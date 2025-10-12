@@ -1,5 +1,42 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual Environment
+.venv/
+venv/
+ENV/
+
+# Environment Variables
 .env
-src/__pycache__
-/__pycache__
-/output
-/rag_local_storage
+.env.local
+
+# RAG Storage
+rag_local_storage/
+output/
+*.json
+*.graphml
+
+# UV
+uv.lock
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+server.log
+
+# Temporary files
+/tmp/
+*.tmp
