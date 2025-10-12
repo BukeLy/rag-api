@@ -36,7 +36,17 @@ Thumbs.db
 # Logs
 *.log
 server.log
+logs/
 
 # Temporary files
 /tmp/
 *.tmp
+
+# Backups
+backups/
+
+# Docker
+docker-compose.override.yml
+
+# Deploy
+deploy/ssl/

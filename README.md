@@ -2,128 +2,119 @@
 
 基于 RAG-Anything 和 LightRAG 的多模态文档检索增强生成 API。
 
-## 特性
+## ⚡ 快速开始
 
-- ✅ **多模态文档处理**：PDF、DOCX、图片等
-- ✅ **VLM 增强**：自动处理图片、表格、公式
-- ✅ **智能检索**：支持 local、global、hybrid、mix 等模式
-- ✅ **安全可靠**：UUID 文件名、精细化错误处理
-- ✅ **异步处理**：高性能文档处理和查询
-
-## 快速开始
-
-### 1. 环境配置
-
-创建 `.env` 文件：
+### 一键部署（3 分钟）
 
 ```bash
-ARK_API_KEY=your_ark_api_key
-ARK_BASE_URL=your_ark_base_url
-SF_API_KEY=your_sf_api_key
-SF_BASE_URL=your_sf_base_url
+# 1. 克隆项目
+git clone <your-repo-url>
+cd rag-api
+
+# 2. 配置环境变量
+cp env.example .env
+nano .env  # 填入你的 API 密钥
+
+# 3. 启动服务
+docker compose up -d
+
+# 4. 验证
+curl http://localhost:8000/
 ```
 
-### 2. 安装依赖
+**访问 API 文档：** http://localhost:8000/docs
+
+---
+
+## 📦 服务器部署（自动化）
+
+在全新的 Linux 服务器上运行：
 
 ```bash
+chmod +x deploy.sh
+./deploy.sh
+```
+
+脚本会自动安装 Docker、配置环境、启动服务。
+
+**推荐配置（测试环境）：**
+- 实例类型: 计算型 c7（阿里云/腾讯云）
+- 配置: 2 核 4GB + 40GB SSD
+- 价格: ¥105/月
+
+---
+
+## 🔧 本地开发
+
+```bash
+# 安装依赖
 uv sync
-```
-
-### 3. 启动服务
-
-```bash
-# 首次启动前清理旧数据
-rm -rf ./rag_local_storage
 
 # 启动服务
-uv run uvicorn main:app --host 0.0.0.0 --port 8000
+uv run uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-### 4. 访问 API
-
-- Swagger UI: http://localhost:8000/docs
-- ReDoc: http://localhost:8000/redoc
-
-## API 端点
+## 📝 API 使用
 
 ### 上传文档
-
 ```bash
-curl -X POST "http://localhost:8000/insert?doc_id=my_doc" \
+curl -X POST "http://localhost:8000/insert?doc_id=doc1" \
   -F "file=@document.pdf"
 ```
 
 ### 查询
-
 ```bash
 curl -X POST "http://localhost:8000/query" \
   -H "Content-Type: application/json" \
-  -d '{"query": "什么是人工智能？", "mode": "mix"}'
+  -d '{"query": "文档讲了什么？", "mode": "mix"}'
 ```
 
-### 健康检查
+## 🛠️ 维护命令
 
 ```bash
-curl http://localhost:8000/
+./scripts/monitor.sh  # 监控服务状态
+./scripts/backup.sh   # 备份数据
+./scripts/update.sh   # 更新部署
+
+docker compose logs -f              # 查看日志
+docker compose restart              # 重启服务
+uv run python scripts/test_api.py   # 测试 API
 ```
 
-## 项目结构
+## 📂 项目结构
 
 ```
 rag-api/
-├── main.py              # FastAPI 应用主入口
-├── src/
-│   └── rag.py          # RAG 实例管理
-├── docs/               # 📚 文档
-│   ├── USAGE.md        # 详细使用文档
-│   ├── IMPROVEMENTS.md # 技术改进说明
-│   ├── OPTIONAL_ENHANCEMENTS.md  # 可选功能
-│   └── PROJECT_STRUCTURE.md      # 项目结构说明
-├── scripts/            # 🔧 工具脚本
-│   └── test_api.py     # API 测试脚本
-└── pyproject.toml      # 项目配置
+├── main.py              # FastAPI 应用
+├── src/rag.py           # RAG 实例管理
+├── deploy.sh            # 一键部署脚本
+├── docker-compose.yml   # Docker 配置
+├── scripts/             # 维护脚本（监控/备份/更新）
+└── docs/                # 文档
+    ├── USAGE.md         # 详细使用文档
+    └── IMPROVEMENTS.md  # 技术改进说明
 ```
 
-详见 [项目结构说明](docs/PROJECT_STRUCTURE.md)
+## ⚠️ 常见问题
 
-## 文档
-
-- [详细使用文档](docs/USAGE.md) - API 使用、配置、故障排除
-- [技术改进说明](docs/IMPROVEMENTS.md) - 安全性、错误处理改进
-- [可选功能清单](docs/OPTIONAL_ENHANCEMENTS.md) - 高级功能参考
-
-## 测试
-
+**Q: 服务启动失败？**
 ```bash
-# 运行测试脚本
-uv run python scripts/test_api.py
+docker compose logs  # 查看错误日志
 ```
 
-## 技术栈
-
-- **FastAPI** - Web 框架
-- **RAG-Anything 1.2.8** - 多模态文档处理
-- **LightRAG 1.4.9.2** - RAG 引擎
-- **UV** - 包管理器
-
-## 故障排除
-
-### multimodal_processed 错误
-
+**Q: multimodal_processed 错误？**
 ```bash
-rm -rf ./rag_local_storage
+rm -rf ./rag_local_storage  # 清理旧数据
 ```
 
-### Embedding 维度不匹配
+**Q: 上传文件返回 400？**
+- 支持格式: PDF, DOCX, PNG, JPG
+- 最大 100MB
 
-确认 `src/rag.py` 中 `embedding_dim=4096`
-
-详见 [使用文档](docs/USAGE.md#故障排除)
-
-## 许可证
-
-本项目仅供学习和内部使用。
+详见 [使用文档](docs/USAGE.md)
 
 ---
 
-© 2025 RAG API Project
+**技术栈:** FastAPI · RAG-Anything · LightRAG · Docker
+
+© 2025
