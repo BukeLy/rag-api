@@ -19,7 +19,7 @@ app = FastAPI(lifespan=lifespan)
 
 class QueryRequest(BaseModel):
     query: str
-    mode: str = "hybrid"
+    mode: str = "mix"
 
 @app.post("/insert")
 async def insert_document(doc_id: str, file: UploadFile = File(...)):
