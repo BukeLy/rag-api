@@ -20,7 +20,6 @@ ENV PATH="/root/.cargo/bin:$PATH"
 COPY pyproject.toml uv.lock* ./
 COPY main.py ./
 COPY src/ ./src/
-COPY .env.example .env
 
 # 使用 uv 安装依赖
 RUN uv sync --frozen
