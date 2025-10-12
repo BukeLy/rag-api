@@ -53,7 +53,7 @@ async def lifespan(app):
         )
 
     embedding_func = EmbeddingFunc(
-        embedding_dim=3072,
+        embedding_dim=4096,  # Qwen/Qwen3-Embedding-8B 实际返回 4096 维向量
         func=lambda texts: openai_embed(
             texts, model="Qwen/Qwen3-Embedding-8B", api_key=sf_api_key, base_url=sf_base_url
         ),
@@ -69,9 +69,10 @@ async def lifespan(app):
         embedding_func=embedding_func,
         vision_model_func=vision_model_func,
     )
-    # 注意：这里不需要手动调用任何 _ensure_lightrag_initialized 方法
-    # 在第一次调用 aquery 或 process 时，它会自动初始化
-    logger.info("RAGAnything instance created. Ready to serve.")
+    
+    # 4. 显式初始化 LightRAG 实例（确保查询时可用）
+    await rag_instance._ensure_lightrag_initialized()
+    logger.info("RAGAnything instance created and LightRAG initialized. Ready to serve.")
 
     yield  # 应用运行期间保持实例可用
 

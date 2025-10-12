@@ -39,12 +39,11 @@ async def insert_document(doc_id: str, file: UploadFile = File(...)):
         logger.info(f"Processing uploaded file: {temp_file_path} (original: {file.filename}) for doc_id: {doc_id}")
         
         # 使用 RAG-Anything 处理上传的文件 (支持 PDF, DOCX, PNG, JPG 等)
-        result = await rag_instance.process_document_complete(file_path=temp_file_path, output_dir="./output")
+        # 注意: process_document_complete 不返回值，如果处理失败会抛出异常
+        await rag_instance.process_document_complete(file_path=temp_file_path, output_dir="./output")
         
-        if not result.get("success"):
-             raise HTTPException(status_code=500, detail=f"Failed to process document: {result.get('error')}")
-
-        return {"message": "Document processed successfully", "doc_id": doc_id, "filename": file.filename, "details": result}
+        logger.info(f"Document processed successfully: {file.filename}")
+        return {"message": "Document processed successfully", "doc_id": doc_id, "filename": file.filename}
 
     except Exception as e:
         logger.error(f"Error during document insertion: {e}", exc_info=True)

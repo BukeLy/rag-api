@@ -1,3 +1,5 @@
 .env
 src/__pycache__
 /__pycache__
+/output
+/rag_local_storage
