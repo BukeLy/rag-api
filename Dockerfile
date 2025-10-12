@@ -12,17 +12,16 @@ RUN apt-get update && apt-get install -y \
     git \
     && rm -rf /var/lib/apt/lists/*
 
-# 安装 uv（快速的 Python 包管理器）
-RUN curl -LsSf https://astral.sh/uv/install.sh | sh
-ENV PATH="/root/.cargo/bin:$PATH"
+# 安装 uv（使用 pip 安装更可靠）
+RUN pip install --no-cache-dir uv
 
 # 复制项目文件
-COPY pyproject.toml uv.lock* ./
+COPY pyproject.toml ./
 COPY main.py ./
 COPY src/ ./src/
 
 # 使用 uv 安装依赖
-RUN uv sync --frozen
+RUN uv sync
 
 # 创建必要的目录
 RUN mkdir -p /app/rag_local_storage /app/output /app/logs
