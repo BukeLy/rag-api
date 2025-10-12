@@ -10,6 +10,9 @@ RUN apt-get update && apt-get install -y \
     g++ \
     curl \
     git \
+    libreoffice \
+    libreoffice-writer \
+    libreoffice-calc \
     && rm -rf /var/lib/apt/lists/*
 
 # 安装 uv（使用 pip 安装更可靠）
