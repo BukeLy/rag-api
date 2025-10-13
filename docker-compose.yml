@@ -26,15 +26,15 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
-    # 资源限制（根据实际情况调整）
-    deploy:
-      resources:
-        limits:
-          cpus: '2'
-          memory: 4G
-        reservations:
-          cpus: '1'
-          memory: 2G
+    # 资源限制已移除，容器可使用宿主机所有资源
+    # deploy:
+    #   resources:
+    #     limits:
+    #       cpus: '2'
+    #       memory: 4G
+    #     reservations:
+    #       cpus: '1'
+    #       memory: 2G
 
   # 可选：Nginx 反向代理（用于生产环境）
   nginx:
