@@ -22,6 +22,7 @@ RUN pip install --no-cache-dir uv
 COPY pyproject.toml ./
 COPY main.py ./
 COPY src/ ./src/
+COPY api/ ./api/
 
 # 使用 uv 安装依赖
 RUN uv sync
