@@ -199,6 +199,10 @@ optimize_system() {
 
 # 构建并启动服务
 start_services() {
+    log_info "清理旧 Docker 资源..."
+    docker system prune -f || true
+    docker builder prune -f || true
+    
     log_info "构建 Docker 镜像..."
     docker compose build
     
@@ -206,6 +210,9 @@ start_services() {
     docker compose up -d
     
     log_success "服务已启动"
+    
+    # 显示磁盘使用情况
+    log_info "当前磁盘使用: $(df -h / | tail -1 | awk '{print $3 "/" $2 " (" $5 ")"}')"
 }
 
 # 等待服务就绪
