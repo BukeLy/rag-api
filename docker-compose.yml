@@ -16,6 +16,8 @@ services:
       - ./output:/app/output
       # 持久化日志
       - ./logs:/app/logs
+      # 持久化模型缓存（MinerU/HuggingFace 模型，避免重复下载）
+      - ./model_cache:/root/.cache
     environment:
       - TZ=Asia/Shanghai
       - PYTHONUNBUFFERED=1
