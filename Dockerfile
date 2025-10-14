@@ -17,6 +17,10 @@ RUN apt-get update && apt-get install -y \
     fonts-wqy-zenhei \
     && rm -rf /var/lib/apt/lists/*
 
+# 创建字体符号链接（RAG-Anything 期望的路径）
+RUN mkdir -p /usr/share/fonts/wqy-microhei && \
+    ln -s /usr/share/fonts/truetype/wqy/wqy-microhei.ttc /usr/share/fonts/wqy-microhei/wqy-microhei.ttc
+
 # 安装 uv（使用 pip 安装更可靠）
 RUN pip install --no-cache-dir uv
 
