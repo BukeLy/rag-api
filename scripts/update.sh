@@ -1,8 +1,8 @@
 #!/bin/bash
 
 ###############################################################################
-# RAG API 智能更新脚本
-# 用途: 拉取最新代码，智能判断是否需要重建镜像
+# RAG API 智能更新脚本 (适配 ECR 部署)
+# 用途: 拉取最新代码，利用 Docker 缓存快速重建
 ###############################################################################
 
 set -e
@@ -19,13 +19,8 @@ echo "                   RAG API 智能更新"
 echo -e "======================================================================${NC}"
 echo ""
 
-# 0. 获取当前文件的 Git Hash
-echo -e "${YELLOW}[1/7] 检测变更文件...${NC}"
-BEFORE_DEPS_HASH=$(git log -1 --format="%H" -- pyproject.toml Dockerfile 2>/dev/null || echo "none")
-BEFORE_CODE_HASH=$(git log -1 --format="%H" -- main.py src/ api/ 2>/dev/null || echo "none")
-
 # 1. 备份当前数据
-echo -e "${YELLOW}[2/7] 备份当前数据...${NC}"
+echo -e "${YELLOW}[1/6] 备份当前数据...${NC}"
 if [ -f "./scripts/backup.sh" ]; then
     bash ./scripts/backup.sh
 else
@@ -33,50 +28,36 @@ else
 fi
 
 # 2. 拉取最新代码
-echo -e "${YELLOW}[3/7] 拉取最新代码...${NC}"
+echo -e "${YELLOW}[2/6] 拉取最新代码...${NC}"
 git fetch origin
 git pull origin main
 
-# 3. 检测变更类型
-AFTER_DEPS_HASH=$(git log -1 --format="%H" -- pyproject.toml Dockerfile 2>/dev/null || echo "none")
-AFTER_CODE_HASH=$(git log -1 --format="%H" -- main.py src/ api/ 2>/dev/null || echo "none")
+# 3. 清理悬空镜像（保留当前使用的镜像）
+echo -e "${YELLOW}[3/6] 清理悬空镜像...${NC}"
+docker image prune -f
+CLEANED=$(docker system df -v | grep "Build Cache" | awk '{print $4}')
+echo -e "${GREEN}✓ 已清理构建缓存${NC}"
 
-NEED_REBUILD=false
-if [ "$BEFORE_DEPS_HASH" != "$AFTER_DEPS_HASH" ]; then
-    echo -e "${YELLOW}检测到依赖文件变更 (pyproject.toml 或 Dockerfile)${NC}"
-    NEED_REBUILD=true
-fi
+# 4. 停止当前服务
+echo -e "${YELLOW}[4/6] 停止当前服务...${NC}"
+docker compose down
 
-# 4. 根据变更类型决定操作
-if [ "$NEED_REBUILD" = true ]; then
-    echo -e "${YELLOW}[4/7] 清理旧镜像和缓存...${NC}"
-    docker compose down
-    docker system prune -f
-    docker builder prune -f
-    
-    echo -e "${YELLOW}[5/7] 重新构建镜像 (依赖变更)...${NC}"
-    docker compose build
-    
-    echo -e "${YELLOW}[6/7] 启动新服务...${NC}"
-    docker compose up -d
-else
-    echo -e "${GREEN}✓ 依赖未变更，无需重建镜像${NC}"
-    
-    if [ "$BEFORE_CODE_HASH" != "$AFTER_CODE_HASH" ]; then
-        echo -e "${YELLOW}[4/7] 检测到代码变更${NC}"
-        echo -e "${YELLOW}[5/7] 跳过镜像构建${NC}"
-        echo -e "${YELLOW}[6/7] 重启容器以加载新代码...${NC}"
-        docker compose restart
-    else
-        echo -e "${GREEN}✓ 代码未变更，无需操作${NC}"
-        echo -e "${YELLOW}[4/7] 跳过${NC}"
-        echo -e "${YELLOW}[5/7] 跳过${NC}"
-        echo -e "${YELLOW}[6/7] 跳过${NC}"
-    fi
-fi
+# 5. 重新构建镜像（利用缓存）
+echo -e "${YELLOW}[5/6] 重新构建镜像（利用缓存加速）...${NC}"
+echo -e "${BLUE}提示: 如果只修改了代码，构建会很快（1-2分钟）${NC}"
+echo -e "${BLUE}提示: 如果修改了依赖，需要重新下载包（15分钟）${NC}"
+BUILD_START=$(date +%s)
+docker compose build
+BUILD_END=$(date +%s)
+BUILD_TIME=$((BUILD_END - BUILD_START))
+echo -e "${GREEN}✓ 构建完成，耗时 ${BUILD_TIME}s${NC}"
+
+# 6. 启动新服务
+echo -e "${YELLOW}[6/6] 启动新服务...${NC}"
+docker compose up -d
 
 # 7. 等待服务就绪
-echo -e "${YELLOW}[7/7] 等待服务就绪...${NC}"
+echo -e "${YELLOW}等待服务就绪...${NC}"
 for i in {1..20}; do
     if curl -f http://localhost:8000/ &> /dev/null; then
         echo -e "${GREEN}✓ 服务已就绪！${NC}"
@@ -91,8 +72,9 @@ echo -e "${GREEN}===============================================================
 echo "                   更新完成！"
 echo -e "======================================================================${NC}"
 echo ""
-echo "磁盘使用: $(df -h / | tail -1 | awk '{print $3 "/" $2 " (" $5 ")"}')"
-echo "镜像大小: $(docker images rag-api-rag-api:latest --format '{{.Size}}')"
+echo -e "构建耗时: ${BUILD_TIME}s"
+echo -e "磁盘使用: $(df -h / | tail -1 | awk '{print $3 "/" $2 " (" $5 ")"}')"
+echo -e "镜像大小: $(docker images rag-api-rag-api:latest --format '{{.Size}}')"
 echo ""
 echo "查看服务状态: docker compose ps"
 echo "查看日志:     docker compose logs -f"

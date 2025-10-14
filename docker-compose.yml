@@ -10,10 +10,6 @@ services:
     env_file:
       - .env
     volumes:
-      # 挂载代码（代码变更无需重建镜像）
-      - ./main.py:/app/main.py:ro
-      - ./src:/app/src:ro
-      - ./api:/app/api:ro
       # 持久化向量数据库
       - ./rag_local_storage:/app/rag_local_storage
       # 持久化输出文件

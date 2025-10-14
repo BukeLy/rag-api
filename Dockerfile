@@ -30,10 +30,13 @@ COPY pyproject.toml uv.lock* ./
 # 使用 uv 安装依赖（这层会被缓存，除非 pyproject.toml 变化）
 RUN uv sync
 
+# 复制项目代码（放在最后，利用缓存）
+COPY main.py ./
+COPY src/ ./src/
+COPY api/ ./api/
+
 # 创建必要的目录
 RUN mkdir -p /app/rag_local_storage /app/output /app/logs
-
-# 代码将通过 volume 挂载，不在这里 COPY
 
 # 暴露端口
 EXPOSE 8000
