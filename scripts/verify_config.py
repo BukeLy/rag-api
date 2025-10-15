@@ -57,12 +57,10 @@ print("-" * 70)
 
 mineru_mode = os.getenv("MINERU_MODE", "local")
 mineru_api_token = os.getenv("MINERU_API_TOKEN", "")
-mineru_user_token = os.getenv("MINERU_USER_TOKEN", "")
 mineru_api_base_url = os.getenv("MINERU_API_BASE_URL", "https://mineru.net")
 
 print(f"  MINERU_MODE:              {mineru_mode}")
 print(f"  MINERU_API_TOKEN:         {'✓ 已设置' if mineru_api_token else '✗ 未设置'}")
-print(f"  MINERU_USER_TOKEN:        {'✓ 已设置' if mineru_user_token else '✗ 未设置'}")
 print(f"  MINERU_API_BASE_URL:      {mineru_api_base_url}")
 
 # MinerU 限流配置
@@ -132,8 +130,6 @@ if not sf_api_key:
 if mineru_mode == "remote":
     if not mineru_api_token:
         warnings.append("MINERU_MODE=remote 但 MINERU_API_TOKEN 未设置")
-    if not mineru_user_token:
-        warnings.append("MINERU_MODE=remote 但 MINERU_USER_TOKEN 未设置")
 
 # 验证代码是否读取了这些配置
 print("\n✅ 代码读取验证:")
@@ -152,7 +148,6 @@ try:
     # 验证 src/mineru_client.py 读取
     print("\n  src/mineru_client.py:")
     print(f"    ✓ MINERU_API_TOKEN (使用中)")
-    print(f"    ✓ MINERU_USER_TOKEN (使用中)")
     print(f"    ✓ MINERU_API_BASE_URL (使用中)")
     print(f"    ✓ MINERU_MAX_CONCURRENT_REQUESTS (使用中)")
     print(f"    ✓ MINERU_REQUESTS_PER_MINUTE (使用中)")

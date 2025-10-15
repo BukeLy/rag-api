@@ -27,18 +27,19 @@ logger = logging.getLogger(__name__)
 
 
 class TaskStatus(str, Enum):
-    """任务状态枚举"""
-    PENDING = "pending"      # 等待处理
-    PROCESSING = "processing"  # 处理中
-    COMPLETED = "completed"   # 已完成
-    FAILED = "failed"        # 失败
+    """任务状态枚举（根据 MinerU API 官方文档）"""
+    WAITING_FILE = "waiting-file"  # 等待文件上传
+    PENDING = "pending"            # 排队中
+    RUNNING = "running"            # 正在解析
+    CONVERTING = "converting"      # 格式转换中
+    DONE = "done"                  # 已完成
+    FAILED = "failed"              # 解析失败
 
 
 @dataclass
 class MinerUConfig:
     """MinerU API 配置"""
     api_token: str = field(default_factory=lambda: os.getenv("MINERU_API_TOKEN", ""))
-    user_token: str = field(default_factory=lambda: os.getenv("MINERU_USER_TOKEN", ""))
     base_url: str = field(default_factory=lambda: os.getenv("MINERU_API_BASE_URL", "https://mineru.net"))
     api_version: str = "v4"
     
@@ -64,67 +65,72 @@ class MinerUConfig:
         """验证配置"""
         if not self.api_token:
             raise ValueError("MINERU_API_TOKEN is required. Please set it in environment variables or config.")
-        if not self.user_token:
-            raise ValueError("MINERU_USER_TOKEN is required. Please set it in environment variables or config.")
 
 
 @dataclass
 class ParseOptions:
-    """文档解析选项"""
-    enable_formula: bool = True       # 启用公式解析
-    enable_table: bool = True         # 启用表格解析
+    """文档解析选项（根据 MinerU API 官方文档）"""
+    enable_formula: bool = True       # 启用公式解析（默认 true）
+    enable_table: bool = True         # 启用表格解析（默认 true）
     language: str = "ch"              # 语言：ch（中文）/ en（英文）
-    is_ocr: bool = True              # 是否使用 OCR
-    parse_method: str = "auto"       # 解析方法：auto / ocr / txt
-    output_format: str = "markdown"  # 输出格式：markdown / json
-    
-    def to_dict(self) -> Dict[str, Any]:
-        """转换为 API 参数字典"""
-        return {
-            "enable_formula": self.enable_formula,
-            "enable_table": self.enable_table,
-            "language": self.language,
-            "is_ocr": self.is_ocr,
-            "parse_method": self.parse_method,
-            "output_format": self.output_format,
-        }
-
-
-@dataclass
-class FileTask:
-    """单个文件任务"""
-    url: str                          # 文件 URL（必填）
-    data_id: str                      # 数据 ID（必填，用于标识文件）
-    is_ocr: Optional[bool] = None    # 是否使用 OCR（可选，覆盖全局设置）
-    language: Optional[str] = None   # 语言（可选，覆盖全局设置）
+    callback: Optional[str] = None    # 解析结果回调 URL
+    seed: Optional[str] = None        # 回调签名种子（使用 callback 时必填）
+    extra_formats: Optional[List[str]] = None  # 额外导出格式：["docx", "html", "latex"]
+    model_version: str = "pipeline"   # 模型版本：pipeline / vlm（默认 pipeline）
     
     def to_dict(self) -> Dict[str, Any]:
         """转换为 API 参数字典"""
         result = {
-            "url": self.url,
-            "data_id": self.data_id,
+            "enable_formula": self.enable_formula,
+            "enable_table": self.enable_table,
+            "language": self.language,
+            "model_version": self.model_version,
         }
+        if self.callback:
+            result["callback"] = self.callback
+        if self.seed:
+            result["seed"] = self.seed
+        if self.extra_formats:
+            result["extra_formats"] = self.extra_formats
+        return result
+
+
+@dataclass
+class FileTask:
+    """单个文件任务（根据 MinerU API 官方文档）"""
+    url: str                              # 文件 URL（必填）支持 .pdf/.doc/.docx/.ppt/.pptx/.png/.jpg/.jpeg
+    data_id: Optional[str] = None        # 数据 ID（可选，用于标识文件）
+    is_ocr: Optional[bool] = None        # 是否使用 OCR（可选，覆盖全局设置，默认 false）
+    page_ranges: Optional[str] = None    # 页码范围（可选）如 "2,4-6" 或 "2--2"
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """转换为 API 参数字典"""
+        result = {"url": self.url}
+        
+        if self.data_id:
+            result["data_id"] = self.data_id
         if self.is_ocr is not None:
             result["is_ocr"] = self.is_ocr
-        if self.language is not None:
-            result["language"] = self.language
+        if self.page_ranges:
+            result["page_ranges"] = self.page_ranges
+        
         return result
 
 
 @dataclass
 class TaskResult:
-    """任务结果"""
-    batch_id: str
-    status: TaskStatus
-    files: List[Dict[str, Any]] = field(default_factory=list)
-    error_message: Optional[str] = None
-    created_at: Optional[str] = None
-    completed_at: Optional[str] = None
+    """任务结果（根据 MinerU API 官方文档）"""
+    task_id: str                                      # 单个任务 ID 或批量任务 ID
+    status: TaskStatus                                # 任务状态
+    files: List[Dict[str, Any]] = field(default_factory=list)  # 文件结果列表
+    error_message: Optional[str] = None               # 错误信息
+    full_zip_url: Optional[str] = None               # 结果压缩包 URL（单个任务）
+    extract_progress: Optional[Dict[str, Any]] = None  # 解析进度（running 状态时）
     
     @property
     def is_completed(self) -> bool:
         """任务是否完成"""
-        return self.status == TaskStatus.COMPLETED
+        return self.status == TaskStatus.DONE
     
     @property
     def is_failed(self) -> bool:
@@ -134,7 +140,7 @@ class TaskResult:
     @property
     def is_processing(self) -> bool:
         """任务是否处理中"""
-        return self.status in [TaskStatus.PENDING, TaskStatus.PROCESSING]
+        return self.status in [TaskStatus.WAITING_FILE, TaskStatus.PENDING, TaskStatus.RUNNING, TaskStatus.CONVERTING]
 
 
 class RateLimiter:
@@ -198,11 +204,11 @@ class MinerUClient:
         logger.info(f"MinerU Client initialized: {self.config.base_url}/api/{self.config.api_version}")
     
     def _get_headers(self) -> Dict[str, str]:
-        """获取请求头"""
+        """获取请求头（根据官方文档）"""
         return {
             "Content-Type": "application/json",
             "Authorization": f"Bearer {self.config.api_token}",
-            "token": self.config.user_token,
+            "Accept": "*/*"
         }
     
     def _get_api_url(self, endpoint: str) -> str:
@@ -257,9 +263,8 @@ class MinerUClient:
                                 logger.info(f"✓ Batch task created successfully: {batch_id}")
                                 
                                 return TaskResult(
-                                    batch_id=batch_id,
-                                    status=TaskStatus.PENDING,
-                                    created_at=result["data"].get("created_at")
+                                    task_id=batch_id,
+                                    status=TaskStatus.PENDING
                                 )
                             else:
                                 error_msg = result.get("msg", "Unknown error")
@@ -316,9 +321,8 @@ class MinerUClient:
                     logger.info(f"✓ Batch task created successfully: {batch_id}")
                     
                     return TaskResult(
-                        batch_id=batch_id,
-                        status=TaskStatus.PENDING,
-                        created_at=result["data"].get("created_at")
+                        task_id=batch_id,
+                        status=TaskStatus.PENDING
                     )
                 else:
                     error_msg = result.get("msg", "Unknown error")
@@ -357,20 +361,37 @@ class MinerUClient:
                         
                         if response.status == 200 and result.get("code") == 0:
                             data = result["data"]
-                            status_map = {
+                            
+                            # 解析状态（官方文档：state 字段）
+                            state_map = {
+                                "waiting-file": TaskStatus.WAITING_FILE,
                                 "pending": TaskStatus.PENDING,
-                                "processing": TaskStatus.PROCESSING,
-                                "completed": TaskStatus.COMPLETED,
+                                "running": TaskStatus.RUNNING,
+                                "converting": TaskStatus.CONVERTING,
+                                "done": TaskStatus.DONE,
                                 "failed": TaskStatus.FAILED,
                             }
                             
+                            # 处理批量结果
+                            files_result = []
+                            if "extract_result" in data:
+                                for item in data["extract_result"]:
+                                    files_result.append({
+                                        "file_name": item.get("file_name"),
+                                        "data_id": item.get("data_id"),
+                                        "state": item.get("state"),
+                                        "full_zip_url": item.get("full_zip_url"),
+                                        "err_msg": item.get("err_msg"),
+                                        "extract_progress": item.get("extract_progress"),
+                                    })
+                            
                             return TaskResult(
-                                batch_id=batch_id,
-                                status=status_map.get(data.get("status", "pending"), TaskStatus.PENDING),
-                                files=data.get("files", []),
-                                error_message=data.get("error_message"),
-                                created_at=data.get("created_at"),
-                                completed_at=data.get("completed_at"),
+                                task_id=batch_id,
+                                status=state_map.get(data.get("state", "pending"), TaskStatus.PENDING),
+                                files=files_result,
+                                error_message=data.get("err_msg"),
+                                full_zip_url=data.get("full_zip_url"),
+                                extract_progress=data.get("extract_progress"),
                             )
                         else:
                             error_msg = result.get("msg", "Unknown error")
@@ -402,20 +423,37 @@ class MinerUClient:
             
             if response.status_code == 200 and result.get("code") == 0:
                 data = result["data"]
-                status_map = {
+                
+                # 解析状态（官方文档：state 字段）
+                state_map = {
+                    "waiting-file": TaskStatus.WAITING_FILE,
                     "pending": TaskStatus.PENDING,
-                    "processing": TaskStatus.PROCESSING,
-                    "completed": TaskStatus.COMPLETED,
+                    "running": TaskStatus.RUNNING,
+                    "converting": TaskStatus.CONVERTING,
+                    "done": TaskStatus.DONE,
                     "failed": TaskStatus.FAILED,
                 }
                 
+                # 处理批量结果
+                files_result = []
+                if "extract_result" in data:
+                    for item in data["extract_result"]:
+                        files_result.append({
+                            "file_name": item.get("file_name"),
+                            "data_id": item.get("data_id"),
+                            "state": item.get("state"),
+                            "full_zip_url": item.get("full_zip_url"),
+                            "err_msg": item.get("err_msg"),
+                            "extract_progress": item.get("extract_progress"),
+                        })
+                
                 return TaskResult(
-                    batch_id=batch_id,
-                    status=status_map.get(data.get("status", "pending"), TaskStatus.PENDING),
-                    files=data.get("files", []),
-                    error_message=data.get("error_message"),
-                    created_at=data.get("created_at"),
-                    completed_at=data.get("completed_at"),
+                    task_id=batch_id,
+                    status=state_map.get(data.get("state", "pending"), TaskStatus.PENDING),
+                    files=files_result,
+                    error_message=data.get("err_msg"),
+                    full_zip_url=data.get("full_zip_url"),
+                    extract_progress=data.get("extract_progress"),
                 )
             else:
                 error_msg = result.get("msg", "Unknown error")
@@ -465,7 +503,12 @@ class MinerUClient:
                 raise Exception(f"Task failed: {error_msg}")
             
             # 仍在处理中，继续等待
-            logger.debug(f"Task {batch_id} status: {result.status}, elapsed: {elapsed:.1f}s")
+            progress_info = ""
+            if result.extract_progress:
+                prog = result.extract_progress
+                progress_info = f" ({prog.get('extracted_pages')}/{prog.get('total_pages')} pages)"
+            
+            logger.info(f"Task {batch_id} status: {result.status}{progress_info}, elapsed: {elapsed:.1f}s")
             await asyncio.sleep(self.config.poll_interval)
     
     def wait_for_completion_sync(
@@ -505,7 +548,12 @@ class MinerUClient:
                 raise Exception(f"Task failed: {error_msg}")
             
             # 仍在处理中，继续等待
-            logger.debug(f"Task {batch_id} status: {result.status}, elapsed: {elapsed:.1f}s")
+            progress_info = ""
+            if result.extract_progress:
+                prog = result.extract_progress
+                progress_info = f" ({prog.get('extracted_pages')}/{prog.get('total_pages')} pages)"
+            
+            logger.info(f"Task {batch_id} status: {result.status}{progress_info}, elapsed: {elapsed:.1f}s")
             time.sleep(self.config.poll_interval)
     
     async def parse_documents(
@@ -571,23 +619,27 @@ class MinerUClient:
 
 def create_client(
     api_token: Optional[str] = None,
-    user_token: Optional[str] = None,
     **kwargs
 ) -> MinerUClient:
     """
     创建 MinerU 客户端（便捷函数）
     
     Args:
-        api_token: API Token（可选，优先使用环境变量）
-        user_token: User Token（可选，优先使用环境变量）
+        api_token: API Token（可选，优先使用环境变量 MINERU_API_TOKEN）
         **kwargs: 其他配置参数
     
     Returns:
         MinerUClient: 客户端实例
+    
+    Example:
+        # 使用环境变量
+        client = create_client()
+        
+        # 手动指定 token
+        client = create_client(api_token="your_token_here")
     """
     config = MinerUConfig(
         api_token=api_token or os.getenv("MINERU_API_TOKEN", ""),
-        user_token=user_token or os.getenv("MINERU_USER_TOKEN", ""),
         **kwargs
     )
     return MinerUClient(config)
