@@ -76,7 +76,9 @@ class ParseOptions:
     callback: Optional[str] = None    # 解析结果回调 URL
     seed: Optional[str] = None        # 回调签名种子（使用 callback 时必填）
     extra_formats: Optional[List[str]] = None  # 额外导出格式：["docx", "html", "latex"]
-    model_version: str = "pipeline"   # 模型版本：pipeline / vlm（默认 pipeline）
+    model_version: str = field(
+        default_factory=lambda: os.getenv("MINERU_MODEL_VERSION", "pipeline")
+    )  # 模型版本：pipeline（默认，稳定）/ vlm（高精度）
     
     def to_dict(self) -> Dict[str, Any]:
         """转换为 API 参数字典"""
