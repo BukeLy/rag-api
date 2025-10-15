@@ -92,10 +92,15 @@ async def lifespan(app):
         llm_model_func=llm_model_func,
         embedding_func=embedding_func,
         vision_model_func=vision_model_func,
-        rerank_model_func=rerank_func,  # 添加 rerank 函数
     )
     await rag_instance_mineru._ensure_lightrag_initialized()
-    logger.info("✓ MinerU instance initialized (for complex multimodal documents)")
+    
+    # 在 LightRAG 层面配置 rerank（如果已启用）
+    if rerank_func and hasattr(rag_instance_mineru, 'lightrag'):
+        rag_instance_mineru.lightrag.rerank_model_func = rerank_func
+        logger.info("✓ MinerU instance initialized with rerank support")
+    else:
+        logger.info("✓ MinerU instance initialized (for complex multimodal documents)")
 
     # 3. 创建 Docling 实例（轻量快速，内存占用小）
     config_docling = RAGAnythingConfig(
@@ -110,10 +115,15 @@ async def lifespan(app):
         llm_model_func=llm_model_func,
         embedding_func=embedding_func,
         vision_model_func=vision_model_func,
-        rerank_model_func=rerank_func,  # 添加 rerank 函数
     )
     await rag_instance_docling._ensure_lightrag_initialized()
-    logger.info("✓ Docling instance initialized (for fast text processing)")
+    
+    # 在 LightRAG 层面配置 rerank（如果已启用）
+    if rerank_func and hasattr(rag_instance_docling, 'lightrag'):
+        rag_instance_docling.lightrag.rerank_model_func = rerank_func
+        logger.info("✓ Docling instance initialized with rerank support")
+    else:
+        logger.info("✓ Docling instance initialized (for fast text processing)")
 
     # 4. 设置默认实例为 MinerU（向后兼容）
     rag_instance = rag_instance_mineru
