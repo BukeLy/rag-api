@@ -58,8 +58,10 @@ print("-" * 70)
 mineru_mode = os.getenv("MINERU_MODE", "local")
 mineru_api_token = os.getenv("MINERU_API_TOKEN", "")
 mineru_api_base_url = os.getenv("MINERU_API_BASE_URL", "https://mineru.net")
+mineru_model_version = os.getenv("MINERU_MODEL_VERSION", "vlm")
 
 print(f"  MINERU_MODE:              {mineru_mode}")
+print(f"  MINERU_MODEL_VERSION:     {mineru_model_version} ⭐")
 print(f"  MINERU_API_TOKEN:         {'✓ 已设置' if mineru_api_token else '✗ 未设置'}")
 print(f"  MINERU_API_BASE_URL:      {mineru_api_base_url}")
 
@@ -149,6 +151,7 @@ try:
     print("\n  src/mineru_client.py:")
     print(f"    ✓ MINERU_API_TOKEN (使用中)")
     print(f"    ✓ MINERU_API_BASE_URL (使用中)")
+    print(f"    ✓ MINERU_MODEL_VERSION (使用中)")
     print(f"    ✓ MINERU_MAX_CONCURRENT_REQUESTS (使用中)")
     print(f"    ✓ MINERU_REQUESTS_PER_MINUTE (使用中)")
     print(f"    ✓ MINERU_RETRY_MAX_ATTEMPTS (使用中)")
