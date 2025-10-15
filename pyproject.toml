@@ -1,10 +1,12 @@
 [project]
 name = "rag-api"
 version = "0.1.0"
-description = "Add your description here"
+description = "RAG API with multimodal document processing"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
     "lightrag-hku>=1.4.9.3",
     "raganything[all]>=1.2.8",
+    "aiohttp>=3.9.0",
+    "requests>=2.31.0",
 ]
