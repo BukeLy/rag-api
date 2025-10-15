@@ -46,8 +46,9 @@ async def query_rag(request: QueryRequest):
         raise HTTPException(status_code=503, detail="RAG service is not ready.")
     
     try:
-        # 创建优化的查询参数（减少 LLM 调用次数）
-        query_param = QueryParam(
+        # 使用优化参数直接查询（减少 LLM 调用次数）
+        answer = await rag_instance.aquery(
+            request.query,
             mode=request.mode,
             top_k=20,  # 从默认 60 减少到 20（减少 66% 的检索量）
             chunk_top_k=10,  # 从默认 20 减少到 10
@@ -56,9 +57,6 @@ async def query_rag(request: QueryRequest):
             # top_k=10,
             # chunk_top_k=5,
         )
-        
-        # 使用优化参数查询
-        answer = await rag_instance.aquery(request.query, param=query_param)
         return {"answer": answer}
     except Exception as e:
         logger.error(f"Error during query: {e}", exc_info=True)
