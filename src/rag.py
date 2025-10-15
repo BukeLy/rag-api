@@ -122,13 +122,15 @@ def select_parser_by_file(filename: str, file_size: int) -> str:
     根据文件特征智能选择解析器
     
     策略：
+    - 纯文本 (.txt, .md) → 返回 "mineru"（实际会在处理函数中直接插入 LightRAG，不经过解析器）
     - 图片文件 (.jpg, .png) → MinerU（OCR能力强）
-    - 纯文本 (.txt, .md) → MinerU（Docling不支持）
     - PDF/Office 小文件 (< 500KB) → Docling（快速）
     - PDF/Office 大文件 (> 500KB) → MinerU（更强大）
     - 其他 → MinerU（默认）
     
-    注意：Docling 只支持 PDF 和 Office 格式（.pdf, .docx, .xlsx, .pptx, .html）
+    注意：
+    - Docling 只支持 PDF 和 Office 格式（.pdf, .docx, .xlsx, .pptx, .html）
+    - 纯文本文件会被特殊处理：直接读取内容并插入 LightRAG，无需解析器
     
     Args:
         filename: 文件名

@@ -43,17 +43,33 @@ async def process_document_task(task_id: str, doc_id: str, temp_file_path: str, 
         TASK_STORE[task_id].updated_at = datetime.now().isoformat()
         logger.info(f"[Task {task_id}] Started processing: {original_filename} (parser: {parser})")
         
-        # 使用信号量限制并发处理（防止多个 MinerU 同时运行导致 OOM）
-        async with DOCUMENT_PROCESSING_SEMAPHORE:
-            logger.info(f"[Task {task_id}] Acquired processing lock for: {original_filename}")
+        # 根据 parser 参数获取对应的 RAG 实例
+        rag_instance = get_rag_instance(parser=parser)
+        if not rag_instance:
+            raise Exception(f"RAG service ({parser}) is not ready")
+        
+        # 检查是否为纯文本文件，使用轻量级直接插入
+        file_ext = Path(original_filename).suffix.lower()
+        if file_ext in ['.txt', '.md', '.markdown']:
+            logger.info(f"[Task {task_id}] Detected text file, using lightweight direct insertion")
             
-            # 根据 parser 参数获取对应的 RAG 实例
-            rag_instance = get_rag_instance(parser=parser)
-            if not rag_instance:
-                raise Exception(f"RAG service ({parser}) is not ready")
+            # 直接读取文本内容
+            with open(temp_file_path, 'r', encoding='utf-8') as f:
+                text_content = f.read()
             
-            # 使用 RAG-Anything 处理上传的文件
-            await rag_instance.process_document_complete(file_path=temp_file_path, output_dir="./output")
+            if not text_content or len(text_content.strip()) == 0:
+                raise ValueError(f"Empty text file: {original_filename}")
+            
+            # 直接插入到 LightRAG（轻量级，无需解析）
+            await rag_instance.lightrag.ainsert(text_content)
+            logger.info(f"[Task {task_id}] Text content inserted directly to LightRAG ({len(text_content)} characters)")
+        else:
+            # 非文本文件，使用信号量限制并发处理（防止多个 MinerU 同时运行导致 OOM）
+            async with DOCUMENT_PROCESSING_SEMAPHORE:
+                logger.info(f"[Task {task_id}] Acquired processing lock for: {original_filename}")
+                
+                # 使用 RAG-Anything 处理上传的文件（PDF、Office、图片等）
+                await rag_instance.process_document_complete(file_path=temp_file_path, output_dir="./output")
         
         # 处理成功
         TASK_STORE[task_id].status = TaskStatus.COMPLETED
@@ -122,16 +138,16 @@ async def insert_document(
     """
     上传文件并异步处理。立即返回 task_id，客户端可通过 /task/{task_id} 查询处理状态。
     
-    **解析器策略：**
-    - `mineru`: 强大的多模态解析器，支持图片、表格、公式提取（内存占用大，适合复杂文档）
-    - `docling`: 轻量级解析器，快速处理纯文本（内存占用小，适合简单文档）
-    - `auto`: 自动选择（根据文件类型和大小智能选择，推荐）
+    **文件类型处理策略：**
+    - **纯文本 (.txt, .md)**: 直接插入 LightRAG，轻量快速，无需解析器
+    - **图片 (.jpg, .png)**: 使用 MinerU（OCR 能力强）
+    - **PDF/Office 小文件 (< 500KB)**: 使用 Docling（快速）
+    - **PDF/Office 大文件 (> 500KB)**: 使用 MinerU（强大多模态）
     
-    **自动选择策略：**
-    - 图片文件 → MinerU（OCR 能力强）
-    - 纯文本 < 1MB → Docling（快速）
-    - PDF/Office < 500KB → Docling（快速）
-    - 大文件/复杂文档 → MinerU（强大）
+    **解析器参数（仅对非文本文件生效）：**
+    - `auto`: 自动选择（推荐）
+    - `mineru`: 强大的多模态解析器（内存占用大）
+    - `docling`: 轻量级解析器（内存占用小）
     
     返回 202 Accepted 表示任务已接受，正在处理中。
     """
