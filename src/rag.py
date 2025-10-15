@@ -122,11 +122,13 @@ def select_parser_by_file(filename: str, file_size: int) -> str:
     根据文件特征智能选择解析器
     
     策略：
-    - 纯文本文件 (.txt, .md) 且 < 1MB → Docling（快速）
     - 图片文件 (.jpg, .png) → MinerU（OCR能力强）
-    - PDF/Office 且 < 500KB → Docling（快速）
-    - PDF/Office 且 > 500KB → MinerU（更强大）
+    - 纯文本 (.txt, .md) → MinerU（Docling不支持）
+    - PDF/Office 小文件 (< 500KB) → Docling（快速）
+    - PDF/Office 大文件 (> 500KB) → MinerU（更强大）
     - 其他 → MinerU（默认）
+    
+    注意：Docling 只支持 PDF 和 Office 格式（.pdf, .docx, .xlsx, .pptx, .html）
     
     Args:
         filename: 文件名
@@ -142,13 +144,13 @@ def select_parser_by_file(filename: str, file_size: int) -> str:
     if ext in ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff']:
         return "mineru"
     
-    # 纯文本且小文件 → Docling
-    if ext in ['.txt', '.md', '.markdown'] and file_size < 1 * 1024 * 1024:  # < 1MB
+    # 纯文本文件 → MinerU（Docling 不支持 .txt）
+    if ext in ['.txt', '.md', '.markdown']:
+        return "mineru"
+    
+    # PDF/Office 小文件 → Docling（快速）
+    if ext in ['.pdf', '.docx', '.xlsx', '.pptx', '.html', '.htm'] and file_size < 500 * 1024:  # < 500KB
         return "docling"
     
-    # PDF/Office 小文件 → Docling
-    if ext in ['.pdf', '.docx', '.xlsx', '.pptx'] and file_size < 500 * 1024:  # < 500KB
-        return "docling"
-    
-    # 其他或大文件 → MinerU
+    # 大文件或其他 → MinerU
     return "mineru"
