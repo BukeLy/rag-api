@@ -96,7 +96,7 @@ async def lifespan(app):
     await rag_instance_mineru._ensure_lightrag_initialized()
     
     # 在 LightRAG 层面配置 rerank（如果已启用）
-    if rerank_func and hasattr(rag_instance_mineru, 'lightrag'):
+    if rerank_func and hasattr(rag_instance_mineru, 'lightrag') and rag_instance_mineru.lightrag:
         rag_instance_mineru.lightrag.rerank_model_func = rerank_func
         logger.info("✓ MinerU instance initialized with rerank support")
     else:
@@ -119,7 +119,7 @@ async def lifespan(app):
     await rag_instance_docling._ensure_lightrag_initialized()
     
     # 在 LightRAG 层面配置 rerank（如果已启用）
-    if rerank_func and hasattr(rag_instance_docling, 'lightrag'):
+    if rerank_func and hasattr(rag_instance_docling, 'lightrag') and rag_instance_docling.lightrag:
         rag_instance_docling.lightrag.rerank_model_func = rerank_func
         logger.info("✓ Docling instance initialized with rerank support")
     else:
