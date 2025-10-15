@@ -166,8 +166,9 @@ async def lifespan(app):
         # 配置 Rerank（可选）
         if rerank_func:
             rag_instance_docling.lightrag.rerank_model_func = rerank_func
-        
-        logger.info("✓ Docling instance initialized with custom parameters")
+            logger.info("✓ Docling instance initialized with Rerank support")
+        else:
+            logger.info("✓ Docling instance initialized (Rerank disabled)")
     else:
         logger.info("✓ Docling instance initialized (for fast text processing)")
 
