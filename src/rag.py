@@ -2,11 +2,19 @@ import os
 from dotenv import load_dotenv
 import logging
 from contextlib import asynccontextmanager
+from functools import partial
 
 # -- 从 raganything_example.py 抄过来的组件 --
 from lightrag.llm.openai import openai_complete_if_cache, openai_embed
 from lightrag.utils import EmbeddingFunc
 from raganything import RAGAnything, RAGAnythingConfig
+
+# 导入 rerank 函数
+try:
+    from lightrag.rerank import cohere_rerank
+except ImportError:
+    cohere_rerank = None
+    logging.warning("lightrag.rerank not available, rerank功能将被禁用")
 
 # --- 配置 ---
 load_dotenv()
@@ -29,6 +37,8 @@ async def lifespan(app):
     ark_base_url = os.getenv("ARK_BASE_URL")
     sf_api_key = os.getenv("SF_API_KEY")
     sf_base_url = os.getenv("SF_BASE_URL")
+    rerank_model = os.getenv("RERANK_MODEL", "")  # 可选配置
+    
     if not ark_api_key:
         raise RuntimeError("ARK_API_KEY is not set!")
     if not sf_api_key:
@@ -50,10 +60,24 @@ async def lifespan(app):
             texts, model="Qwen/Qwen3-Embedding-8B", api_key=sf_api_key, base_url=sf_base_url
         ),
     )
+    
     def vision_model_func(prompt, **kwargs):
         return openai_complete_if_cache(
             "seed-1-6-250615", prompt, api_key=ark_api_key, base_url=ark_base_url, **kwargs
         )
+    
+    # 配置 Rerank 函数（可选，提升检索相关性）
+    rerank_func = None
+    if rerank_model and cohere_rerank:
+        rerank_func = partial(
+            cohere_rerank,
+            model=rerank_model,  # 例如：Qwen/Qwen3-Reranker-8B
+            api_key=sf_api_key,  # 复用硅基流动的 API Key
+            base_url=f"{sf_base_url}/rerank"  # 硅基流动的 Rerank 端点
+        )
+        logger.info(f"✓ Rerank enabled with model: {rerank_model}")
+    else:
+        logger.info("⚠ Rerank disabled (RERANK_MODEL not set or cohere_rerank unavailable)")
 
     # 2. 创建 MinerU 实例（强大多模态，内存占用大）
     config_mineru = RAGAnythingConfig(
@@ -68,6 +92,7 @@ async def lifespan(app):
         llm_model_func=llm_model_func,
         embedding_func=embedding_func,
         vision_model_func=vision_model_func,
+        rerank_model_func=rerank_func,  # 添加 rerank 函数
     )
     await rag_instance_mineru._ensure_lightrag_initialized()
     logger.info("✓ MinerU instance initialized (for complex multimodal documents)")
@@ -85,6 +110,7 @@ async def lifespan(app):
         llm_model_func=llm_model_func,
         embedding_func=embedding_func,
         vision_model_func=vision_model_func,
+        rerank_model_func=rerank_func,  # 添加 rerank 函数
     )
     await rag_instance_docling._ensure_lightrag_initialized()
     logger.info("✓ Docling instance initialized (for fast text processing)")

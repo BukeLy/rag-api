@@ -38,21 +38,21 @@ async def query_rag(request: QueryRequest):
     **性能优化配置**：
     - 减少了 `top_k` 从 60 → 20（减少检索量）
     - 减少了 `chunk_top_k` 从 20 → 10
-    - 禁用了 `enable_rerank`（跳过重排序）
-    - 这些配置可将查询时间从 **47 秒降至 10-15 秒**
+    - **启用了 `enable_rerank`**（需配置 `RERANK_MODEL` 环境变量）
+    - Rerank 会提升检索相关性，但会增加约 2-3 秒响应时间
     """
     rag_instance = get_rag_instance()
     if not rag_instance:
         raise HTTPException(status_code=503, detail="RAG service is not ready.")
     
     try:
-        # 使用优化参数直接查询（减少 LLM 调用次数）
+        # 使用优化参数直接查询
         answer = await rag_instance.aquery(
             request.query,
             mode=request.mode,
             top_k=20,  # 从默认 60 减少到 20（减少 66% 的检索量）
             chunk_top_k=10,  # 从默认 20 减少到 10
-            enable_rerank=False,  # 禁用重排序（节省时间）
+            enable_rerank=True,  # 启用 rerank 提升检索相关性（如果配置了 RERANK_MODEL）
             # 如果需要更快的响应，可以进一步减少：
             # top_k=10,
             # chunk_top_k=5,
