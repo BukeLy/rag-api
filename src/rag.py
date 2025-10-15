@@ -33,12 +33,18 @@ async def lifespan(app):
     global rag_instance, rag_instance_mineru, rag_instance_docling
     logger.info("Starting up and creating RAGAnything instances (MinerU + Docling)...")
 
+    # 读取 LLM 和 Embedding 配置
     ark_api_key = os.getenv("ARK_API_KEY")
     ark_base_url = os.getenv("ARK_BASE_URL")
+    ark_model = os.getenv("ARK_MODEL", "seed-1-6-250615")
+    
     sf_api_key = os.getenv("SF_API_KEY")
     sf_base_url = os.getenv("SF_BASE_URL")
+    sf_embedding_model = os.getenv("SF_EMBEDDING_MODEL", "Qwen/Qwen3-Embedding-8B")
+    
     rerank_model = os.getenv("RERANK_MODEL", "")  # 可选配置
     
+    # 验证必需配置
     if not ark_api_key:
         raise RuntimeError("ARK_API_KEY is not set!")
     if not sf_api_key:
@@ -47,23 +53,44 @@ async def lifespan(app):
         raise RuntimeError("SF_BASE_URL is not set!")
     if not ark_base_url:
         raise RuntimeError("ARK_BASE_URL is not set!")
+    
+    # 读取 LightRAG 查询优化参数
+    top_k = int(os.getenv("TOP_K", "20"))
+    chunk_top_k = int(os.getenv("CHUNK_TOP_K", "10"))
+    max_async = int(os.getenv("MAX_ASYNC", "4"))
+    max_parallel_insert = int(os.getenv("MAX_PARALLEL_INSERT", "2"))
+    max_entity_tokens = int(os.getenv("MAX_ENTITY_TOKENS", "6000"))
+    max_relation_tokens = int(os.getenv("MAX_RELATION_TOKENS", "8000"))
+    max_total_tokens = int(os.getenv("MAX_TOTAL_TOKENS", "30000"))
+    
+    # 输出配置信息
+    logger.info("=" * 70)
+    logger.info("📊 RAG API 配置总览")
+    logger.info("=" * 70)
+    logger.info(f"🤖 LLM: {ark_model}")
+    logger.info(f"🔤 Embedding: {sf_embedding_model} (dim={4096})")
+    logger.info(f"🎯 Rerank: {rerank_model or 'Disabled'}")
+    logger.info(f"📈 Query: top_k={top_k}, chunk_top_k={chunk_top_k}, max_async={max_async}")
+    logger.info(f"💾 Tokens: entity={max_entity_tokens}, relation={max_relation_tokens}, total={max_total_tokens}")
+    logger.info(f"⚙️  Concurrency: doc_processing=1, parallel_insert={max_parallel_insert}")
+    logger.info("=" * 70)
 
     # 1. 定义共享的 LLM 和 Embedding 函数
     def llm_model_func(prompt, **kwargs):
         return openai_complete_if_cache(
-            "seed-1-6-250615", prompt, api_key=ark_api_key, base_url=ark_base_url, **kwargs
+            ark_model, prompt, api_key=ark_api_key, base_url=ark_base_url, **kwargs
         )
 
     embedding_func = EmbeddingFunc(
         embedding_dim=4096,  # Qwen/Qwen3-Embedding-8B 实际返回 4096 维向量
         func=lambda texts: openai_embed(
-            texts, model="Qwen/Qwen3-Embedding-8B", api_key=sf_api_key, base_url=sf_base_url
+            texts, model=sf_embedding_model, api_key=sf_api_key, base_url=sf_base_url
         ),
     )
     
     def vision_model_func(prompt, **kwargs):
         return openai_complete_if_cache(
-            "seed-1-6-250615", prompt, api_key=ark_api_key, base_url=ark_base_url, **kwargs
+            ark_model, prompt, api_key=ark_api_key, base_url=ark_base_url, **kwargs
         )
     
     # 配置 Rerank 函数（可选，提升检索相关性）
@@ -95,10 +122,26 @@ async def lifespan(app):
     )
     await rag_instance_mineru._ensure_lightrag_initialized()
     
-    # 在 LightRAG 层面配置 rerank（如果已启用）
-    if rerank_func and hasattr(rag_instance_mineru, 'lightrag') and rag_instance_mineru.lightrag:
-        rag_instance_mineru.lightrag.rerank_model_func = rerank_func
-        logger.info("✓ MinerU instance initialized with rerank support")
+    # 在 LightRAG 层面配置参数（如果已启用）
+    if hasattr(rag_instance_mineru, 'lightrag') and rag_instance_mineru.lightrag:
+        lightrag = rag_instance_mineru.lightrag
+        
+        # 配置 Rerank
+        if rerank_func:
+            lightrag.rerank_model_func = rerank_func
+            logger.info("✓ Rerank enabled")
+        
+        # 配置查询参数（从环境变量）
+        # 注意：这些参数会作为默认值，可在查询时覆盖
+        os.environ.setdefault("TOP_K", str(top_k))
+        os.environ.setdefault("CHUNK_TOP_K", str(chunk_top_k))
+        os.environ.setdefault("MAX_ASYNC", str(max_async))
+        os.environ.setdefault("MAX_PARALLEL_INSERT", str(max_parallel_insert))
+        os.environ.setdefault("MAX_ENTITY_TOKENS", str(max_entity_tokens))
+        os.environ.setdefault("MAX_RELATION_TOKENS", str(max_relation_tokens))
+        os.environ.setdefault("MAX_TOTAL_TOKENS", str(max_total_tokens))
+        
+        logger.info("✓ MinerU instance initialized with custom parameters")
     else:
         logger.info("✓ MinerU instance initialized (for complex multimodal documents)")
 
@@ -118,10 +161,13 @@ async def lifespan(app):
     )
     await rag_instance_docling._ensure_lightrag_initialized()
     
-    # 在 LightRAG 层面配置 rerank（如果已启用）
-    if rerank_func and hasattr(rag_instance_docling, 'lightrag') and rag_instance_docling.lightrag:
-        rag_instance_docling.lightrag.rerank_model_func = rerank_func
-        logger.info("✓ Docling instance initialized with rerank support")
+    # 在 LightRAG 层面配置参数（如果已启用）
+    if hasattr(rag_instance_docling, 'lightrag') and rag_instance_docling.lightrag:
+        # 配置 Rerank（可选）
+        if rerank_func:
+            rag_instance_docling.lightrag.rerank_model_func = rerank_func
+        
+        logger.info("✓ Docling instance initialized with custom parameters")
     else:
         logger.info("✓ Docling instance initialized (for fast text processing)")
 

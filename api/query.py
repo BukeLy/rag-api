@@ -2,6 +2,7 @@
 查询路由
 """
 
+import os
 import logging
 from fastapi import APIRouter, HTTPException
 from typing import Optional
@@ -21,6 +22,10 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+# 从环境变量读取查询优化参数
+DEFAULT_TOP_K = int(os.getenv("TOP_K", "20"))
+DEFAULT_CHUNK_TOP_K = int(os.getenv("CHUNK_TOP_K", "10"))
 
 
 @router.post("/query")
@@ -46,16 +51,13 @@ async def query_rag(request: QueryRequest):
         raise HTTPException(status_code=503, detail="RAG service is not ready.")
     
     try:
-        # 使用优化参数直接查询
+        # 使用优化参数直接查询（从环境变量读取，可在 .env 中调整）
         answer = await rag_instance.aquery(
             request.query,
             mode=request.mode,
-            top_k=20,  # 从默认 60 减少到 20（减少 66% 的检索量）
-            chunk_top_k=10,  # 从默认 20 减少到 10
+            top_k=DEFAULT_TOP_K,  # 从环境变量 TOP_K 读取（默认 20）
+            chunk_top_k=DEFAULT_CHUNK_TOP_K,  # 从环境变量 CHUNK_TOP_K 读取（默认 10）
             enable_rerank=True,  # 启用 rerank 提升检索相关性（如果配置了 RERANK_MODEL）
-            # 如果需要更快的响应，可以进一步减少：
-            # top_k=10,
-            # chunk_top_k=5,
         )
         return {"answer": answer}
     except Exception as e:

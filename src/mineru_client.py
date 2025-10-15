@@ -39,18 +39,26 @@ class MinerUConfig:
     """MinerU API 配置"""
     api_token: str = field(default_factory=lambda: os.getenv("MINERU_API_TOKEN", ""))
     user_token: str = field(default_factory=lambda: os.getenv("MINERU_USER_TOKEN", ""))
-    base_url: str = "https://mineru.net"
+    base_url: str = field(default_factory=lambda: os.getenv("MINERU_API_BASE_URL", "https://mineru.net"))
     api_version: str = "v4"
     
-    # 限流配置
-    max_concurrent_requests: int = 5  # 最大并发请求数
-    requests_per_minute: int = 60     # 每分钟最大请求数
-    retry_max_attempts: int = 3       # 最大重试次数
-    retry_delay: float = 1.0          # 重试延迟（秒）
+    # 限流配置（从环境变量读取）
+    max_concurrent_requests: int = field(
+        default_factory=lambda: int(os.getenv("MINERU_MAX_CONCURRENT_REQUESTS", "5"))
+    )
+    requests_per_minute: int = field(
+        default_factory=lambda: int(os.getenv("MINERU_REQUESTS_PER_MINUTE", "60"))
+    )
+    retry_max_attempts: int = field(
+        default_factory=lambda: int(os.getenv("MINERU_RETRY_MAX_ATTEMPTS", "3"))
+    )
+    retry_delay: float = 1.0  # 重试延迟（秒）
     
-    # 轮询配置
-    poll_interval: float = 2.0        # 状态轮询间隔（秒）
-    poll_timeout: float = 600.0       # 轮询超时（秒）
+    # 轮询配置（从环境变量读取）
+    poll_interval: float = 2.0  # 状态轮询间隔（秒）
+    poll_timeout: float = field(
+        default_factory=lambda: float(os.getenv("MINERU_POLL_TIMEOUT", "600.0"))
+    )
     
     def __post_init__(self):
         """验证配置"""
