@@ -8,9 +8,10 @@ import uuid
 import logging
 from datetime import datetime
 from pathlib import Path
-from fastapi import APIRouter, HTTPException, UploadFile, File, BackgroundTasks
+from fastapi import APIRouter, HTTPException, UploadFile, File, BackgroundTasks, Query
+from typing import Optional
 
-from src.rag import get_rag_instance
+from src.rag import get_rag_instance, select_parser_by_file
 from .models import TaskStatus, TaskInfo
 from .task_store import TASK_STORE, DOCUMENT_PROCESSING_SEMAPHORE
 
@@ -25,23 +26,31 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-async def process_document_task(task_id: str, doc_id: str, temp_file_path: str, original_filename: str):
+async def process_document_task(task_id: str, doc_id: str, temp_file_path: str, original_filename: str, parser: str = "auto"):
     """
     后台异步处理文档
+    
+    Args:
+        task_id: 任务ID
+        doc_id: 文档ID
+        temp_file_path: 临时文件路径
+        original_filename: 原始文件名
+        parser: 解析器类型 ("mineru" / "docling" / "auto")
     """
     try:
         # 更新任务状态为处理中
         TASK_STORE[task_id].status = TaskStatus.PROCESSING
         TASK_STORE[task_id].updated_at = datetime.now().isoformat()
-        logger.info(f"[Task {task_id}] Started processing: {original_filename}")
+        logger.info(f"[Task {task_id}] Started processing: {original_filename} (parser: {parser})")
         
         # 使用信号量限制并发处理（防止多个 MinerU 同时运行导致 OOM）
         async with DOCUMENT_PROCESSING_SEMAPHORE:
             logger.info(f"[Task {task_id}] Acquired processing lock for: {original_filename}")
             
-            rag_instance = get_rag_instance()
+            # 根据 parser 参数获取对应的 RAG 实例
+            rag_instance = get_rag_instance(parser=parser)
             if not rag_instance:
-                raise Exception("RAG service is not ready")
+                raise Exception(f"RAG service ({parser}) is not ready")
             
             # 使用 RAG-Anything 处理上传的文件
             await rag_instance.process_document_complete(file_path=temp_file_path, output_dir="./output")
@@ -101,13 +110,36 @@ async def process_document_task(task_id: str, doc_id: str, temp_file_path: str, 
 
 
 @router.post("/insert", status_code=202)
-async def insert_document(doc_id: str, file: UploadFile = File(...), background_tasks: BackgroundTasks = None):
+async def insert_document(
+    doc_id: str, 
+    file: UploadFile = File(...), 
+    background_tasks: BackgroundTasks = None,
+    parser: Optional[str] = Query(
+        default="auto",
+        description="解析器选择: 'mineru'(强大多模态), 'docling'(快速轻量), 'auto'(智能选择)"
+    )
+):
     """
     上传文件并异步处理。立即返回 task_id，客户端可通过 /task/{task_id} 查询处理状态。
     
+    **解析器策略：**
+    - `mineru`: 强大的多模态解析器，支持图片、表格、公式提取（内存占用大，适合复杂文档）
+    - `docling`: 轻量级解析器，快速处理纯文本（内存占用小，适合简单文档）
+    - `auto`: 自动选择（根据文件类型和大小智能选择，推荐）
+    
+    **自动选择策略：**
+    - 图片文件 → MinerU（OCR 能力强）
+    - 纯文本 < 1MB → Docling（快速）
+    - PDF/Office < 500KB → Docling（快速）
+    - 大文件/复杂文档 → MinerU（强大）
+    
     返回 202 Accepted 表示任务已接受，正在处理中。
     """
-    rag_instance = get_rag_instance()
+    # 验证 parser 参数
+    if parser not in ["mineru", "docling", "auto"]:
+        raise HTTPException(status_code=400, detail=f"Invalid parser: {parser}. Must be 'mineru', 'docling', or 'auto'.")
+    
+    rag_instance = get_rag_instance(parser if parser != "auto" else "mineru")
     if not rag_instance:
         raise HTTPException(status_code=503, detail="RAG service is not ready.")
     
@@ -148,6 +180,12 @@ async def insert_document(doc_id: str, file: UploadFile = File(...), background_
                 detail=f"File too large: {original_filename} ({file_size} bytes, max: {max_file_size} bytes)"
             )
         
+        # 智能选择解析器
+        selected_parser = parser
+        if parser == "auto":
+            selected_parser = select_parser_by_file(original_filename, file_size)
+            logger.info(f"Auto-selected parser for {original_filename} ({file_size} bytes): {selected_parser}")
+        
         # 生成任务 ID
         task_id = str(uuid.uuid4())
         current_time = datetime.now().isoformat()
@@ -163,16 +201,17 @@ async def insert_document(doc_id: str, file: UploadFile = File(...), background_
         )
         TASK_STORE[task_id] = task_info
         
-        # 添加后台任务
+        # 添加后台任务（传递选择的解析器）
         background_tasks.add_task(
             process_document_task,
             task_id=task_id,
             doc_id=doc_id,
             temp_file_path=temp_file_path,
-            original_filename=original_filename
+            original_filename=original_filename,
+            parser=selected_parser  # 传递选择的解析器
         )
         
-        logger.info(f"[Task {task_id}] Created task for file: {original_filename} (size: {file_size} bytes, doc_id: {doc_id})")
+        logger.info(f"[Task {task_id}] Created task for file: {original_filename} (size: {file_size} bytes, doc_id: {doc_id}, parser: {selected_parser})")
         
         # 立即返回 202 + task_id
         return {
@@ -180,7 +219,9 @@ async def insert_document(doc_id: str, file: UploadFile = File(...), background_
             "status": TaskStatus.PENDING,
             "message": "Document upload accepted. Processing in background.",
             "doc_id": doc_id,
-            "filename": original_filename
+            "filename": original_filename,
+            "parser": selected_parser,  # 告知用户使用的解析器
+            "file_size": file_size
         }
     
     except HTTPException:
