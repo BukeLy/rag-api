@@ -64,12 +64,29 @@ async def process_document_task(task_id: str, doc_id: str, temp_file_path: str, 
             await rag_instance.lightrag.ainsert(text_content)
             logger.info(f"[Task {task_id}] Text content inserted directly to LightRAG ({len(text_content)} characters)")
         else:
-            # 非文本文件，使用信号量限制并发处理（防止多个 MinerU 同时运行导致 OOM）
+            # 非文本文件，需要使用解析器
+            mineru_mode = os.getenv("MINERU_MODE", "local")
+            
+            # 根据 MinerU 模式选择处理策略
+            # 注意：当前仅支持本地模式，远程模式需要实现文件 URL 上传
             async with DOCUMENT_PROCESSING_SEMAPHORE:
-                logger.info(f"[Task {task_id}] Acquired processing lock for: {original_filename}")
+                logger.info(f"[Task {task_id}] Acquired processing lock for: {original_filename} (mode: {mineru_mode}, parser: {parser})")
                 
-                # 使用 RAG-Anything 处理上传的文件（PDF、Office、图片等）
+                # TODO: 远程 MinerU 优化
+                # 如果 mineru_mode == "remote" 且 parser == "mineru":
+                #   1. 将文件上传到临时存储（S3/OSS）或本地临时 HTTP 服务
+                #   2. 获取可访问的 URL
+                #   3. 使用 src.mineru_client.MinerUClient 调用远程 API
+                #   4. 批量处理多个文件（充分利用 API 性能）
+                #   5. 下载 markdown 结果并插入 LightRAG
+                # 优势：
+                #   - 无本地资源消耗（无需 GPU、无需模型下载）
+                #   - 并发数可提升到 10+（由远程 API 限流控制）
+                #   - 支持批量识别（单次 API 调用处理多文件）
+                
+                # 当前：使用 RAG-Anything 本地解析
                 await rag_instance.process_document_complete(file_path=temp_file_path, output_dir="./output")
+                logger.info(f"[Task {task_id}] Document parsed using {parser} parser (mode: {mineru_mode})")
         
         # 处理成功
         TASK_STORE[task_id].status = TaskStatus.COMPLETED

@@ -7,16 +7,36 @@
 
 import os
 import asyncio
+import logging
 from typing import Dict
 from .models import TaskInfo
+
+logger = logging.getLogger(__name__)
 
 # 任务存储（内存字典）
 TASK_STORE: Dict[str, TaskInfo] = {}
 
-# 并发控制信号量（从环境变量读取）
-# 限制同时处理的文档数量（防止 MinerU 并发导致 OOM）
-DOCUMENT_PROCESSING_CONCURRENCY = int(os.getenv("DOCUMENT_PROCESSING_CONCURRENCY", "1"))
+# 并发控制信号量（动态配置，根据 MinerU 模式）
+# 读取 MinerU 模式
+mineru_mode = os.getenv("MINERU_MODE", "local")
+
+if mineru_mode == "remote":
+    # 远程模式：允许高并发（远程服务器处理，不占用本地资源）
+    # 由 MinerU API 的限流配置控制，而非本地 Semaphore
+    DEFAULT_CONCURRENCY = 10  # 高并发，充分利用远程 API
+    logger.info(f"📡 MinerU Remote Mode: 允许高并发处理（并发数: {DEFAULT_CONCURRENCY}）")
+else:
+    # 本地模式：限制并发（防止本地 OOM）
+    DEFAULT_CONCURRENCY = 1  # 严格限制，避免多个本地 MinerU 进程
+    logger.info(f"💻 MinerU Local Mode: 限制并发处理（并发数: {DEFAULT_CONCURRENCY}）")
+
+DOCUMENT_PROCESSING_CONCURRENCY = int(
+    os.getenv("DOCUMENT_PROCESSING_CONCURRENCY", str(DEFAULT_CONCURRENCY))
+)
 DOCUMENT_PROCESSING_SEMAPHORE = asyncio.Semaphore(DOCUMENT_PROCESSING_CONCURRENCY)
+
+# 输出配置信息
+logger.info(f"⚙️  Document Processing: mode={mineru_mode}, concurrency={DOCUMENT_PROCESSING_CONCURRENCY}")
 
 
 def get_task(task_id: str) -> TaskInfo:
