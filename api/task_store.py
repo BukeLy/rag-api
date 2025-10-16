@@ -7,11 +7,10 @@
 
 import os
 import asyncio
-import logging
 from typing import Dict
-from .models import TaskInfo
 
-logger = logging.getLogger(__name__)
+from src.logger import logger
+from .models import TaskInfo
 
 # 任务存储（内存字典）
 TASK_STORE: Dict[str, TaskInfo] = {}

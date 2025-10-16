@@ -15,7 +15,6 @@ MinerU Remote API Client
 import os
 import time
 import asyncio
-import logging
 from typing import List, Dict, Optional, Any, Union
 from dataclasses import dataclass, field
 from enum import Enum
@@ -23,7 +22,7 @@ import aiohttp
 import requests
 from pathlib import Path
 
-logger = logging.getLogger(__name__)
+from src.logger import logger
 
 
 class TaskStatus(str, Enum):

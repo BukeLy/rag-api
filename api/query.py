@@ -3,10 +3,10 @@
 """
 
 import os
-import logging
 from fastapi import APIRouter, HTTPException
 from typing import Optional
 
+from src.logger import logger
 from src.rag import get_lightrag_instance
 from .models import QueryRequest
 
@@ -20,7 +20,6 @@ except ImportError:
             for key, value in kwargs.items():
                 setattr(self, key, value)
 
-logger = logging.getLogger(__name__)
 router = APIRouter()
 
 # 从环境变量读取查询优化参数

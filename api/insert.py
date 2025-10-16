@@ -5,12 +5,12 @@
 import os
 import shutil
 import uuid
-import logging
 from datetime import datetime
 from pathlib import Path
 from fastapi import APIRouter, HTTPException, UploadFile, File, BackgroundTasks, Query
 from typing import Optional
 
+from src.logger import logger
 from src.rag import get_rag_instance, select_parser_by_file
 from .models import TaskStatus, TaskInfo
 from .task_store import TASK_STORE, DOCUMENT_PROCESSING_SEMAPHORE
@@ -22,7 +22,6 @@ except ImportError:
     class MineruExecutionError(Exception):
         pass
 
-logger = logging.getLogger(__name__)
 router = APIRouter()
 
 

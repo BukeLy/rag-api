@@ -9,4 +9,5 @@ dependencies = [
     "raganything[all]>=1.2.8",
     "aiohttp>=3.9.0",
     "requests>=2.31.0",
+    "loguru>=0.7.0",
 ]

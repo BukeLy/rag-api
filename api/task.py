@@ -2,12 +2,11 @@
 任务状态查询路由
 """
 
-import logging
 from fastapi import APIRouter, HTTPException
 
+from src.logger import logger
 from .task_store import TASK_STORE
 
-logger = logging.getLogger(__name__)
 router = APIRouter()
 
 

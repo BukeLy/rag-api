@@ -5,21 +5,16 @@ RAG API - 主应用入口
 支持多模态文档处理（PDF、DOCX、图片等）和异步任务处理。
 """
 
-import logging
 from fastapi import FastAPI
+
+# 导入统一日志系统
+from src.logger import logger
 
 # 导入 RAG 相关模块
 from src.rag import lifespan
 
 # 导入 API 路由
 from api import api_router
-
-# 配置日志
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
 
 # --- FastAPI 应用 ---
 

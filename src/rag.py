@@ -1,8 +1,9 @@
 import os
 from dotenv import load_dotenv
-import logging
 from contextlib import asynccontextmanager
 from functools import partial
+
+from src.logger import logger
 
 # -- 从 raganything_example.py 抄过来的组件 --
 from lightrag import LightRAG
@@ -16,12 +17,10 @@ try:
     from lightrag.rerank import cohere_rerank
 except ImportError:
     cohere_rerank = None
-    logging.warning("lightrag.rerank not available, rerank功能将被禁用")
+    logger.warning("lightrag.rerank not available, rerank功能将被禁用")
 
 # --- 配置 ---
 load_dotenv()
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
 
 # --- 全局实例（单一 LightRAG 架构）---
 global_lightrag_instance = None  # 单一共享的 LightRAG 实例（核心知识图谱）
