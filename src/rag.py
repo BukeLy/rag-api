@@ -5,8 +5,10 @@ from contextlib import asynccontextmanager
 from functools import partial
 
 # -- 从 raganything_example.py 抄过来的组件 --
+from lightrag import LightRAG
 from lightrag.llm.openai import openai_complete_if_cache, openai_embed
 from lightrag.utils import EmbeddingFunc
+from lightrag.kg.shared_storage import initialize_pipeline_status
 from raganything import RAGAnything, RAGAnythingConfig
 
 # 导入 rerank 函数
@@ -21,17 +23,18 @@ load_dotenv()
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# --- 全局 RAG 实例（双解析器架构）---
-rag_instance_mineru = None  # MinerU: 强大多模态，适合复杂文档（图片、表格、公式）
-rag_instance_docling = None  # Docling: 轻量快速，适合纯文本/小文件
+# --- 全局实例（单一 LightRAG 架构）---
+global_lightrag_instance = None  # 单一共享的 LightRAG 实例（核心知识图谱）
+rag_instance_mineru = None  # MinerU: 强大多模态解析器，共享 LightRAG
+rag_instance_docling = None  # Docling: 轻量快速解析器，共享 LightRAG
 rag_instance = None  # 默认实例（向后兼容）
 
 # --- RAG 实例管理 ---
 @asynccontextmanager
 async def lifespan(app):
-    # 启动时创建双 RAG 实例（MinerU + Docling）
-    global rag_instance, rag_instance_mineru, rag_instance_docling
-    logger.info("Starting up and creating RAGAnything instances (MinerU + Docling)...")
+    # 启动时创建单一 LightRAG 实例 + 多解析器架构
+    global global_lightrag_instance, rag_instance, rag_instance_mineru, rag_instance_docling
+    logger.info("Starting up: Single LightRAG + Multiple Parsers architecture...")
 
     # 读取 LLM 和 Embedding 配置
     ark_api_key = os.getenv("ARK_API_KEY")
@@ -54,10 +57,10 @@ async def lifespan(app):
     if not ark_base_url:
         raise RuntimeError("ARK_BASE_URL is not set!")
     
-    # 读取 LightRAG 查询优化参数
+    # 读取 LightRAG 查询优化参数（优化 MAX_ASYNC 提升并发性能）
     top_k = int(os.getenv("TOP_K", "20"))
     chunk_top_k = int(os.getenv("CHUNK_TOP_K", "10"))
-    max_async = int(os.getenv("MAX_ASYNC", "4"))
+    max_async = int(os.getenv("MAX_ASYNC", "8"))  # 从 4 提升到 8，优化实体合并性能
     max_parallel_insert = int(os.getenv("MAX_PARALLEL_INSERT", "2"))
     max_entity_tokens = int(os.getenv("MAX_ENTITY_TOKENS", "6000"))
     max_relation_tokens = int(os.getenv("MAX_RELATION_TOKENS", "8000"))
@@ -106,7 +109,27 @@ async def lifespan(app):
     else:
         logger.info("⚠ Rerank disabled (RERANK_MODEL not set or cohere_rerank unavailable)")
 
-    # 2. 创建 MinerU 实例（强大多模态，内存占用大）
+    # 2. 创建单一 LightRAG 实例（核心知识图谱，所有解析器共享）
+    logger.info("Creating shared LightRAG instance...")
+    global_lightrag_instance = LightRAG(
+        working_dir="./rag_local_storage",
+        llm_model_func=llm_model_func,
+        embedding_func=embedding_func,
+        llm_model_max_async=max_async,  # 优化并发性能（从 4 提升到 8）
+    )
+    
+    # 初始化 LightRAG 存储
+    await global_lightrag_instance.initialize_storages()
+    await initialize_pipeline_status()
+    
+    # 配置 Rerank（如果启用）
+    if rerank_func:
+        global_lightrag_instance.rerank_model_func = rerank_func
+        logger.info("✓ LightRAG Rerank configured")
+    
+    logger.info("✓ Shared LightRAG instance created successfully")
+
+    # 3. 创建 MinerU 解析器实例（共享 LightRAG）
     config_mineru = RAGAnythingConfig(
         working_dir="./rag_local_storage",
         parser="mineru",  # 强大的多模态解析
@@ -116,36 +139,12 @@ async def lifespan(app):
     )
     rag_instance_mineru = RAGAnything(
         config=config_mineru,
-        llm_model_func=llm_model_func,
-        embedding_func=embedding_func,
+        lightrag=global_lightrag_instance,  # 传入共享的 LightRAG 实例
         vision_model_func=vision_model_func,
     )
-    await rag_instance_mineru._ensure_lightrag_initialized()
-    
-    # 在 LightRAG 层面配置参数（如果已启用）
-    if hasattr(rag_instance_mineru, 'lightrag') and rag_instance_mineru.lightrag:
-        lightrag = rag_instance_mineru.lightrag
-        
-        # 配置 Rerank
-        if rerank_func:
-            lightrag.rerank_model_func = rerank_func
-            logger.info("✓ Rerank enabled")
-        
-        # 配置查询参数（从环境变量）
-        # 注意：这些参数会作为默认值，可在查询时覆盖
-        os.environ.setdefault("TOP_K", str(top_k))
-        os.environ.setdefault("CHUNK_TOP_K", str(chunk_top_k))
-        os.environ.setdefault("MAX_ASYNC", str(max_async))
-        os.environ.setdefault("MAX_PARALLEL_INSERT", str(max_parallel_insert))
-        os.environ.setdefault("MAX_ENTITY_TOKENS", str(max_entity_tokens))
-        os.environ.setdefault("MAX_RELATION_TOKENS", str(max_relation_tokens))
-        os.environ.setdefault("MAX_TOTAL_TOKENS", str(max_total_tokens))
-        
-        logger.info("✓ MinerU instance initialized with custom parameters")
-    else:
-        logger.info("✓ MinerU instance initialized (for complex multimodal documents)")
+    logger.info("✓ MinerU parser initialized (shares LightRAG instance)")
 
-    # 3. 创建 Docling 实例（轻量快速，内存占用小）
+    # 4. 创建 Docling 解析器实例（共享 LightRAG）
     config_docling = RAGAnythingConfig(
         working_dir="./rag_local_storage",  # 共享相同的 working_dir
         parser="docling",  # 轻量级解析器
@@ -155,26 +154,21 @@ async def lifespan(app):
     )
     rag_instance_docling = RAGAnything(
         config=config_docling,
-        llm_model_func=llm_model_func,
-        embedding_func=embedding_func,
+        lightrag=global_lightrag_instance,  # 传入共享的 LightRAG 实例
         vision_model_func=vision_model_func,
     )
-    await rag_instance_docling._ensure_lightrag_initialized()
-    
-    # 在 LightRAG 层面配置参数（如果已启用）
-    if hasattr(rag_instance_docling, 'lightrag') and rag_instance_docling.lightrag:
-        # 配置 Rerank（可选）
-        if rerank_func:
-            rag_instance_docling.lightrag.rerank_model_func = rerank_func
-            logger.info("✓ Docling instance initialized with Rerank support")
-        else:
-            logger.info("✓ Docling instance initialized (Rerank disabled)")
-    else:
-        logger.info("✓ Docling instance initialized (for fast text processing)")
+    logger.info("✓ Docling parser initialized (shares LightRAG instance)")
 
-    # 4. 设置默认实例为 MinerU（向后兼容）
+    # 5. 设置默认实例为 MinerU（向后兼容）
     rag_instance = rag_instance_mineru
-    logger.info("✅ Dual-parser RAG system ready (MinerU + Docling)")
+    
+    logger.info("=" * 70)
+    logger.info("✅ Architecture: Single LightRAG + Multiple Parsers")
+    logger.info("   - Shared LightRAG: 1 instance (knowledge graph core)")
+    logger.info("   - MinerU Parser: for complex multimodal documents")
+    logger.info("   - Docling Parser: for simple documents")
+    logger.info("   - Direct Query: bypass parsers for 95% text queries")
+    logger.info("=" * 70)
 
     yield  # 应用运行期间保持实例可用
 
@@ -182,16 +176,34 @@ async def lifespan(app):
     logger.info("Shutting down RAGAnything instance...")
     # 如果需要清理资源，可以在这里添加
 
-# 获取 RAG 实例的函数
+# 获取 LightRAG 实例的函数（用于查询，直接访问知识图谱）
+def get_lightrag_instance():
+    """
+    获取共享的 LightRAG 实例（用于查询）
+    
+    优势：
+    - 绕过解析器，直接访问知识图谱
+    - 适合 95% 的纯文本查询
+    - 性能更优，资源占用更低
+    
+    Returns:
+        LightRAG: 共享的 LightRAG 实例
+    """
+    return global_lightrag_instance
+
+# 获取 RAG 实例的函数（用于文档插入，需要解析器）
 def get_rag_instance(parser: str = "auto"):
     """
-    获取 RAG 实例
+    获取 RAGAnything 实例（用于文档插入）
     
     Args:
         parser: 解析器类型
             - "mineru": 使用 MinerU（强大多模态，内存占用大）
             - "docling": 使用 Docling（轻量快速，内存占用小）
             - "auto": 自动选择（默认返回 MinerU）
+    
+    Returns:
+        RAGAnything: 对应的解析器实例（共享 LightRAG）
     """
     if parser == "docling":
         return rag_instance_docling
