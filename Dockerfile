@@ -24,13 +24,21 @@ RUN mkdir -p /usr/share/fonts/wqy-microhei && \
 # 安装 uv（使用 pip 安装更可靠）
 RUN pip install --no-cache-dir uv
 
-# 只复制依赖文件（用于缓存层）
+# === 依赖层：只复制依赖文件，这层会被有效缓存 ===
+# 远端部署优化：当 pyproject.toml/uv.lock 不变时，此层会被重用
 COPY pyproject.toml uv.lock* ./
 
-# 使用 uv 安装依赖（这层会被缓存，除非 pyproject.toml 变化）
-RUN uv sync
+# 使用 uv 安装依赖
+# 关键优化：BuildKit 缓存挂载 + 持久化卷
+# 1. 通过 BuildKit 的 cache mount 保留构建期间的缓存
+# 2. /root/.cache/uv 会映射到宿主机的 ./model_cache（docker-compose.yml 中定义）
+# 3. 下次构建时会重用已缓存的包，大幅加快速度
+# 4. 即使容器销毁，宿主机上的 ./model_cache 依然保留
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync
 
-# 复制项目代码（放在最后，利用缓存）
+# === 代码层：放在最后，不影响依赖层缓存 ===
+# 仅修改代码不影响依赖层，构建快速
 COPY main.py ./
 COPY src/ ./src/
 COPY api/ ./api/

@@ -1,0 +1,31 @@
+# BuildKit 配置文件
+# 用于优化缓存策略和构建性能
+
+# 启用内联缓存（允许镜像与缓存信息一起推送到注册表）
+[features]
+  inline-cache = true
+
+# 垃圾收集策略：保留最近的构建缓存
+[gc]
+  # 保留最后 10 次构建的缓存
+  max-unused-build-cache-size = "100gb"
+  
+  # 缓存条目的最大保留时间（这里设置为 30 天）
+  # 注意：这是一个示例，具体值可根据需要调整
+  policy = [
+    {
+      # 保留所有标记的缓存（带有 tag 的镜像）
+      keepStorage = "50gb",
+      filter = ["type==exec.cachemount"],
+    },
+    {
+      # 对其他缓存，保留 1 周内的
+      keepStorage = "30gb",
+      filter = ["unused-for==604800s"],  # 7 天
+    },
+  ]
+
+# 调试选项（可选）
+[debug]
+  # 启用详细日志
+  # level = "debug"

@@ -1,0 +1,62 @@
+# 不包含在 Docker 构建上下文中的文件
+# 这样可以减小 build context 大小，提高缓存效率
+
+# 版本控制
+.git/
+.gitignore
+.github/
+
+# 本地存储和输出（容器启动时会创建）
+rag_local_storage/
+output/
+logs/
+model_cache/
+
+# Python 缓存
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.pytest_cache/
+*.egg-info/
+
+# 虚拟环境
+.venv/
+venv/
+ENV/
+
+# 环境变量（只在容器内使用 .env，不需要构建时包含）
+.env.local
+.env*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*.sublime-workspace
+*.sublime-project
+
+# OS
+.DS_Store
+Thumbs.db
+
+# 构建和部署相关
+*.tmp
+*.bak
+backups/
+docker-compose.override.yml
+.docker/
+
+# 文档（在构建时不需要，但可选保留以减小镜像）
+docs/
+README.md
+LICENSE
+*.md
+
+# 测试脚本和数据
+scripts/
+tests/
+test_data/
+benchmarks/

@@ -3,6 +3,12 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      # 本地构建时使用先前构建的镜像作为缓存基础
+      cache_from:
+        - type=registry,ref=rag-api-rag-api:latest
+      # 推送到注册表后可用于远端部署
+      # cache_to:
+      #   - type=registry,ref=rag-api-rag-api:latest,mode=max
     container_name: rag-api
     restart: unless-stopped
     ports:
@@ -16,11 +22,14 @@ services:
       - ./output:/app/output
       # 持久化日志
       - ./logs:/app/logs
-      # 持久化模型缓存（MinerU/HuggingFace 模型，避免重复下载）
+      # 持久化 Python 包缓存（远端部署时避免重复下载）
+      # 关键优化：uv 的包缓存会被保留，加快后续构建
       - ./model_cache:/root/.cache
     environment:
       - TZ=Asia/Shanghai
       - PYTHONUNBUFFERED=1
+      # 提高 uv 包下载的并发性能
+      - UV_HTTP_TIMEOUT=60
     logging:
       driver: "json-file"
       options:

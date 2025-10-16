@@ -50,3 +50,6 @@ docker-compose.override.yml
 
 # Deploy
 deploy/ssl/
+
+# BuildKit 缓存文件（本地使用，不版本控制）
+.docker/*.hash
