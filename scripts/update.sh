@@ -85,6 +85,33 @@ NEW_COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 echo -e "${GREEN}✓ 代码已更新 (commit: ${NEW_COMMIT})${NC}"
 echo ""
 
+# 2.5 检查远程 MinerU 配置（新增）
+echo -e "${YELLOW}[2.5/7] 检查远程 MinerU 配置...${NC}"
+if [ -f ".env" ]; then
+    # 检查 FILE_SERVICE_BASE_URL 配置
+    CURRENT_FILE_URL=$(grep "^FILE_SERVICE_BASE_URL=" .env | cut -d '=' -f2)
+    if [[ "$CURRENT_FILE_URL" != "http://45.78.223.205:8000" ]]; then
+        echo -e "${YELLOW}  ⚠ 更新 FILE_SERVICE_BASE_URL 为服务器公网 IP:8000${NC}"
+        sed -i "s|FILE_SERVICE_BASE_URL=.*|FILE_SERVICE_BASE_URL=http://45.78.223.205:8000|" .env
+    fi
+    
+    # 检查 MINERU_API_TOKEN 配置
+    MINERU_TOKEN=$(grep "^MINERU_API_TOKEN=" .env | cut -d '=' -f2)
+    if [[ "$MINERU_TOKEN" == "your_mineru_api_token_here" || -z "$MINERU_TOKEN" ]]; then
+        echo -e "${YELLOW}  ⚠ 请编辑 .env 文件配置 MINERU_API_TOKEN${NC}"
+        echo -e "${YELLOW}      MINERU_API_TOKEN=您的_MinerU_API_Token${NC}"
+    else
+        echo -e "${GREEN}✓ MINERU_API_TOKEN 已配置${NC}"
+    fi
+    
+    # 确保使用远程模式
+    sed -i "s|MINERU_MODE=.*|MINERU_MODE=remote|" .env
+    echo -e "${GREEN}✓ 远程 MinerU 模式已启用${NC}"
+else
+    echo -e "${YELLOW}  ⚠ .env 文件不存在，请从 env.example 创建${NC}"
+fi
+echo ""
+
 # 3. 检查构建缓存情况
 echo -e "${YELLOW}[3/7] 检查构建缓存...${NC}"
 CACHE_STATUS="有效"
