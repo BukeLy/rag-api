@@ -73,7 +73,7 @@ docker compose down
 
 ### Production Server
 - **Host**: 45.78.223.205
-- **SSH Access**: `ssh -i /Users/chengjie/Downloads/chengjie.pem ubuntu@45.78.223.205`
+- **SSH Access**: `ssh -i /Users/chengjie/Downloads/chengjie.pem root@45.78.223.205`
 - **Deployment Method**: Git-based deployment via GitHub
 
 ### Deployment Workflow
@@ -97,7 +97,7 @@ git commit -m "feat: 描述你的更改"
 git push origin feature/your-branch  # or main
 
 # 2. SSH into production server
-ssh -i /Users/chengjie/Downloads/chengjie.pem ubuntu@45.78.223.205
+ssh -i /Users/chengjie/Downloads/chengjie.pem root@45.78.223.205
 
 # 3. On production server: Pull latest changes
 cd /path/to/rag-api  # Navigate to project directory
@@ -112,7 +112,7 @@ docker compose up -d
 
 ```bash
 # Deploy from local to production (requires SSH key setup)
-git push && ssh -i /Users/chengjie/Downloads/chengjie.pem ubuntu@45.78.223.205 "cd /path/to/rag-api && git pull && docker compose restart"
+git push && ssh -i /Users/chengjie/Downloads/chengjie.pem root@45.78.223.205 "cd /path/to/rag-api && git pull && docker compose restart"
 ```
 
 **Important Notes**:

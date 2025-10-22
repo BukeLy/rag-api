@@ -59,7 +59,7 @@ async def lifespan(app):
     # 读取 LightRAG 查询优化参数（优化 MAX_ASYNC 提升并发性能）
     top_k = int(os.getenv("TOP_K", "20"))
     chunk_top_k = int(os.getenv("CHUNK_TOP_K", "10"))
-    max_async = int(os.getenv("MAX_ASYNC", "8"))  # 从 4 提升到 8，优化实体合并性能
+    max_async = int(os.getenv("MAX_ASYNC", "4"))  # 平衡性能和启动速度（Fargate优化）
     max_parallel_insert = int(os.getenv("MAX_PARALLEL_INSERT", "2"))
     max_entity_tokens = int(os.getenv("MAX_ENTITY_TOKENS", "6000"))
     max_relation_tokens = int(os.getenv("MAX_RELATION_TOKENS", "8000"))
@@ -79,6 +79,11 @@ async def lifespan(app):
 
     # 1. 定义共享的 LLM 和 Embedding 函数
     def llm_model_func(prompt, **kwargs):
+        # 显式禁用COT（Chain of Thought）处理，避免返回<think>标签
+        kwargs['enable_cot'] = False
+        # 添加system prompt指示不输出思考过程
+        if 'system_prompt' not in kwargs:
+            kwargs['system_prompt'] = "You are a helpful assistant. Provide direct answers without showing your reasoning process. Do not use <think> tags or output your thinking process."
         return openai_complete_if_cache(
             ark_model, prompt, api_key=ark_api_key, base_url=ark_base_url, **kwargs
         )
@@ -184,6 +189,59 @@ async def lifespan(app):
     metrics_collector = get_metrics_collector()
     metrics_collector.start_system_monitoring(interval=60)  # 每 60 秒采集一次系统指标
     logger.info("✓ Performance monitoring started")
+
+    # 8. 预热 Workers（减少首次查询延迟）
+    import time
+    import asyncio
+    logger.info("=" * 70)
+    logger.info("🔥 Warming up Workers (Embedding + LLM)...")
+    logger.info("=" * 70)
+    warmup_start = time.time()
+
+    try:
+        # 并行预热Embedding和LLM Workers
+        warmup_tasks = []
+
+        # 预热Embedding Workers
+        async def warmup_embedding():
+            try:
+                test_embedding = await embedding_func(["warmup test query"])
+                logger.info(f"✓ Embedding Workers warmed up ({len(test_embedding[0])} dimensions)")
+                return True
+            except Exception as e:
+                logger.warning(f"⚠️  Embedding warmup failed: {e}")
+                return False
+
+        # 预热LLM Workers
+        async def warmup_llm():
+            try:
+                test_response = await llm_model_func("Hello, respond with 'Hi'")
+                logger.info(f"✓ LLM Workers warmed up (response: {len(test_response)} chars)")
+                return True
+            except Exception as e:
+                logger.warning(f"⚠️  LLM warmup failed: {e}")
+                return False
+
+        warmup_tasks.append(warmup_embedding())
+        warmup_tasks.append(warmup_llm())
+
+        # 并行执行预热
+        results = await asyncio.gather(*warmup_tasks, return_exceptions=True)
+
+        warmup_elapsed = time.time() - warmup_start
+        success_count = sum(1 for r in results if r is True)
+
+        if success_count == len(warmup_tasks):
+            logger.info(f"✅ All Workers ready in {warmup_elapsed:.2f}s")
+        else:
+            logger.warning(f"⚠️  Partial warmup completed in {warmup_elapsed:.2f}s ({success_count}/{len(warmup_tasks)} succeeded)")
+            logger.warning("   Workers will be initialized on first request")
+
+    except Exception as e:
+        logger.error(f"❌ Worker warmup failed: {e}")
+        logger.warning("   Workers will be initialized on first request")
+
+    logger.info("=" * 70)
 
     yield  # 应用运行期间保持实例可用
 

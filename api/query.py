@@ -3,6 +3,7 @@
 """
 
 import os
+import re
 from fastapi import APIRouter, HTTPException
 from typing import Optional
 
@@ -25,6 +26,34 @@ router = APIRouter()
 # 从环境变量读取查询优化参数
 DEFAULT_TOP_K = int(os.getenv("TOP_K", "20"))
 DEFAULT_CHUNK_TOP_K = int(os.getenv("CHUNK_TOP_K", "10"))
+
+
+def clean_thinking_tags(text: str) -> str:
+    """
+    清理LLM响应中的<think>标签及其内容
+
+    当使用支持COT（Chain of Thought）的模型时，响应可能包含思考过程。
+    此函数移除这些标签，只保留最终答案。
+
+    Args:
+        text: 可能包含<think>标签的响应文本
+
+    Returns:
+        清理后的文本（只包含最终答案）
+    """
+    if not text:
+        return text
+
+    # 移除<think>...</think>标签及其内容
+    cleaned = re.sub(r'<think>.*?</think>', '', text, flags=re.DOTALL)
+
+    # 清理多余的空行
+    cleaned = re.sub(r'\n{3,}', '\n\n', cleaned)
+
+    # 清理首尾空白
+    cleaned = cleaned.strip()
+
+    return cleaned
 
 
 @router.post("/query")
@@ -70,6 +99,10 @@ async def query_rag(request: QueryRequest):
             request.query,
             param=query_param
         )
+
+        # 清理响应中的<think>标签（针对COT模型）
+        answer = clean_thinking_tags(answer)
+
         return {"answer": answer}
     except Exception as e:
         logger.error(f"Error during query: {e}", exc_info=True)
