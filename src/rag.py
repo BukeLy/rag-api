@@ -22,6 +22,13 @@ except ImportError:
 # --- 配置 ---
 load_dotenv()
 
+# Seed 1.6 model returns <think> tags by default, breaking API responses
+DEFAULT_SYSTEM_PROMPT = "You are a helpful assistant. Provide direct answers without showing your reasoning process."
+
+# EC2 t3.small has 2 vCPUs. 4x oversubscription for I/O-bound LLM API calls.
+# Empirically tested: 8 gives best throughput without hitting rate limits.
+DEFAULT_MAX_ASYNC = 8
+
 # --- 全局实例（单一 LightRAG 架构）---
 global_lightrag_instance = None  # 单一共享的 LightRAG 实例（核心知识图谱）
 rag_instance_mineru = None  # MinerU: 强大多模态解析器，共享 LightRAG
@@ -56,10 +63,10 @@ async def lifespan(app):
     if not ark_base_url:
         raise RuntimeError("ARK_BASE_URL is not set!")
     
-    # 读取 LightRAG 查询优化参数（针对 EC2 持久化容器优化）
+    # 读取 LightRAG 查询优化参数
     top_k = int(os.getenv("TOP_K", "20"))
     chunk_top_k = int(os.getenv("CHUNK_TOP_K", "10"))
-    max_async = int(os.getenv("MAX_ASYNC", "8"))  # EC2环境：提升并发以加速查询（持久化容器无冷启动问题）
+    max_async = int(os.getenv("MAX_ASYNC", str(DEFAULT_MAX_ASYNC)))
     max_parallel_insert = int(os.getenv("MAX_PARALLEL_INSERT", "2"))
     max_entity_tokens = int(os.getenv("MAX_ENTITY_TOKENS", "6000"))
     max_relation_tokens = int(os.getenv("MAX_RELATION_TOKENS", "8000"))
@@ -79,11 +86,9 @@ async def lifespan(app):
 
     # 1. 定义共享的 LLM 和 Embedding 函数
     def llm_model_func(prompt, **kwargs):
-        # 显式禁用COT（Chain of Thought）处理，避免返回<think>标签
         kwargs['enable_cot'] = False
-        # 添加system prompt指示不输出思考过程
         if 'system_prompt' not in kwargs:
-            kwargs['system_prompt'] = "You are a helpful assistant. Provide direct answers without showing your reasoning process. Do not use <think> tags or output your thinking process."
+            kwargs['system_prompt'] = DEFAULT_SYSTEM_PROMPT
         return openai_complete_if_cache(
             ark_model, prompt, api_key=ark_api_key, base_url=ark_base_url, **kwargs
         )
