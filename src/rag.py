@@ -169,6 +169,22 @@ async def lifespan(app):
     logger.info("   - Direct Query: bypass parsers for 95% text queries")
     logger.info("=" * 70)
 
+    # 6. 初始化文件服务和清理任务
+    from src.file_url_service import get_file_service
+    file_service = get_file_service()
+    
+    # 启动后台文件清理任务
+    cleanup_interval = int(os.getenv("FILE_CLEANUP_INTERVAL", "3600"))  # 默认 1 小时
+    cleanup_hours = int(os.getenv("FILE_CLEANUP_HOURS", "24"))  # 默认 24 小时保留
+    file_service.start_cleanup_task(interval_seconds=cleanup_interval, max_age_hours=cleanup_hours)
+    logger.info(f"✓ File cleanup task started: interval={cleanup_interval}s, retention={cleanup_hours}h")
+
+    # 7. 启动性能监控
+    from src.metrics import get_metrics_collector
+    metrics_collector = get_metrics_collector()
+    metrics_collector.start_system_monitoring(interval=60)  # 每 60 秒采集一次系统指标
+    logger.info("✓ Performance monitoring started")
+
     yield  # 应用运行期间保持实例可用
 
     # 关闭时清理资源

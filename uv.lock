@@ -3547,6 +3547,7 @@ dependencies = [
     { name = "aiohttp" },
     { name = "lightrag-hku" },
     { name = "loguru" },
+    { name = "psutil" },
     { name = "raganything", extra = ["all"] },
     { name = "requests" },
 ]
@@ -3556,6 +3557,7 @@ requires-dist = [
     { name = "aiohttp", specifier = ">=3.9.0" },
     { name = "lightrag-hku", specifier = ">=1.4.9.3" },
     { name = "loguru", specifier = ">=0.7.0" },
+    { name = "psutil", specifier = ">=5.9.0" },
     { name = "raganything", extras = ["all"], specifier = ">=1.2.8" },
     { name = "requests", specifier = ">=2.31.0" },
 ]

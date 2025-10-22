@@ -6,8 +6,11 @@
 import os
 import shutil
 import uuid
+import asyncio
+import threading
 from typing import Optional
 from pathlib import Path
+from datetime import datetime, timedelta
 
 from src.logger import logger
 
@@ -58,9 +61,65 @@ class FileURLService:
                 logger.warning(f"Failed to cleanup file {file_id}: {e}")
     
     def cleanup_old_files(self, max_age_hours: int = 24):
-        """清理过期文件（TODO: 实现基于时间的清理）"""
-        # 目前先简单实现，后续可以添加基于文件创建时间的清理逻辑
-        logger.info("File cleanup triggered (placeholder implementation)")
+        """清理过期文件（基于创建时间自动删除）"""
+        current_time = datetime.now()
+        cleanup_count = 0
+        freed_bytes = 0
+        
+        files_to_remove = []
+        
+        # 检查所有文件的创建时间
+        for file_id, file_path in list(self.file_mapping.items()):
+            if os.path.exists(file_path):
+                try:
+                    # 获取文件创建时间
+                    file_ctime = datetime.fromtimestamp(os.path.getctime(file_path))
+                    file_age = current_time - file_ctime
+                    
+                    # 如果超过指定时间，标记为待删除
+                    if file_age > timedelta(hours=max_age_hours):
+                        file_size = os.path.getsize(file_path)
+                        files_to_remove.append((file_id, file_path, file_size))
+                        freed_bytes += file_size
+                        cleanup_count += 1
+                except (OSError, ValueError) as e:
+                    logger.warning(f"Failed to check file age for {file_id}: {e}")
+        
+        # 执行删除
+        for file_id, file_path, file_size in files_to_remove:
+            try:
+                os.remove(file_path)
+                del self.file_mapping[file_id]
+                logger.info(f"Cleaned up old file: {file_id} (size: {file_size} bytes, age: {(current_time - datetime.fromtimestamp(os.path.getctime(file_path))).total_seconds() / 3600:.1f}h)")
+            except OSError as e:
+                logger.warning(f"Failed to cleanup file {file_id}: {e}")
+        
+        if cleanup_count > 0:
+            logger.info(f"File cleanup completed: removed {cleanup_count} files, freed {freed_bytes / (1024 * 1024):.2f} MB")
+    
+    def start_cleanup_task(self, interval_seconds: int = 3600, max_age_hours: int = 24):
+        """启动后台定时清理任务
+        
+        Args:
+            interval_seconds: 清理间隔（秒），默认每小时清理一次
+            max_age_hours: 文件保留时间（小时），默认 24 小时
+        """
+        def cleanup_loop():
+            while True:
+                try:
+                    asyncio.run(asyncio.sleep(interval_seconds))
+                    self.cleanup_old_files(max_age_hours=max_age_hours)
+                except Exception as e:
+                    logger.error(f"Error in cleanup task: {e}")
+                except asyncio.CancelledError:
+                    logger.info("Cleanup task cancelled")
+                    break
+        
+        # 使用后台线程执行定时清理
+        cleanup_thread = threading.Thread(target=cleanup_loop, daemon=True)
+        cleanup_thread.name = "FileCleanupThread"
+        cleanup_thread.start()
+        logger.info(f"File cleanup task started: interval={interval_seconds}s, max_age={max_age_hours}h")
     
     def _sanitize_filename(self, filename: str) -> str:
         """清理文件名，确保 URL 安全"""
