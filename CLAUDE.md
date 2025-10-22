@@ -137,10 +137,33 @@ Environment variables are managed through `.env` (copy from `env.example`):
   - Model version: `pipeline` (stable) or `vlm` (faster, more accurate, recommended)
 
 ### Performance Tuning
+
+**Current configuration is optimized for EC2 persistent containers.**
+
+#### Core Parameters
 - **TOP_K**: Number of entities/relations to retrieve (default: 20, was 60)
 - **CHUNK_TOP_K**: Number of text chunks to retrieve (default: 10, was 20)
 - **MAX_ASYNC**: LLM concurrent requests (default: 8, optimized from 4)
 - **DOCUMENT_PROCESSING_CONCURRENCY**: Concurrent document processing (1 for local, 10+ for remote)
+
+#### Deployment-Specific Recommendations
+
+**EC2/ECS Persistent Containers** (Current setup):
+- `MAX_ASYNC=8`: Fully leverage persistent HTTP connections
+- Worker warmup: Enabled in `src/rag.py:lifespan()` to reduce first query delay
+- Expected performance: First query ~15s (after warmup), subsequent queries 6-11s
+- Best for: Stable traffic (>5 req/hour), 7x24 services
+
+**Fargate Auto-Scaling** (Alternative):
+- `MAX_ASYNC=4`: Reduce cold start overhead
+- Worker warmup: Still beneficial but less effective due to frequent container restarts
+- Expected performance: First query ~35s, subsequent queries 10-15s
+- Best for: Variable traffic, cost optimization for low-frequency usage
+
+**Lambda/Serverless** (Not recommended):
+- Worker initialization delay (25-35s per cold start) significantly impacts user experience
+- HTTP connection pooling ineffective due to short container lifetime
+- See `docs/LIGHTRAG_WORKER_MECHANISM_SOURCE_CODE_ANALYSIS.md` for detailed analysis
 
 ## Architecture Notes
 

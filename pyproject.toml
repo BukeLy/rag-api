@@ -5,7 +5,7 @@ description = "RAG API with multimodal document processing"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
-    "lightrag-hku>=1.4.9.3",
+    "lightrag-hku==1.4.9.4rc1",
     "raganything[all]>=1.2.8",
     "aiohttp>=3.9.0",
     "requests>=2.31.0",

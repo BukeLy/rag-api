@@ -56,10 +56,10 @@ async def lifespan(app):
     if not ark_base_url:
         raise RuntimeError("ARK_BASE_URL is not set!")
     
-    # 读取 LightRAG 查询优化参数（优化 MAX_ASYNC 提升并发性能）
+    # 读取 LightRAG 查询优化参数（针对 EC2 持久化容器优化）
     top_k = int(os.getenv("TOP_K", "20"))
     chunk_top_k = int(os.getenv("CHUNK_TOP_K", "10"))
-    max_async = int(os.getenv("MAX_ASYNC", "4"))  # 平衡性能和启动速度（Fargate优化）
+    max_async = int(os.getenv("MAX_ASYNC", "8"))  # EC2环境：提升并发以加速查询（持久化容器无冷启动问题）
     max_parallel_insert = int(os.getenv("MAX_PARALLEL_INSERT", "2"))
     max_entity_tokens = int(os.getenv("MAX_ENTITY_TOKENS", "6000"))
     max_relation_tokens = int(os.getenv("MAX_RELATION_TOKENS", "8000"))
