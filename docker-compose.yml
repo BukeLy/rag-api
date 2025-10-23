@@ -1,4 +1,13 @@
+# ============================================================
+# Docker Compose 配置文件
+# ============================================================
+# 分支: main（生产环境）
+# 架构: 应用容器 + 外部存储（Redis + Neo4j + PostgreSQL）
+# 特点: 代码打包在镜像内，稳定部署
+# ============================================================
+
 services:
+  # ==================== 应用服务 ====================
   rag-api:
     build:
       context: .
@@ -16,7 +25,7 @@ services:
     env_file:
       - .env
     volumes:
-      # 持久化向量数据库
+      # 持久化临时文件（外部存储模式下，主要数据在数据库中）
       - ./rag_local_storage:/app/rag_local_storage
       # 持久化输出文件
       - ./output:/app/output
@@ -30,6 +39,16 @@ services:
       - PYTHONUNBUFFERED=1
       # 提高 uv 包下载的并发性能
       - UV_HTTP_TIMEOUT=60
+    # 依赖外部存储服务（健康检查通过后启动）
+    depends_on:
+      redis:
+        condition: service_healthy
+      neo4j:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    networks:
+      - rag-network
     logging:
       driver: "json-file"
       options:
@@ -45,7 +64,93 @@ services:
     #       cpus: '1'
     #       memory: 2G
 
-  # 可选：Nginx 反向代理（用于生产环境）
+  # ==================== Redis（KV 存储 + 缓存）====================
+  redis:
+    image: redis:7-alpine
+    container_name: rag-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: >
+      redis-server
+      --appendonly yes
+      --maxmemory 512mb
+      --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - rag-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ==================== Neo4j（图存储）====================
+  neo4j:
+    image: neo4j:5-community
+    container_name: rag-neo4j
+    restart: unless-stopped
+    ports:
+      - "7474:7474"  # HTTP
+      - "7687:7687"  # Bolt
+    volumes:
+      - neo4j_data:/data
+      - neo4j_logs:/logs
+    environment:
+      - NEO4J_AUTH=neo4j/${NEO4J_PASSWORD}
+      - NEO4J_server_memory_heap_initial__size=512m
+      - NEO4J_server_memory_heap_max__size=1G
+      - NEO4J_server_memory_pagecache_size=512m
+      # 允许从容器外访问
+      - NEO4J_server_default__listen__address=0.0.0.0
+    healthcheck:
+      test: ["CMD", "cypher-shell", "-u", "neo4j", "-p", "${NEO4J_PASSWORD}", "RETURN 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    networks:
+      - rag-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ==================== PostgreSQL（向量存储）====================
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: rag-postgres
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init_postgres.sql:/docker-entrypoint-initdb.d/init.sql
+    environment:
+      - POSTGRES_DB=lightrag
+      - POSTGRES_USER=lightrag
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_INITDB_ARGS=--encoding=UTF-8 --lc-collate=C --lc-ctype=C
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U lightrag -d lightrag"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - rag-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ==================== Nginx 反向代理（生产环境）====================
   nginx:
     image: nginx:alpine
     container_name: rag-nginx
@@ -59,10 +164,24 @@ services:
       - ./logs/nginx:/var/log/nginx
     depends_on:
       - rag-api
+    networks:
+      - rag-network
     profiles:
       - production
 
+# ==================== 持久化卷 ====================
+volumes:
+  redis_data:
+    driver: local
+  neo4j_data:
+    driver: local
+  neo4j_logs:
+    driver: local
+  postgres_data:
+    driver: local
+
+# ==================== 网络 ====================
 networks:
-  default:
-    name: rag-network
+  rag-network:
+    driver: bridge
 
