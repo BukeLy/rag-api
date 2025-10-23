@@ -10,7 +10,7 @@ from typing import Optional
 from src.logger import logger
 from src.tenant_deps import get_tenant_id
 from src.multi_tenant import get_tenant_lightrag
-from .models import QueryRequest
+from .models import QueryRequest, QueryResponse
 
 # 导入 LightRAG 查询参数
 try:
@@ -37,11 +37,11 @@ def strip_think_tags(text: str) -> str:
     return re.sub(r'\n{3,}', '\n\n', text).strip()
 
 
-@router.post("/query")
+@router.post("/query", response_model=QueryResponse)
 async def query_rag(
     request: QueryRequest,
     tenant_id: str = Depends(get_tenant_id)
-):
+) -> QueryResponse:
     """
     查询 RAG 系统（多租户隔离，直接访问 LightRAG 知识图谱）
 
