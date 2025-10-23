@@ -142,6 +142,50 @@ Environment variables are managed through `.env` (copy from `env.example`):
   - Requires **MINERU_API_TOKEN** and **FILE_SERVICE_BASE_URL**
   - Model version: `pipeline` (stable) or `vlm` (faster, more accurate, recommended)
 
+### External Storage Configuration
+
+**Important**: LightRAG 1.4.9.4 uses **environment variables** for external storage configuration, not initialization parameters.
+
+To enable external storage:
+
+1. **Set storage toggle**:
+   ```bash
+   USE_EXTERNAL_STORAGE=true
+   KV_STORAGE=RedisKVStorage
+   VECTOR_STORAGE=PGVectorStorage
+   GRAPH_STORAGE=Neo4JStorage
+   ```
+
+2. **Configure Redis** (for KV storage):
+   ```bash
+   REDIS_URI=redis://redis:6379/0  # URI format required
+   REDIS_WORKSPACE=default          # Optional
+   ```
+
+3. **Configure PostgreSQL** (for vector storage):
+   ```bash
+   POSTGRES_HOST=postgres
+   POSTGRES_PORT=5432
+   POSTGRES_DATABASE=lightrag       # Note: POSTGRES_DATABASE not POSTGRES_DB
+   POSTGRES_USER=lightrag
+   POSTGRES_PASSWORD=your_password
+   POSTGRES_WORKSPACE=default
+   POSTGRES_MAX_CONNECTIONS=20
+   ```
+
+4. **Configure Neo4j** (for graph storage):
+   ```bash
+   NEO4J_URI=bolt://neo4j:7687
+   NEO4J_USERNAME=neo4j
+   NEO4J_PASSWORD=your_password
+   NEO4J_WORKSPACE=default
+   ```
+
+**Key Points**:
+- ✅ Storage backends read connection info from environment variables
+- ❌ Do NOT pass `*_cls_kwargs` parameters to LightRAG.__init__()
+- 📝 See `env.example` for complete configuration template
+
 ### Performance Tuning
 
 **Current configuration is optimized for EC2 persistent containers.**

@@ -137,55 +137,29 @@ async def lifespan(app):
         logger.info("=" * 70)
 
         # 准备存储配置
+        # 注意：LightRAG 1.4.9.4 通过环境变量读取连接配置，无需传递 *_cls_kwargs
         storage_kwargs = {}
 
         # Redis KV 存储配置
         if kv_storage == "RedisKVStorage":
-            redis_host = os.getenv("REDIS_HOST", "localhost")
-            redis_port = int(os.getenv("REDIS_PORT", "6379"))
-            redis_db = int(os.getenv("REDIS_DB", "0"))
-            logger.info(f"   Redis: {redis_host}:{redis_port} (db={redis_db})")
-
+            redis_uri = os.getenv("REDIS_URI", "redis://localhost:6379/0")
+            logger.info(f"   Redis: {redis_uri}")
             storage_kwargs["kv_storage"] = "RedisKVStorage"
-            storage_kwargs["kv_storage_cls_kwargs"] = {
-                "host": redis_host,
-                "port": redis_port,
-                "db": redis_db
-            }
-            # 可选：Redis 密码
-            redis_password = os.getenv("REDIS_PASSWORD", "")
-            if redis_password:
-                storage_kwargs["kv_storage_cls_kwargs"]["password"] = redis_password
 
         # PostgreSQL 向量存储配置
         if vector_storage == "PGVectorStorage":
             postgres_host = os.getenv("POSTGRES_HOST", "localhost")
-            postgres_port = int(os.getenv("POSTGRES_PORT", "5432"))
-            postgres_db = os.getenv("POSTGRES_DB", "lightrag")
-            postgres_user = os.getenv("POSTGRES_USER", "lightrag")
+            postgres_port = os.getenv("POSTGRES_PORT", "5432")
+            postgres_db = os.getenv("POSTGRES_DATABASE", "lightrag")
             logger.info(f"   PostgreSQL: {postgres_host}:{postgres_port}/{postgres_db}")
-
             storage_kwargs["vector_storage"] = "PGVectorStorage"
-            storage_kwargs["vector_storage_cls_kwargs"] = {
-                "host": postgres_host,
-                "port": postgres_port,
-                "database": postgres_db,
-                "user": postgres_user,
-                "password": os.getenv("POSTGRES_PASSWORD", "")
-            }
 
         # Neo4j 图存储配置
         if graph_storage == "Neo4JStorage":
             neo4j_uri = os.getenv("NEO4J_URI", "bolt://localhost:7687")
             neo4j_username = os.getenv("NEO4J_USERNAME", "neo4j")
-            logger.info(f"   Neo4j: {neo4j_uri}")
-
+            logger.info(f"   Neo4j: {neo4j_uri} (user: {neo4j_username})")
             storage_kwargs["graph_storage"] = "Neo4JStorage"
-            storage_kwargs["graph_storage_cls_kwargs"] = {
-                "uri": neo4j_uri,
-                "user": neo4j_username,
-                "password": os.getenv("NEO4J_PASSWORD", "")
-            }
 
         global_lightrag_instance = LightRAG(
             working_dir="./rag_local_storage",  # 仅用于临时文件
