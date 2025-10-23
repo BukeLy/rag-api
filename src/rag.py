@@ -120,12 +120,91 @@ async def lifespan(app):
 
     # 2. 创建单一 LightRAG 实例（核心知识图谱，所有解析器共享）
     logger.info("Creating shared LightRAG instance...")
-    global_lightrag_instance = LightRAG(
-        working_dir="./rag_local_storage",
-        llm_model_func=llm_model_func,
-        embedding_func=embedding_func,
-        llm_model_max_async=max_async,  # 优化并发性能（从 4 提升到 8）
-    )
+
+    # 读取外部存储配置
+    use_external_storage = os.getenv("USE_EXTERNAL_STORAGE", "false").lower() == "true"
+    kv_storage = os.getenv("KV_STORAGE", "JsonKVStorage")
+    vector_storage = os.getenv("VECTOR_STORAGE", "NanoVectorDB")
+    graph_storage = os.getenv("GRAPH_STORAGE", "NetworkXStorage")
+
+    # 根据配置创建 LightRAG 实例
+    if use_external_storage:
+        logger.info("=" * 70)
+        logger.info("🔌 Using external storage backends:")
+        logger.info(f"   - KV Storage: {kv_storage}")
+        logger.info(f"   - Vector Storage: {vector_storage}")
+        logger.info(f"   - Graph Storage: {graph_storage}")
+        logger.info("=" * 70)
+
+        # 准备存储配置
+        storage_kwargs = {}
+
+        # Redis KV 存储配置
+        if kv_storage == "RedisKVStorage":
+            redis_host = os.getenv("REDIS_HOST", "localhost")
+            redis_port = int(os.getenv("REDIS_PORT", "6379"))
+            redis_db = int(os.getenv("REDIS_DB", "0"))
+            logger.info(f"   Redis: {redis_host}:{redis_port} (db={redis_db})")
+
+            storage_kwargs["kv_storage"] = "RedisKVStorage"
+            storage_kwargs["kv_storage_cls_kwargs"] = {
+                "host": redis_host,
+                "port": redis_port,
+                "db": redis_db
+            }
+            # 可选：Redis 密码
+            redis_password = os.getenv("REDIS_PASSWORD", "")
+            if redis_password:
+                storage_kwargs["kv_storage_cls_kwargs"]["password"] = redis_password
+
+        # PostgreSQL 向量存储配置
+        if vector_storage == "PGVectorStorage":
+            postgres_host = os.getenv("POSTGRES_HOST", "localhost")
+            postgres_port = int(os.getenv("POSTGRES_PORT", "5432"))
+            postgres_db = os.getenv("POSTGRES_DB", "lightrag")
+            postgres_user = os.getenv("POSTGRES_USER", "lightrag")
+            logger.info(f"   PostgreSQL: {postgres_host}:{postgres_port}/{postgres_db}")
+
+            storage_kwargs["vector_storage"] = "PGVectorStorage"
+            storage_kwargs["vector_storage_cls_kwargs"] = {
+                "host": postgres_host,
+                "port": postgres_port,
+                "database": postgres_db,
+                "user": postgres_user,
+                "password": os.getenv("POSTGRES_PASSWORD", "")
+            }
+
+        # Neo4j 图存储配置
+        if graph_storage == "Neo4JStorage":
+            neo4j_uri = os.getenv("NEO4J_URI", "bolt://localhost:7687")
+            neo4j_username = os.getenv("NEO4J_USERNAME", "neo4j")
+            logger.info(f"   Neo4j: {neo4j_uri}")
+
+            storage_kwargs["graph_storage"] = "Neo4JStorage"
+            storage_kwargs["graph_storage_cls_kwargs"] = {
+                "uri": neo4j_uri,
+                "user": neo4j_username,
+                "password": os.getenv("NEO4J_PASSWORD", "")
+            }
+
+        global_lightrag_instance = LightRAG(
+            working_dir="./rag_local_storage",  # 仅用于临时文件
+            llm_model_func=llm_model_func,
+            embedding_func=embedding_func,
+            llm_model_max_async=max_async,
+            **storage_kwargs  # 应用外部存储配置
+        )
+    else:
+        logger.info("=" * 70)
+        logger.info("📁 Using local file storage (default)")
+        logger.info("=" * 70)
+
+        global_lightrag_instance = LightRAG(
+            working_dir="./rag_local_storage",
+            llm_model_func=llm_model_func,
+            embedding_func=embedding_func,
+            llm_model_max_async=max_async,  # 优化并发性能（从 4 提升到 8）
+        )
     
     # 初始化 LightRAG 存储
     await global_lightrag_instance.initialize_storages()

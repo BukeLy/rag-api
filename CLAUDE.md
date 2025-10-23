@@ -24,46 +24,25 @@ This is a multimodal RAG (Retrieval-Augmented Generation) API service built with
 
 ## Branch Strategy
 
-- **`dev` branch**: Development environment
+- **`main` branch** (Production): Streamlined for deployment
+  - Code baked into Docker image
+  - Essential scripts and documentation only
+  - Optimized for stability and performance
+
+- **`dev` branch** (Development): Feature-rich development environment
   - Code mounted via volumes (hot reload enabled)
   - Full test scripts and technical documentation
   - Fast iteration without rebuilding images
 
-- **`main` branch**: Production environment
-  - Code baked into Docker image
-  - Streamlined structure (essential scripts/docs only)
-  - Optimized for deployment stability
+## Deployment Commands
 
-## Development Commands
-
-### Dev Environment (dev branch)
+**Note**: For development with hot reload, switch to `dev` branch:
 ```bash
-# Start dev environment with hot reload
-./scripts/dev.sh
-# OR
-docker compose -f docker-compose.dev.yml up --build
-
-# View logs
-docker compose -f docker-compose.dev.yml logs -f
-
-# Stop dev environment
-docker compose -f docker-compose.dev.yml down
-
-# Test API endpoints
-uv run python scripts/test_api.py
-uv run bash scripts/test_concurrent_perf.sh
+git checkout dev
+# See dev branch CLAUDE.md for development commands
 ```
 
-### Local Development (without Docker)
-```bash
-# Install dependencies
-uv sync
-
-# Start development server with hot reload
-uv run uvicorn main:app --host 0.0.0.0 --port 8000 --reload
-```
-
-### Docker Deployment (main branch)
+### Production Deployment (main branch)
 ```bash
 # Start all services
 docker compose up -d
