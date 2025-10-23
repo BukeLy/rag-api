@@ -77,10 +77,11 @@ docker compose down
 
 ## Remote Deployment
 
-### Production Server
+### Testing Server
 - **Host**: 45.78.223.205
 - **SSH Access**: `ssh -i /Users/chengjie/Downloads/chengjie.pem root@45.78.223.205`
 - **Deployment Method**: Git-based deployment via GitHub
+- **Environment**: dev branch with code hot-reload (volumes mounted)
 
 ### Deployment Workflow
 
@@ -94,37 +95,40 @@ All code changes must be pushed to GitHub first to ensure synchronization across
 2. GitHub repository (central source of truth)
 3. Production server
 
-### Deploying Code to Production
+### Deploying Code to Testing Server (45.78.223.205)
+
+**Important**: Testing server runs **dev branch** with code hot-reload enabled.
 
 ```bash
 # 1. From local machine: Commit and push changes to GitHub
 git add .
 git commit -m "feat: 描述你的更改"
-git push origin feature/your-branch  # or main
+git push origin dev
 
-# 2. SSH into production server
+# 2. SSH into testing server
 ssh -i /Users/chengjie/Downloads/chengjie.pem root@45.78.223.205
 
-# 3. On production server: Pull latest changes
-cd /path/to/rag-api  # Navigate to project directory
-git pull origin main  # or your target branch
+# 3. On testing server: Pull latest changes
+cd ~/rag-api
+git pull origin dev
 
-# 4. Restart services (if needed)
-docker compose down
-docker compose up -d
+# 4. Code changes take effect immediately (hot-reload via volumes)
+# Only restart if you changed dependencies or docker-compose.yml:
+docker compose restart  # Only if needed
 ```
 
 ### Quick Deployment Commands
 
 ```bash
-# Deploy from local to production (requires SSH key setup)
-git push && ssh -i /Users/chengjie/Downloads/chengjie.pem root@45.78.223.205 "cd /path/to/rag-api && git pull && docker compose restart"
+# Deploy from local to testing server
+git push && ssh -i /Users/chengjie/Downloads/chengjie.pem root@45.78.223.205 "cd ~/rag-api && git pull origin dev"
 ```
 
 **Important Notes**:
-- Always push to GitHub before deploying to production
-- Never commit directly on the production server
-- Use feature branches for development and merge to main after review
+- Testing server (45.78.223.205) runs **dev branch** with hot-reload
+- Code changes (src/, api/, main.py) take effect **immediately** without rebuild
+- Always push to GitHub before deploying to testing server
+- Never commit directly on the testing server
 - The SSH key `/Users/chengjie/Downloads/chengjie.pem` should have proper permissions (`chmod 600`)
 
 ## Configuration
