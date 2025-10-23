@@ -24,160 +24,143 @@ RAG API 采用**多租户 LightRAG 实例池 + 多解析器**架构,实现租户
 
 ### 整体架构(多租户模式)
 
-```
-                    FastAPI 应用层
-                          ↓
-        ┌─────────────────┴─────────────────┐
-        ↓                                   ↓
-    插入端点 (/insert)                  查询端点 (/query)
-    ?tenant_id=xxx                     ?tenant_id=xxx
-        ↓                                   ↓
-    租户依赖验证                         租户依赖验证
-        ↓                                   ↓
-    多租户管理器                         多租户管理器
-        ↓                                   ↓
-  ┌─────┴─────┐                    ┌──────────────┐
-  ↓           ↓                    │ 实例池(LRU)  │
-文件类型    解析器选择              │ ┌──────────┐ │
-判断         ↓     ↓                │ │tenant_a  │ │
-  ↓      MinerU  Docling            │ │tenant_b  │ │
-纯文本      ↓     ↓                 │ │tenant_c  │ │
-  ↓         LightRAG 实例           │ │...       │ │
-  ↓         (tenant_a)              │ └──────────┘ │
-  ↓              ↓                  └──────────────┘
-  └──→  LightRAG 实例                      ↓
-        (tenant_a)            LightRAG 实例(tenant_x)
-              ↓                            ↓
-        ┌─────────────────────────────────┐
-        │  外部存储(租户隔离命名空间)        │
-        ├─────────────────────────────────┤
-        │ Redis: tenant_a:kv_store        │
-        │ PostgreSQL: tenant_a:vectors    │
-        │ Neo4j: tenant_a:GraphDB         │
-        └─────────────────────────────────┘
+```mermaid
+flowchart TD
+    A[FastAPI 应用层] --> B[插入端点 /insert<br/>?tenant_id=xxx]
+    A --> C[查询端点 /query<br/>?tenant_id=xxx]
+
+    B --> D1[租户依赖验证]
+    C --> D2[租户依赖验证]
+
+    D1 --> E1[多租户管理器]
+    D2 --> E2[多租户管理器]
+
+    E1 --> F[文件类型判断]
+    F --> G1[纯文本]
+    F --> G2[解析器选择]
+
+    G2 --> H1[MinerU]
+    G2 --> H2[Docling]
+
+    G1 --> I1[LightRAG 实例<br/>tenant_a]
+    H1 --> I1
+    H2 --> I1
+
+    E2 --> J[实例池 LRU]
+    J --> K1[tenant_a]
+    J --> K2[tenant_b]
+    J --> K3[tenant_c]
+    J --> K4[...]
+
+    K1 --> L[LightRAG 实例<br/>tenant_x]
+
+    I1 --> M[(外部存储<br/>租户隔离命名空间)]
+    L --> M
+
+    M --> N1[Redis: tenant_a:kv_store]
+    M --> N2[PostgreSQL: tenant_a:vectors]
+    M --> N3[Neo4j: tenant_a:GraphDB]
+
+    style M fill:#e1f5ff
+    style J fill:#fff4e1
+    style A fill:#f0f0f0
 ```
 
 ### 租户隔离机制
 
-```
-租户 A 请求
-    ↓
-tenant_id=tenant_a
-    ↓
-┌────────────────────────────────┐
-│ 多租户管理器(LRU 缓存池)         │
-│                                │
-│  tenant_a → LightRAG(workspace=tenant_a)
-│             ↓
-│             Redis: tenant_a:*
-│             PostgreSQL: tenant_a:*
-│             Neo4j: tenant_a:*
-│                                │
-│  tenant_b → LightRAG(workspace=tenant_b)
-│             ↓
-│             Redis: tenant_b:*
-│             PostgreSQL: tenant_b:*
-│             Neo4j: tenant_b:*
-│                                │
-│  tenant_c → ...                │
-└────────────────────────────────┘
-    ↓
-完全隔离的知识图谱
+```mermaid
+flowchart TD
+    A[租户 A 请求] --> B[tenant_id=tenant_a]
+    B --> C[多租户管理器<br/>LRU 缓存池]
+
+    C --> D1[tenant_a]
+    C --> D2[tenant_b]
+    C --> D3[tenant_c ...]
+
+    D1 --> E1[LightRAG<br/>workspace=tenant_a]
+    E1 --> F1[Redis: tenant_a:*]
+    E1 --> F2[PostgreSQL: tenant_a:*]
+    E1 --> F3[Neo4j: tenant_a:*]
+
+    D2 --> E2[LightRAG<br/>workspace=tenant_b]
+    E2 --> G1[Redis: tenant_b:*]
+    E2 --> G2[PostgreSQL: tenant_b:*]
+    E2 --> G3[Neo4j: tenant_b:*]
+
+    F1 & F2 & F3 --> H[完全隔离的知识图谱]
+    G1 & G2 & G3 --> H
+
+    style C fill:#fff4e1
+    style H fill:#d4edda
 ```
 
 ### 数据流
 
 #### 插入流程(文档 → 知识图谱)
 
-```
-用户上传文件
-    ↓
-GET /insert?tenant_id=tenant_a&doc_id=xxx
-    ↓
-┌────────────────────────────────┐
-│ 1. 租户依赖验证                 │
-│    - 验证 tenant_id 格式        │
-│    - 调用鉴权钩子(预留)          │
-└────────────────────────────────┘
-    ↓
-┌────────────────────────────────┐
-│ 2. 获取租户实例                 │
-│    - 从实例池获取/创建          │
-│    - workspace=tenant_a        │
-└────────────────────────────────┘
-    ↓
-文件类型判断
-    ↓
-┌────────────────────────────────┐
-│ 纯文本(.txt, .md)              │
-│   → 直接读取                    │
-│   → LightRAG.ainsert()          │ 极快(~1秒)
-│   → tenant_a 知识图谱          │
-└────────────────────────────────┘
-    ↓(其他格式)
-┌────────────────────────────────┐
-│ 简单文档(< 500KB PDF/Office)   │
-│   → Docling 解析器              │ 快(~5-10秒)
-│   → 转 Markdown                 │
-│   → LightRAG.ainsert()          │
-│   → tenant_a 知识图谱          │
-└────────────────────────────────┘
-    ↓(其他格式)
-┌────────────────────────────────┐
-│ 复杂文档(图片、大文件)           │
-│   → MinerU 解析器               │ 强大(支持多模态)
-│   → 提取图片/表格/公式           │
-│   → 转 Markdown                 │
-│   → LightRAG.ainsert()          │
-│   → tenant_a 知识图谱          │
-└────────────────────────────────┘
+```mermaid
+flowchart TD
+    A[用户上传文件] --> B[GET /insert?tenant_id=tenant_a&doc_id=xxx]
+    B --> C[1. 租户依赖验证<br/>- 验证 tenant_id 格式<br/>- 调用鉴权钩子预留]
+    C --> D[2. 获取租户实例<br/>- 从实例池获取/创建<br/>- workspace=tenant_a]
+    D --> E{文件类型判断}
+
+    E -->|.txt, .md| F1[纯文本<br/>→ 直接读取<br/>→ LightRAG.ainsert<br/>→ tenant_a 知识图谱]
+    E -->|PDF/Office < 500KB| F2[简单文档<br/>→ Docling 解析器<br/>→ 转 Markdown<br/>→ LightRAG.ainsert<br/>→ tenant_a 知识图谱]
+    E -->|图片/大文件| F3[复杂文档<br/>→ MinerU 解析器<br/>→ 提取图片/表格/公式<br/>→ 转 Markdown<br/>→ LightRAG.ainsert<br/>→ tenant_a 知识图谱]
+
+    F1 --> G[知识图谱完成]
+    F2 --> G
+    F3 --> G
+
+    style F1 fill:#d4edda
+    style F2 fill:#fff3cd
+    style F3 fill:#f8d7da
+    style G fill:#cfe2ff
+
+    note1[极快 ~1秒]
+    note2[快 ~5-10秒]
+    note3[强大 支持多模态]
+
+    F1 -.- note1
+    F2 -.- note2
+    F3 -.- note3
 ```
 
 #### 查询流程(问题 → 答案)
 
-```
-用户查询
-    ↓
-POST /query?tenant_id=tenant_a
-    ↓
-┌────────────────────────────────┐
-│ 1. 租户依赖验证                 │
-│    - 验证 tenant_id            │
-└────────────────────────────────┘
-    ↓
-┌────────────────────────────────┐
-│ 2. 获取租户实例                 │
-│    - 从实例池获取 tenant_a 实例 │
-│    - 如不存在,返回 503          │
-└────────────────────────────────┘
-    ↓
-直接访问 LightRAG(workspace=tenant_a)
-(绕过解析器)
-    ↓
-┌────────────────────┐
-│ QueryParam 配置    │
-│ - mode: naive/...  │
-│ - top_k: 20        │
-│ - enable_rerank    │
-└────────────────────┘
-    ↓
-tenant_a 知识图谱检索
-    ↓
-┌─ Naive 模式 ────┐
-│ 向量相似度检索   │ 最快(10-20秒)
-└─────────────────┘
-┌─ Local 模式 ────┐
-│ 局部知识图谱     │ 精确(20-40秒)
-└─────────────────┘
-┌─ Global 模式 ───┐
-│ 全局知识图谱     │ 完整(30-60秒)
-└─────────────────┘
-    ↓
-Rerank 重排序(可选)
-    ↓
-LLM 生成答案(仅使用 tenant_a 的数据)
-    ↓
-返回结果
+```mermaid
+flowchart TD
+    A[用户查询] --> B[POST /query?tenant_id=tenant_a]
+    B --> C[1. 租户依赖验证<br/>- 验证 tenant_id]
+    C --> D[2. 获取租户实例<br/>- 从实例池获取 tenant_a 实例<br/>- 如不存在返回 503]
+    D --> E[直接访问 LightRAG<br/>workspace=tenant_a<br/>绕过解析器]
+    E --> F[QueryParam 配置<br/>- mode: naive/...<br/>- top_k: 20<br/>- enable_rerank]
+    F --> G[tenant_a 知识图谱检索]
+
+    G --> H1[Naive 模式<br/>向量相似度检索]
+    G --> H2[Local 模式<br/>局部知识图谱]
+    G --> H3[Global 模式<br/>全局知识图谱]
+
+    H1 --> I[Rerank 重排序<br/>可选]
+    H2 --> I
+    H3 --> I
+
+    I --> J[LLM 生成答案<br/>仅使用 tenant_a 的数据]
+    J --> K[返回结果]
+
+    style H1 fill:#d4edda
+    style H2 fill:#fff3cd
+    style H3 fill:#f8d7da
+    style K fill:#cfe2ff
+
+    note1[最快 10-20秒]
+    note2[精确 20-40秒]
+    note3[完整 30-60秒]
+
+    H1 -.- note1
+    H2 -.- note2
+    H3 -.- note3
 ```
 
 ---
@@ -426,24 +409,23 @@ LightRAG(
 
 **2. 实例池管理(LRU 缓存)**
 
-```
-┌────────────────────────────────┐
-│ 多租户管理器                    │
-│                                │
-│ _instances = {                │
-│   "tenant_a": LightRAG(...),  │
-│   "tenant_b": LightRAG(...),  │
-│   "tenant_c": LightRAG(...),  │
-│   ...                          │
-│ }                              │
-│                                │
-│ max_instances = 50            │
-└────────────────────────────────┘
+```mermaid
+graph TB
+    subgraph Manager[多租户管理器]
+        A[_instances Dictionary]
+        A --> B[tenant_a: LightRAG...]
+        A --> C[tenant_b: LightRAG...]
+        A --> D[tenant_c: LightRAG...]
+        A --> E[...]
+        F[max_instances = 50]
+    end
 
-当实例数 >= 50:
-  1. 移除最旧的实例(FIFO)
-  2. 创建新实例
-  3. 加入缓存
+    G[当实例数 >= 50] --> H[1. 移除最旧的实例 FIFO]
+    H --> I[2. 创建新实例]
+    I --> J[3. 加入缓存]
+
+    style Manager fill:#fff4e1
+    style G fill:#f8d7da
 ```
 
 **3. 任务存储隔离**
@@ -680,54 +662,72 @@ LightRAG(
 
 ### 开发环境
 
-```
-本地机器
-  ├─ Python 虚拟环境(uv)
-  ├─ FastAPI 服务(8000端口)
-  └─ 本地存储
-      ├─ rag_local_storage/
-      │   ├─ tenant_a/  # 租户 A 的数据
-      │   ├─ tenant_b/  # 租户 B 的数据
-      │   └─ tenant_c/  # 租户 C 的数据
-      └─ output/(解析结果)
+```mermaid
+graph TD
+    A[本地机器]
+    A --> B[Python 虚拟环境 uv]
+    A --> C[FastAPI 服务<br/>8000端口]
+    A --> D[本地存储]
+
+    D --> E[rag_local_storage/]
+    D --> F[output/<br/>解析结果]
+
+    E --> G[tenant_a/<br/>租户 A 的数据]
+    E --> H[tenant_b/<br/>租户 B 的数据]
+    E --> I[tenant_c/<br/>租户 C 的数据]
+
+    style A fill:#e1f5ff
+    style D fill:#fff4e1
 ```
 
 ### 生产环境(Docker)
 
-```
-Docker 容器
-  ├─ Python 3.10 环境
-  ├─ FastAPI 服务(8000端口)
-  ├─ 持久化卷
-  │   ├─ rag_local_storage/(知识图谱,多租户)
-  │   ├─ output/(解析结果)
-  │   ├─ logs/(日志)
-  │   └─ model_cache/(模型缓存)
-  └─ Nginx 反向代理(可选)
+```mermaid
+graph TD
+    A[Docker 容器]
+    A --> B[Python 3.10 环境]
+    A --> C[FastAPI 服务<br/>8000端口]
+    A --> D[持久化卷]
+    A --> E[Nginx 反向代理<br/>可选]
+
+    D --> F[rag_local_storage/<br/>知识图谱,多租户]
+    D --> G[output/<br/>解析结果]
+    D --> H[logs/<br/>日志]
+    D --> I[model_cache/<br/>模型缓存]
+
+    style A fill:#cfe2ff
+    style D fill:#fff4e1
+    style E fill:#f8d7da
 ```
 
 ### 外部存储模式(推荐生产环境)
 
-```
-Docker 容器 / ECS 任务
-  ├─ FastAPI 服务(无状态)
-  └─ 多租户管理器
-      ↓
-┌─────────────────────────────────┐
-│  外部存储(租户隔离)              │
-├─────────────────────────────────┤
-│ Redis:                          │
-│   - tenant_a:kv_store           │
-│   - tenant_b:kv_store           │
-│                                 │
-│ PostgreSQL (pgvector):          │
-│   - tenant_a:vectors            │
-│   - tenant_b:vectors            │
-│                                 │
-│ Neo4j:                          │
-│   - tenant_a:GraphDB            │
-│   - tenant_b:GraphDB            │
-└─────────────────────────────────┘
+```mermaid
+graph TB
+    A[Docker 容器 / ECS 任务]
+    A --> B[FastAPI 服务<br/>无状态]
+    A --> C[多租户管理器]
+
+    C --> D[(外部存储<br/>租户隔离)]
+
+    D --> E[Redis]
+    D --> F[PostgreSQL<br/>pgvector]
+    D --> G[Neo4j]
+
+    E --> E1[tenant_a:kv_store]
+    E --> E2[tenant_b:kv_store]
+
+    F --> F1[tenant_a:vectors]
+    F --> F2[tenant_b:vectors]
+
+    G --> G1[tenant_a:GraphDB]
+    G --> G2[tenant_b:GraphDB]
+
+    style A fill:#cfe2ff
+    style D fill:#e1f5ff
+    style E fill:#fff4e1
+    style F fill:#fff4e1
+    style G fill:#fff4e1
 ```
 
 ---
