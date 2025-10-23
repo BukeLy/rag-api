@@ -176,6 +176,10 @@ class MultiTenantRAGManager:
         # 初始化存储
         await instance.initialize_storages()
 
+        # 初始化 Pipeline Status（多租户模式必需）
+        from lightrag.kg.shared_storage import initialize_pipeline_status
+        await initialize_pipeline_status()
+
         # 配置 Rerank（如果启用）
         if rerank_func:
             instance.rerank_model_func = rerank_func
