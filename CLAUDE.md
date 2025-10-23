@@ -22,21 +22,48 @@ This is a multimodal RAG (Retrieval-Augmented Generation) API service built with
 - **Docling parser**: Lightweight fast parsing for simple documents
 - **Direct LightRAG query**: Bypasses parsers for 95% of text queries, optimizing performance
 
+## Branch Strategy
+
+- **`dev` branch**: Development environment
+  - Code mounted via volumes (hot reload enabled)
+  - Full test scripts and technical documentation
+  - Fast iteration without rebuilding images
+
+- **`main` branch**: Production environment
+  - Code baked into Docker image
+  - Streamlined structure (essential scripts/docs only)
+  - Optimized for deployment stability
+
 ## Development Commands
 
-### Local Development
+### Dev Environment (dev branch)
+```bash
+# Start dev environment with hot reload
+./scripts/dev.sh
+# OR
+docker compose -f docker-compose.dev.yml up --build
+
+# View logs
+docker compose -f docker-compose.dev.yml logs -f
+
+# Stop dev environment
+docker compose -f docker-compose.dev.yml down
+
+# Test API endpoints
+uv run python scripts/test_api.py
+uv run bash scripts/test_concurrent_perf.sh
+```
+
+### Local Development (without Docker)
 ```bash
 # Install dependencies
 uv sync
 
 # Start development server with hot reload
 uv run uvicorn main:app --host 0.0.0.0 --port 8000 --reload
-
-# Test API endpoints
-uv run python scripts/test_api.py
 ```
 
-### Docker Deployment
+### Docker Deployment (main branch)
 ```bash
 # Start all services
 docker compose up -d

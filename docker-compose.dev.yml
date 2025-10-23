@@ -1,0 +1,40 @@
+# Development Environment Docker Compose
+# 特性：代码外挂、热重载、快速迭代
+services:
+  rag-api:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: rag-api-dev
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    volumes:
+      # ===代码挂载（Dev环境特色）===
+      # 修改代码立即生效，无需重新构建镜像
+      - ./main.py:/app/main.py
+      - ./src:/app/src
+      - ./api:/app/api
+
+      # ===数据目录挂载===
+      - ./rag_local_storage:/app/rag_local_storage
+      - ./output:/app/output
+      - ./logs:/app/logs
+      - ./model_cache:/root/.cache
+    environment:
+      - TZ=Asia/Shanghai
+      - PYTHONUNBUFFERED=1
+      - UV_HTTP_TIMEOUT=60
+    # 热重载命令
+    command: ["uv", "run", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  default:
+    name: rag-network-dev
