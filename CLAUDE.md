@@ -22,21 +22,27 @@ This is a multimodal RAG (Retrieval-Augmented Generation) API service built with
 - **Docling parser**: Lightweight fast parsing for simple documents
 - **Direct LightRAG query**: Bypasses parsers for 95% of text queries, optimizing performance
 
-## Development Commands
+## Branch Strategy
 
-### Local Development
+- **`main` branch** (Production): Streamlined for deployment
+  - Code baked into Docker image
+  - Essential scripts and documentation only
+  - Optimized for stability and performance
+
+- **`dev` branch** (Development): Feature-rich development environment
+  - Code mounted via volumes (hot reload enabled)
+  - Full test scripts and technical documentation
+  - Fast iteration without rebuilding images
+
+## Deployment Commands
+
+**Note**: For development with hot reload, switch to `dev` branch:
 ```bash
-# Install dependencies
-uv sync
-
-# Start development server with hot reload
-uv run uvicorn main:app --host 0.0.0.0 --port 8000 --reload
-
-# Test API endpoints
-uv run python scripts/test_api.py
+git checkout dev
+# See dev branch CLAUDE.md for development commands
 ```
 
-### Docker Deployment
+### Production Deployment (main branch)
 ```bash
 # Start all services
 docker compose up -d
