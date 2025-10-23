@@ -1,5 +1,5 @@
 """
-任务存储和状态管理
+任务存储和状态管理（支持多租户隔离）
 
 注意：这是内存存储，重启后数据会丢失。
 生产环境建议使用 Redis 或数据库。
@@ -12,8 +12,9 @@ from typing import Dict
 from src.logger import logger
 from .models import TaskInfo
 
-# 任务存储（内存字典）
-TASK_STORE: Dict[str, TaskInfo] = {}
+# 任务存储（按租户隔离的嵌套字典）
+# 结构: {tenant_id: {task_id: TaskInfo}}
+TASK_STORE: Dict[str, Dict[str, TaskInfo]] = {}
 
 # 并发控制信号量（动态配置，根据 MinerU 模式）
 # 读取 MinerU 模式
@@ -38,27 +39,76 @@ DOCUMENT_PROCESSING_SEMAPHORE = asyncio.Semaphore(DOCUMENT_PROCESSING_CONCURRENC
 logger.info(f"⚙️  Document Processing: mode={mineru_mode}, concurrency={DOCUMENT_PROCESSING_CONCURRENCY}")
 
 
-def get_task(task_id: str) -> TaskInfo:
-    """获取任务信息"""
-    return TASK_STORE.get(task_id)
+def get_task(task_id: str, tenant_id: str) -> TaskInfo:
+    """
+    获取指定租户的任务信息
+
+    Args:
+        task_id: 任务ID
+        tenant_id: 租户ID
+
+    Returns:
+        TaskInfo: 任务信息，如果不存在则返回 None
+    """
+    return TASK_STORE.get(tenant_id, {}).get(task_id)
 
 
-def create_task(task_info: TaskInfo) -> None:
-    """创建任务"""
-    TASK_STORE[task_info.task_id] = task_info
+def create_task(task_info: TaskInfo, tenant_id: str) -> None:
+    """
+    为指定租户创建任务
+
+    Args:
+        task_info: 任务信息
+        tenant_id: 租户ID
+    """
+    if tenant_id not in TASK_STORE:
+        TASK_STORE[tenant_id] = {}
+    TASK_STORE[tenant_id][task_info.task_id] = task_info
+    logger.debug(f"Task created: {task_info.task_id} for tenant: {tenant_id}")
 
 
-def update_task(task_id: str, **kwargs) -> None:
-    """更新任务信息"""
-    if task_id in TASK_STORE:
+def update_task(task_id: str, tenant_id: str, **kwargs) -> None:
+    """
+    更新指定租户的任务信息
+
+    Args:
+        task_id: 任务ID
+        tenant_id: 租户ID
+        **kwargs: 要更新的字段
+    """
+    if tenant_id in TASK_STORE and task_id in TASK_STORE[tenant_id]:
         for key, value in kwargs.items():
-            setattr(TASK_STORE[task_id], key, value)
+            setattr(TASK_STORE[tenant_id][task_id], key, value)
+        logger.debug(f"Task updated: {task_id} for tenant: {tenant_id}")
 
 
-def delete_task(task_id: str) -> bool:
-    """删除任务"""
-    if task_id in TASK_STORE:
-        del TASK_STORE[task_id]
+def delete_task(task_id: str, tenant_id: str) -> bool:
+    """
+    删除指定租户的任务
+
+    Args:
+        task_id: 任务ID
+        tenant_id: 租户ID
+
+    Returns:
+        bool: 是否成功删除
+    """
+    if tenant_id in TASK_STORE and task_id in TASK_STORE[tenant_id]:
+        del TASK_STORE[tenant_id][task_id]
+        logger.debug(f"Task deleted: {task_id} for tenant: {tenant_id}")
         return True
     return False
+
+
+def get_tenant_tasks(tenant_id: str) -> Dict[str, TaskInfo]:
+    """
+    获取指定租户的所有任务
+
+    Args:
+        tenant_id: 租户ID
+
+    Returns:
+        Dict[str, TaskInfo]: 租户的所有任务
+    """
+    return TASK_STORE.get(tenant_id, {})
 

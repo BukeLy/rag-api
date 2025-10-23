@@ -1,5 +1,5 @@
 """
-文档插入路由
+文档插入路由（多租户隔离）
 """
 
 import os
@@ -7,13 +7,15 @@ import shutil
 import uuid
 from datetime import datetime
 from pathlib import Path
-from fastapi import APIRouter, HTTPException, UploadFile, File, BackgroundTasks, Query
+from fastapi import APIRouter, HTTPException, UploadFile, File, BackgroundTasks, Query, Depends
 from typing import Optional, List
 
 from src.logger import logger
-from src.rag import get_rag_instance, select_parser_by_file
+from src.rag import select_parser_by_file
+from src.tenant_deps import get_tenant_id
+from src.multi_tenant import get_tenant_lightrag
 from .models import TaskStatus, TaskInfo
-from .task_store import TASK_STORE, DOCUMENT_PROCESSING_SEMAPHORE
+from .task_store import TASK_STORE, DOCUMENT_PROCESSING_SEMAPHORE, create_task
 
 # 导入 RAG-Anything 异常类型
 try:
@@ -28,12 +30,13 @@ from src.file_url_service import get_file_service
 router = APIRouter()
 
 
-async def process_document_task(task_id: str, doc_id: str, temp_file_path: str, original_filename: str, parser: str = "auto"):
+async def process_document_task(task_id: str, tenant_id: str, doc_id: str, temp_file_path: str, original_filename: str, parser: str = "auto"):
     """
-    后台异步处理文档
-    
+    后台异步处理文档（支持多租户隔离）
+
     Args:
         task_id: 任务ID
+        tenant_id: 租户ID
         doc_id: 文档ID
         temp_file_path: 临时文件路径
         original_filename: 原始文件名
@@ -41,14 +44,15 @@ async def process_document_task(task_id: str, doc_id: str, temp_file_path: str, 
     """
     try:
         # 更新任务状态为处理中
-        TASK_STORE[task_id].status = TaskStatus.PROCESSING
-        TASK_STORE[task_id].updated_at = datetime.now().isoformat()
-        logger.info(f"[Task {task_id}] Started processing: {original_filename} (parser: {parser})")
+        if tenant_id in TASK_STORE and task_id in TASK_STORE[tenant_id]:
+            TASK_STORE[tenant_id][task_id].status = TaskStatus.PROCESSING
+            TASK_STORE[tenant_id][task_id].updated_at = datetime.now().isoformat()
+        logger.info(f"[Task {task_id}] [Tenant {tenant_id}] Started processing: {original_filename} (parser: {parser})")
         
-        # 根据 parser 参数获取对应的 RAG 实例
-        rag_instance = get_rag_instance(parser=parser)
-        if not rag_instance:
-            raise Exception(f"RAG service ({parser}) is not ready")
+        # 获取租户专属的 LightRAG 实例
+        lightrag_instance = await get_tenant_lightrag(tenant_id)
+        if not lightrag_instance:
+            raise Exception(f"LightRAG is not ready for tenant: {tenant_id}")
         
         # 检查是否为纯文本文件，使用轻量级直接插入
         file_ext = Path(original_filename).suffix.lower()
@@ -62,9 +66,9 @@ async def process_document_task(task_id: str, doc_id: str, temp_file_path: str, 
             if not text_content or len(text_content.strip()) == 0:
                 raise ValueError(f"Empty text file: {original_filename}")
             
-            # 直接插入到 LightRAG（轻量级，无需解析）
-            await rag_instance.lightrag.ainsert(text_content)
-            logger.info(f"[Task {task_id}] Text content inserted directly to LightRAG ({len(text_content)} characters)")
+            # 直接插入到租户的 LightRAG 实例（轻量级，无需解析）
+            await lightrag_instance.ainsert(text_content)
+            logger.info(f"[Task {task_id}] [Tenant {tenant_id}] Text content inserted directly to LightRAG ({len(text_content)} characters)")
         else:
             # 非文本文件，需要使用解析器
             mineru_mode = os.getenv("MINERU_MODE", "local")
@@ -73,62 +77,76 @@ async def process_document_task(task_id: str, doc_id: str, temp_file_path: str, 
             if mineru_mode == "remote" and parser == "mineru":
                 # 使用远程 MinerU 处理
                 try:
-                    await process_with_remote_mineru(task_id, temp_file_path, 
+                    await process_with_remote_mineru(task_id, tenant_id, temp_file_path,
                                                    original_filename, doc_id)
-                    logger.info(f"[Task {task_id}] Document processed using remote MinerU API")
+                    logger.info(f"[Task {task_id}] [Tenant {tenant_id}] Document processed using remote MinerU API")
                 except Exception as e:
-                    logger.warning(f"[Task {task_id}] Remote MinerU failed, falling back to local: {e}")
-                    # 回退到本地处理
-                    await rag_instance.process_document_complete(file_path=temp_file_path, output_dir="./output")
-                    logger.info(f"[Task {task_id}] Document parsed using local {parser} parser (fallback)")
+                    logger.warning(f"[Task {task_id}] [Tenant {tenant_id}] Remote MinerU failed: {e}")
+                    raise  # 不再回退到本地处理，直接抛出错误
             else:
-                # 原有本地处理逻辑
-                await rag_instance.process_document_complete(file_path=temp_file_path, output_dir="./output")
-                logger.info(f"[Task {task_id}] Document parsed using {parser} parser (mode: {mineru_mode})")
+                # 本地处理：需要使用 RAGAnything 解析器
+                # 注意：这里需要创建临时的 RAGAnything 实例（使用租户的 LightRAG）
+                from raganything import RAGAnything, RAGAnythingConfig
+
+                config = RAGAnythingConfig(
+                    working_dir="./rag_local_storage",
+                    parser=parser,
+                    enable_image_processing=(parser == "mineru"),
+                    enable_table_processing=(parser == "mineru"),
+                    enable_equation_processing=(parser == "mineru"),
+                )
+                rag_anything = RAGAnything(config=config, lightrag=lightrag_instance)
+                await rag_anything.process_document_complete(file_path=temp_file_path, output_dir="./output")
+                logger.info(f"[Task {task_id}] [Tenant {tenant_id}] Document parsed using {parser} parser (mode: {mineru_mode})")
         
         # 处理成功
-        TASK_STORE[task_id].status = TaskStatus.COMPLETED
-        TASK_STORE[task_id].updated_at = datetime.now().isoformat()
-        TASK_STORE[task_id].result = {
-            "message": "Document processed successfully",
-            "doc_id": doc_id,
-            "filename": original_filename
-        }
-        logger.info(f"[Task {task_id}] Completed successfully: {original_filename}")
+        if tenant_id in TASK_STORE and task_id in TASK_STORE[tenant_id]:
+            TASK_STORE[tenant_id][task_id].status = TaskStatus.COMPLETED
+            TASK_STORE[tenant_id][task_id].updated_at = datetime.now().isoformat()
+            TASK_STORE[tenant_id][task_id].result = {
+                "message": "Document processed successfully",
+                "doc_id": doc_id,
+                "filename": original_filename
+            }
+        logger.info(f"[Task {task_id}] [Tenant {tenant_id}] Completed successfully: {original_filename}")
         
     except ValueError as e:
         # 验证错误（客户端错误）
-        TASK_STORE[task_id].status = TaskStatus.FAILED
-        TASK_STORE[task_id].updated_at = datetime.now().isoformat()
-        TASK_STORE[task_id].error = f"Validation error: {str(e)}"
-        logger.error(f"[Task {task_id}] Validation error: {e}", exc_info=True)
-        
+        if tenant_id in TASK_STORE and task_id in TASK_STORE[tenant_id]:
+            TASK_STORE[tenant_id][task_id].status = TaskStatus.FAILED
+            TASK_STORE[tenant_id][task_id].updated_at = datetime.now().isoformat()
+            TASK_STORE[tenant_id][task_id].error = f"Validation error: {str(e)}"
+        logger.error(f"[Task {task_id}] [Tenant {tenant_id}] Validation error: {e}", exc_info=True)
+
     except MineruExecutionError as e:
         # MinerU 解析错误
         error_msg = str(e)
-        TASK_STORE[task_id].status = TaskStatus.FAILED
-        TASK_STORE[task_id].updated_at = datetime.now().isoformat()
-        
-        if "Unknown file suffix" in error_msg or "Unsupported" in error_msg:
-            TASK_STORE[task_id].error = f"Unsupported file format: {original_filename}"
-        else:
-            TASK_STORE[task_id].error = f"Document parsing failed: {original_filename}"
-        
-        logger.error(f"[Task {task_id}] MinerU error: {error_msg}", exc_info=True)
-        
+        if tenant_id in TASK_STORE and task_id in TASK_STORE[tenant_id]:
+            TASK_STORE[tenant_id][task_id].status = TaskStatus.FAILED
+            TASK_STORE[tenant_id][task_id].updated_at = datetime.now().isoformat()
+
+            if "Unknown file suffix" in error_msg or "Unsupported" in error_msg:
+                TASK_STORE[tenant_id][task_id].error = f"Unsupported file format: {original_filename}"
+            else:
+                TASK_STORE[tenant_id][task_id].error = f"Document parsing failed: {original_filename}"
+
+        logger.error(f"[Task {task_id}] [Tenant {tenant_id}] MinerU error: {error_msg}", exc_info=True)
+
     except OSError as e:
         # 文件系统错误
-        TASK_STORE[task_id].status = TaskStatus.FAILED
-        TASK_STORE[task_id].updated_at = datetime.now().isoformat()
-        TASK_STORE[task_id].error = "File system error occurred"
-        logger.error(f"[Task {task_id}] File system error: {e}", exc_info=True)
-        
+        if tenant_id in TASK_STORE and task_id in TASK_STORE[tenant_id]:
+            TASK_STORE[tenant_id][task_id].status = TaskStatus.FAILED
+            TASK_STORE[tenant_id][task_id].updated_at = datetime.now().isoformat()
+            TASK_STORE[tenant_id][task_id].error = "File system error occurred"
+        logger.error(f"[Task {task_id}] [Tenant {tenant_id}] File system error: {e}", exc_info=True)
+
     except Exception as e:
         # 其他未预期的错误
-        TASK_STORE[task_id].status = TaskStatus.FAILED
-        TASK_STORE[task_id].updated_at = datetime.now().isoformat()
-        TASK_STORE[task_id].error = f"Internal server error: {str(e)}"
-        logger.error(f"[Task {task_id}] Unexpected error: {e}", exc_info=True)
+        if tenant_id in TASK_STORE and task_id in TASK_STORE[tenant_id]:
+            TASK_STORE[tenant_id][task_id].status = TaskStatus.FAILED
+            TASK_STORE[tenant_id][task_id].updated_at = datetime.now().isoformat()
+            TASK_STORE[tenant_id][task_id].error = f"Internal server error: {str(e)}"
+        logger.error(f"[Task {task_id}] [Tenant {tenant_id}] Unexpected error: {e}", exc_info=True)
         
     finally:
         # 确保临时文件总是被删除
@@ -142,37 +160,38 @@ async def process_document_task(task_id: str, doc_id: str, temp_file_path: str, 
 
 @router.post("/insert", status_code=202)
 async def insert_document(
-    doc_id: str, 
-    file: UploadFile = File(...), 
+    doc_id: str,
+    file: UploadFile = File(...),
     background_tasks: BackgroundTasks = None,
     parser: Optional[str] = Query(
         default="auto",
         description="解析器选择: 'mineru'(强大多模态), 'docling'(快速轻量), 'auto'(智能选择)"
-    )
+    ),
+    tenant_id: str = Depends(get_tenant_id)
 ):
     """
-    上传文件并异步处理。立即返回 task_id，客户端可通过 /task/{task_id} 查询处理状态。
-    
+    上传文件并异步处理（支持多租户隔离）。立即返回 task_id，客户端可通过 /task/{task_id} 查询处理状态。
+
+    **多租户支持**：
+    - 🔒 **租户隔离**：文档仅对指定租户可见
+    - 🎯 **必填参数**：`?tenant_id=your_tenant_id`
+
     **文件类型处理策略：**
     - **纯文本 (.txt, .md)**: 直接插入 LightRAG，轻量快速，无需解析器
     - **图片 (.jpg, .png)**: 使用 MinerU（OCR 能力强）
     - **PDF/Office 小文件 (< 500KB)**: 使用 Docling（快速）
     - **PDF/Office 大文件 (> 500KB)**: 使用 MinerU（强大多模态）
-    
+
     **解析器参数（仅对非文本文件生效）：**
     - `auto`: 自动选择（推荐）
     - `mineru`: 强大的多模态解析器（内存占用大）
     - `docling`: 轻量级解析器（内存占用小）
-    
+
     返回 202 Accepted 表示任务已接受，正在处理中。
     """
     # 验证 parser 参数
     if parser not in ["mineru", "docling", "auto"]:
         raise HTTPException(status_code=400, detail=f"Invalid parser: {parser}. Must be 'mineru', 'docling', or 'auto'.")
-    
-    rag_instance = get_rag_instance(parser if parser != "auto" else "mineru")
-    if not rag_instance:
-        raise HTTPException(status_code=503, detail="RAG service is not ready.")
     
     # 保留原始文件名（仅用于日志）
     original_filename = file.filename or "unnamed_file"
@@ -221,7 +240,7 @@ async def insert_document(
         task_id = str(uuid.uuid4())
         current_time = datetime.now().isoformat()
         
-        # 创建任务记录
+        # 创建任务记录（按租户隔离）
         task_info = TaskInfo(
             task_id=task_id,
             status=TaskStatus.PENDING,
@@ -230,28 +249,30 @@ async def insert_document(
             created_at=current_time,
             updated_at=current_time
         )
-        TASK_STORE[task_id] = task_info
-        
-        # 添加后台任务（传递选择的解析器）
+        create_task(task_info, tenant_id)
+
+        # 添加后台任务（传递租户ID和选择的解析器）
         background_tasks.add_task(
             process_document_task,
             task_id=task_id,
+            tenant_id=tenant_id,  # 新增租户ID
             doc_id=doc_id,
             temp_file_path=temp_file_path,
             original_filename=original_filename,
-            parser=selected_parser  # 传递选择的解析器
+            parser=selected_parser
         )
-        
-        logger.info(f"[Task {task_id}] Created task for file: {original_filename} (size: {file_size} bytes, doc_id: {doc_id}, parser: {selected_parser})")
+
+        logger.info(f"[Task {task_id}] [Tenant {tenant_id}] Created task for file: {original_filename} (size: {file_size} bytes, doc_id: {doc_id}, parser: {selected_parser})")
         
         # 立即返回 202 + task_id
         return {
             "task_id": task_id,
+            "tenant_id": tenant_id,
             "status": TaskStatus.PENDING,
             "message": "Document upload accepted. Processing in background.",
             "doc_id": doc_id,
             "filename": original_filename,
-            "parser": selected_parser,  # 告知用户使用的解析器
+            "parser": selected_parser,
             "file_size": file_size
         }
     
@@ -270,31 +291,31 @@ async def insert_document(
         raise HTTPException(status_code=500, detail=f"Failed to create task: {str(e)}")
 
 
-async def process_with_remote_mineru(task_id: str, file_path: str, 
+async def process_with_remote_mineru(task_id: str, tenant_id: str, file_path: str,
                                    filename: str, doc_id: str):
     """
-    使用远程 MinerU 处理文档
-    
+    使用远程 MinerU 处理文档（支持多租户）
+
     Args:
         task_id: 任务 ID
+        tenant_id: 租户 ID
         file_path: 本地文件路径
         filename: 原始文件名
         doc_id: 文档 ID
     """
     try:
-        logger.info(f"[Task {task_id}] Starting remote MinerU processing: {filename}")
-        
-        # 获取文件服务实例和 LightRAG 实例
+        logger.info(f"[Task {task_id}] [Tenant {tenant_id}] Starting remote MinerU processing: {filename}")
+
+        # 获取文件服务实例和租户的 LightRAG 实例
         file_service = get_file_service()
-        from src.rag import get_lightrag_instance
-        lightrag_instance = get_lightrag_instance()
-        
+        lightrag_instance = await get_tenant_lightrag(tenant_id)
+
         if not lightrag_instance:
-            raise Exception("LightRAG instance not available")
+            raise Exception(f"LightRAG instance not available for tenant: {tenant_id}")
         
         # 注册文件获取 URL（8000 端口）
         file_url = await file_service.register_file(file_path, filename)
-        logger.info(f"[Task {task_id}] File registered: {file_url}")
+        logger.info(f"[Task {task_id}] [Tenant {tenant_id}] File registered: {file_url}")
         
         # 调用 MinerU 客户端
         from src.mineru_client import create_client, FileTask, ParseOptions
@@ -312,29 +333,29 @@ async def process_with_remote_mineru(task_id: str, file_path: str,
         )
         
         # 调用远程 MinerU API
-        logger.info(f"[Task {task_id}] Calling remote MinerU API...")
+        logger.info(f"[Task {task_id}] [Tenant {tenant_id}] Calling remote MinerU API...")
         result = await client.parse_documents([file_task], options, wait_for_completion=True)
-        
+
         if result.is_completed:
-            logger.info(f"[Task {task_id}] Remote MinerU parsing completed")
-            
+            logger.info(f"[Task {task_id}] [Tenant {tenant_id}] Remote MinerU parsing completed")
+
             # 优化：使用结果处理器直接处理 MinerU 的 Markdown 结果
             from src.mineru_result_processor import get_result_processor
             processor = get_result_processor()
-            
+
             # 处理结果并直接插入 LightRAG
-            logger.info(f"[Task {task_id}] Processing MinerU result and inserting to LightRAG...")
+            logger.info(f"[Task {task_id}] [Tenant {tenant_id}] Processing MinerU result and inserting to LightRAG...")
             process_result = await processor.process_mineru_result(result, lightrag_instance)
-            
-            logger.info(f"[Task {task_id}] MinerU result processed: {process_result}")
-            
+
+            logger.info(f"[Task {task_id}] [Tenant {tenant_id}] MinerU result processed: {process_result}")
+
         else:
             error_msg = result.error_message or "Unknown error"
-            logger.error(f"[Task {task_id}] Remote MinerU failed: {error_msg}")
+            logger.error(f"[Task {task_id}] [Tenant {tenant_id}] Remote MinerU failed: {error_msg}")
             raise Exception(f"Remote MinerU processing failed: {error_msg}")
         
     except Exception as e:
-        logger.error(f"[Task {task_id}] Remote MinerU processing error: {e}", exc_info=True)
+        logger.error(f"[Task {task_id}] [Tenant {tenant_id}] Remote MinerU processing error: {e}", exc_info=True)
         # 清理文件
         try:
             file_id = file_url.split('/')[-2] if 'file_url' in locals() else None
@@ -350,7 +371,8 @@ async def insert_batch(
     files: List[UploadFile] = File(...),
     doc_ids: Optional[str] = Query(None),
     parser: str = Query("auto"),
-    background_tasks: BackgroundTasks = None
+    background_tasks: BackgroundTasks = None,
+    tenant_id: str = Depends(get_tenant_id)
 ):
     """
     批量文档插入端点（优化：单次 API 调用处理多个文件）
@@ -403,14 +425,10 @@ async def insert_batch(
     # 创建批量任务 ID
     batch_id = str(uuid.uuid4())
     tasks = []
-    
-    logger.info(f"[Batch {batch_id}] Starting batch insert with {len(files)} files, parser: {parser}")
-    
+
+    logger.info(f"[Batch {batch_id}] [Tenant {tenant_id}] Starting batch insert with {len(files)} files, parser: {parser}")
+
     try:
-        # 获取 RAG 实例
-        rag_instance = get_rag_instance(parser if parser != "auto" else "mineru")
-        if not rag_instance:
-            raise HTTPException(status_code=503, detail="RAG service is not ready")
         
         # 处理每个文件
         for idx, (file, doc_id) in enumerate(zip(files, doc_ids_list)):
@@ -454,7 +472,7 @@ async def insert_batch(
                 task_id = str(uuid.uuid4())
                 current_time = datetime.now().isoformat()
                 
-                # 创建任务记录
+                # 创建任务记录（按租户隔离）
                 task_info = TaskInfo(
                     task_id=task_id,
                     status=TaskStatus.PENDING,
@@ -463,19 +481,20 @@ async def insert_batch(
                     created_at=current_time,
                     updated_at=current_time
                 )
-                TASK_STORE[task_id] = task_info
-                
+                create_task(task_info, tenant_id)
+
                 # 添加后台任务
                 background_tasks.add_task(
                     process_document_task,
                     task_id=task_id,
+                    tenant_id=tenant_id,  # 新增租户ID
                     doc_id=doc_id,
                     temp_file_path=temp_file_path,
                     original_filename=original_filename,
                     parser=selected_parser
                 )
-                
-                logger.info(f"[Batch {batch_id}] Created task {task_id} for file: {original_filename}")
+
+                logger.info(f"[Batch {batch_id}] [Tenant {tenant_id}] Created task {task_id} for file: {original_filename}")
                 
                 tasks.append({
                     "task_id": task_id,
@@ -492,11 +511,12 @@ async def insert_batch(
         
         if not tasks:
             raise HTTPException(status_code=400, detail="No valid files in batch")
-        
-        logger.info(f"[Batch {batch_id}] Batch insert created: {len(tasks)} tasks")
-        
+
+        logger.info(f"[Batch {batch_id}] [Tenant {tenant_id}] Batch insert created: {len(tasks)} tasks")
+
         return {
             "batch_id": batch_id,
+            "tenant_id": tenant_id,
             "total_files": len(files),
             "accepted_files": len(tasks),
             "message": f"Batch accepted. Processing {len(tasks)} files.",

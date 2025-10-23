@@ -14,10 +14,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is a multimodal RAG (Retrieval-Augmented Generation) API service built with FastAPI, combining RAG-Anything and LightRAG for document processing and intelligent querying.
+This is a **multi-tenant** multimodal RAG (Retrieval-Augmented Generation) API service built with FastAPI, combining RAG-Anything and LightRAG for document processing and intelligent querying.
 
-**Key Architecture**: Single LightRAG + Multiple Parsers
-- **Shared LightRAG instance**: Core knowledge graph shared by all parsers
+**Key Architecture**: Multi-Tenant LightRAG + Multiple Parsers
+- **Multi-tenant isolation**: Each tenant has isolated LightRAG instance (via workspace)
+- **Instance pool management**: LRU cache (max 50 instances by default)
+- **Shared resources**: LLM/Embedding functions shared across tenants
 - **MinerU parser**: Powerful multimodal parsing (OCR, tables, equations) with high memory usage
 - **Docling parser**: Lightweight fast parsing for simple documents
 - **Direct LightRAG query**: Bypasses parsers for 95% of text queries, optimizing performance
@@ -259,20 +261,55 @@ Implemented in `src/rag.py:select_parser_by_file()`:
 - **PDF/Office < 500KB**: Docling (fast)
 - **PDF/Office > 500KB**: MinerU (powerful)
 
+## Multi-Tenant Usage
+
+**All API endpoints require `tenant_id` parameter:**
+
+```bash
+# Query
+POST /query?tenant_id=your_tenant_id
+
+# Document upload
+POST /insert?tenant_id=your_tenant_id
+
+# Task status
+GET /task/{task_id}?tenant_id=your_tenant_id
+```
+
+### Tenant Isolation
+
+- **Data isolation**: Each tenant's documents and queries are completely isolated
+- **Workspace-based**: Uses LightRAG's native workspace mechanism
+- **External storage**: Redis/PostgreSQL/Neo4j with tenant-specific namespaces
+  - Redis: `tenant_a:kv_store`
+  - PostgreSQL: `tenant_a:vectors`
+  - Neo4j: `tenant_a:GraphDB`
+
+### Tenant Management
+
+- **GET /tenants/stats?tenant_id=xxx**: Get tenant statistics
+- **DELETE /tenants/cache?tenant_id=xxx**: Clear tenant instance cache
+- **GET /tenants/pool/stats**: Get instance pool statistics (admin)
+
 ## API Routes
 
 All routes are organized in `api/` directory and registered via `api/__init__.py`:
 
 - **Document Processing**: `api/insert.py`
-  - `POST /insert`: Single document upload (returns task_id)
-  - `POST /batch`: Batch document upload (up to 100 files)
-  - `GET /batch/{batch_id}`: Check batch progress
+  - `POST /insert?tenant_id=xxx`: Single document upload (returns task_id)
+  - `POST /batch?tenant_id=xxx`: Batch document upload (up to 100 files)
+  - `GET /batch/{batch_id}?tenant_id=xxx`: Check batch progress
 
 - **Query**: `api/query.py`
-  - `POST /query`: Query the knowledge graph
+  - `POST /query?tenant_id=xxx`: Query the knowledge graph
 
 - **Task Management**: `api/task.py`
-  - `GET /task/{task_id}`: Get task status
+  - `GET /task/{task_id}?tenant_id=xxx`: Get task status
+
+- **Tenant Management**: `api/tenant.py`
+  - `GET /tenants/stats?tenant_id=xxx`: Get tenant statistics
+  - `DELETE /tenants/cache?tenant_id=xxx`: Clear tenant cache
+  - `GET /tenants/pool/stats`: Get instance pool statistics
 
 - **File Service**: `api/files.py`
   - `GET /files/{file_id}/{filename}`: Download temporary files (for remote MinerU)
@@ -282,13 +319,25 @@ All routes are organized in `api/` directory and registered via `api/__init__.py
 
 ## Important Implementation Details
 
-### Lifespan Management
-Application startup/shutdown logic in `src/rag.py:lifespan()`:
-- Creates single shared LightRAG instance
-- Initializes MinerU and Docling parsers (both share LightRAG)
+### Multi-Tenant Architecture
+
+**Core Components**:
+- `src/multi_tenant.py`: Multi-tenant instance manager (LRU cache)
+- `src/tenant_deps.py`: FastAPI dependency for tenant identification
+- `api/tenant.py`: Tenant management endpoints
+
+**Lifespan Management** (`src/rag.py:lifespan()`):
+- Initializes multi-tenant manager (lazy loading)
+- No shared LightRAG instance created at startup
+- Tenant instances created on-demand (first request)
 - Starts file cleanup background task
 - Starts performance monitoring
-- Configures rerank function if `RERANK_MODEL` is set
+
+**Tenant Instance Lifecycle**:
+1. First request: Create LightRAG instance with `workspace=tenant_id`
+2. Subsequent requests: Reuse cached instance
+3. Pool full: Remove oldest instance (LRU strategy)
+4. Manual cleanup: `DELETE /tenants/cache?tenant_id=xxx`
 
 ### Logging
 Unified logging via `src/logger.py` using loguru:
@@ -329,16 +378,19 @@ From `.cursor/rules/docs-rules.mdc`:
 rag-api/
 ├── main.py              # FastAPI app entry point
 ├── api/                 # API route modules
-│   ├── __init__.py      # Router aggregation
-│   ├── insert.py        # Document insertion endpoints
-│   ├── query.py         # Query endpoints
-│   ├── task.py          # Task status endpoints
+│   ├── __init__.py      # Router aggregation (includes tenant router)
+│   ├── insert.py        # Document insertion endpoints (multi-tenant)
+│   ├── query.py         # Query endpoints (multi-tenant)
+│   ├── task.py          # Task status endpoints (multi-tenant)
+│   ├── tenant.py        # Tenant management endpoints (NEW)
 │   ├── files.py         # File service endpoints
 │   ├── monitor.py       # Performance monitoring endpoints
 │   ├── models.py        # Pydantic models
-│   └── task_store.py    # In-memory task tracking
+│   └── task_store.py    # In-memory task tracking (tenant-isolated)
 ├── src/                 # Core business logic
-│   ├── rag.py           # LightRAG lifecycle and parser management
+│   ├── rag.py           # Multi-tenant lifecycle management
+│   ├── multi_tenant.py  # Multi-tenant instance manager (NEW)
+│   ├── tenant_deps.py   # Tenant dependency injection (NEW)
 │   ├── logger.py        # Unified logging
 │   ├── metrics.py       # Performance metrics collection
 │   ├── file_url_service.py        # Temporary file HTTP service

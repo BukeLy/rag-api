@@ -1,14 +1,15 @@
 """
-查询路由（直接访问 LightRAG 知识图谱）
+查询路由（多租户 LightRAG 知识图谱访问）
 """
 
 import os
 import re
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from typing import Optional
 
 from src.logger import logger
-from src.rag import get_lightrag_instance
+from src.tenant_deps import get_tenant_id
+from src.multi_tenant import get_tenant_lightrag
 from .models import QueryRequest
 
 # 导入 LightRAG 查询参数
@@ -37,32 +38,44 @@ def strip_think_tags(text: str) -> str:
 
 
 @router.post("/query")
-async def query_rag(request: QueryRequest):
+async def query_rag(
+    request: QueryRequest,
+    tenant_id: str = Depends(get_tenant_id)
+):
     """
-    查询 RAG 系统（直接访问 LightRAG 知识图谱，绕过解析器）
-    
+    查询 RAG 系统（多租户隔离，直接访问 LightRAG 知识图谱）
+
+    **多租户支持**：
+    - 🔒 **租户隔离**：每个租户的数据完全隔离
+    - 🎯 **必填参数**：`?tenant_id=your_tenant_id`
+    - ⚡ **共享资源**：LLM/Embedding 函数共享，节省资源
+
     **架构优势**：
     - ⚡ **直接访问 LightRAG**：绕过解析器，性能提升
     - 🎯 **适合 95% 文本查询**：大多数查询不需要多模态能力
     - 💾 **资源占用更低**：无 MinerU/Docling 解析器开销
     - ⚠️ **解决并发冲突**：读写分离，查询不受文档插入影响
-    
+
     **查询模式**：
     - `naive`: 向量检索（**最快**，推荐日常使用，15-20秒）
     - `local`: 局部知识图谱（适合精确查询）
     - `global`: 全局知识图谱（完整，但较慢）
     - `hybrid`: 混合模式
     - `mix`: 全功能混合（慢，但结果最全面）
-    
+
     **性能优化**：
     - `top_k=20`（从默认 60 减少）
     - `chunk_top_k=10`（从默认 20 减少）
     - `max_async=8`（从 4 提升，优化实体合并）
     - `enable_rerank=True`（提升相关性，增加 2-3秒）
     """
-    lightrag = get_lightrag_instance()
+    # 获取租户专属的 LightRAG 实例
+    lightrag = await get_tenant_lightrag(tenant_id)
     if not lightrag:
-        raise HTTPException(status_code=503, detail="LightRAG is not ready.")
+        raise HTTPException(
+            status_code=503,
+            detail=f"LightRAG is not ready for tenant: {tenant_id}"
+        )
     
     try:
         # 直接使用 LightRAG 查询（绕过 RAGAnything 解析器）
