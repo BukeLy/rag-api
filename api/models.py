@@ -101,14 +101,13 @@ class QueryRequest(BaseModel):
     )
     mode: str = Field(
         default="naive",
-        description="""
-        查询模式：
-        - `naive`: 向量检索（最快，推荐日常使用，15-20秒）
-        - `local`: 局部知识图谱（适合精确查询）
-        - `global`: 全局知识图谱（完整，但较慢）
-        - `hybrid`: 混合模式（结合 local 和 global）
-        - `mix`: 全功能混合（最慢，但结果最全面）
-        """,
+        description="""查询模式：
+- `naive`: 向量检索（最快，推荐日常使用，15-20秒）
+- `local`: 局部知识图谱（适合精确查询）
+- `global`: 全局知识图谱（完整，但较慢）
+- `hybrid`: 混合模式（结合 local 和 global）
+- `mix`: 全功能混合（最慢，但结果最全面）
+""",
         example="naive",
         pattern="^(naive|local|global|hybrid|mix)$"
     )
@@ -131,19 +130,18 @@ class QueryResponse(BaseModel):
     answer: str = Field(
         ...,
         description="AI 生成的答案（Markdown 格式，包含引用来源）",
-        example="""
-        人工智能（AI）是计算机科学的一个分支，致力于创建能够执行通常需要人类智能的任务的系统。
+        example="""人工智能（AI）是计算机科学的一个分支，致力于创建能够执行通常需要人类智能的任务的系统。
 
-        主要应用场景包括：
-        - 自然语言处理
-        - 计算机视觉
-        - 推荐系统
-        - 自动驾驶
+主要应用场景包括：
+- 自然语言处理
+- 计算机视觉
+- 推荐系统
+- 自动驾驶
 
-        ### References
-        - [1] AI研究报告.pdf
-        - [2] 深度学习基础.docx
-        """
+### References
+- [1] AI研究报告.pdf
+- [2] 深度学习基础.docx
+"""
     )
 
     class Config:

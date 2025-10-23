@@ -15,7 +15,7 @@ from src.rag import select_parser_by_file
 from src.tenant_deps import get_tenant_id
 from src.multi_tenant import get_tenant_lightrag
 from .models import TaskStatus, TaskInfo
-from .task_store import TASK_STORE, DOCUMENT_PROCESSING_SEMAPHORE, create_task
+from .task_store import TASK_STORE, create_task
 
 # 导入 RAG-Anything 异常类型
 try:
@@ -174,12 +174,11 @@ async def insert_document(
     background_tasks: BackgroundTasks = None,
     parser: Optional[str] = Query(
         default="auto",
-        description="""
-        解析器选择：
-        - `auto`: 智能选择（推荐，根据文件类型和大小自动决策）
-        - `mineru`: 强大的多模态解析器（支持 OCR、表格、公式，内存占用大）
-        - `docling`: 轻量级解析器（快速处理简单文档，内存占用小）
-        """,
+        description="""解析器选择：
+- `auto`: 智能选择（推荐，根据文件类型和大小自动决策）
+- `mineru`: 强大的多模态解析器（支持 OCR、表格、公式，内存占用大）
+- `docling`: 轻量级解析器（快速处理简单文档，内存占用小）
+""",
         pattern="^(auto|mineru|docling)$"
     ),
     tenant_id: str = Depends(get_tenant_id)

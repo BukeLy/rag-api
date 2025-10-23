@@ -7,9 +7,6 @@ RAG API - 主应用入口
 
 from fastapi import FastAPI
 
-# 导入统一日志系统
-from src.logger import logger
-
 # 导入 RAG 相关模块
 from src.rag import lifespan
 
@@ -21,37 +18,37 @@ from api import api_router
 app = FastAPI(
     title="RAG API - 多租户多模态知识图谱系统",
     description="""
-    ## 🚀 多租户多模态 RAG 系统 API
+## 🚀 多租户多模态 RAG 系统 API
 
-    基于 **LightRAG** 和 **RAG-Anything** 构建的企业级检索增强生成系统。
+基于 **LightRAG** 和 **RAG-Anything** 构建的企业级检索增强生成系统。
 
-    ### ✨ 核心特性
+### ✨ 核心特性
 
-    - **🔒 多租户隔离**: 每个租户拥有独立的知识图谱空间，数据完全隔离
-    - **🎨 多模态支持**: 处理 PDF、DOCX、图片等多种文档格式
-    - **⚡ 高性能查询**: 优化后的查询性能，首次查询 ~15秒，后续查询 6-11秒
-    - **📊 知识图谱**: 自动构建实体关系图谱，支持 5 种查询模式
-    - **🔄 异步处理**: 后台任务处理，支持批量文档上传
-    - **💾 外部存储**: 支持 Redis、PostgreSQL、Neo4j 外部存储
+- **🔒 多租户隔离**: 每个租户拥有独立的知识图谱空间，数据完全隔离
+- **🎨 多模态支持**: 处理 PDF、DOCX、图片等多种文档格式
+- **⚡ 高性能查询**: 优化后的查询性能，首次查询 ~15秒，后续查询 6-11秒
+- **📊 知识图谱**: 自动构建实体关系图谱，支持 5 种查询模式
+- **🔄 异步处理**: 后台任务处理，支持批量文档上传
+- **💾 外部存储**: 支持 Redis、PostgreSQL、Neo4j 外部存储
 
-    ### 📋 快速开始
+### 📋 快速开始
 
-    1. **上传文档**: 使用 `/insert` 端点上传文档（需提供 `tenant_id`）
-    2. **查询知识**: 使用 `/query` 端点查询知识图谱
-    3. **查看任务**: 使用 `/task/{task_id}` 查看处理状态
+1. **上传文档**: 使用 `/insert` 端点上传文档（需提供 `tenant_id`）
+2. **查询知识**: 使用 `/query` 端点查询知识图谱
+3. **查看任务**: 使用 `/task/{task_id}` 查看处理状态
 
-    ### 🏗️ 架构说明
+### 🏗️ 架构说明
 
-    - **实例池管理**: LRU 缓存，最多 50 个租户实例
-    - **共享资源**: LLM/Embedding 函数在租户间共享
-    - **解析器选择**: 自动选择最佳解析器（MinerU/Docling）
-    - **直接查询**: 查询直接访问 LightRAG，绕过解析器开销
+- **实例池管理**: LRU 缓存，最多 50 个租户实例
+- **共享资源**: LLM/Embedding 函数在租户间共享
+- **解析器选择**: 自动选择最佳解析器（MinerU/Docling）
+- **直接查询**: 查询直接访问 LightRAG，绕过解析器开销
 
-    ### 📞 联系方式
+### 📞 联系方式
 
-    - GitHub: [rag-api](https://github.com/your-org/rag-api)
-    - 文档: 查看项目 `docs/` 目录
-    """,
+- GitHub: [rag-api](https://github.com/your-org/rag-api)
+- 文档: 查看项目 `docs/` 目录
+""",
     version="1.0.0",
     lifespan=lifespan,
     contact={
