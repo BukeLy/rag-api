@@ -28,7 +28,7 @@ services:
       - PYTHONUNBUFFERED=1
       - UV_HTTP_TIMEOUT=60
       # ⚠️  关键配置：Embedding 维度（必须与模型一致）
-      - EMBEDDING_DIM=4096
+      - EMBEDDING_DIM=${EMBEDDING_DIM:-1024}
     # 依赖外部存储服务（健康检查通过后启动）
     depends_on:
       redis:
@@ -176,7 +176,7 @@ services:
       - EMBEDDING_MODEL=${SF_EMBEDDING_MODEL:-Qwen/Qwen3-Embedding-8B}
       - EMBEDDING_API_KEY=${SF_API_KEY}
       - EMBEDDING_BASE_URL=${SF_BASE_URL}
-      - EMBEDDING_DIM=4096
+      - EMBEDDING_DIM=${EMBEDDING_DIM:-1024}
       # 认证配置（可选）
       - LIGHTRAG_API_KEY=${LIGHTRAG_API_KEY:-}
       - AUTH_ACCOUNTS=${LIGHTRAG_AUTH_ACCOUNTS:-}

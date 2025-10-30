@@ -74,6 +74,9 @@ async def lifespan(app):
     
     # 读取多租户配置
     max_tenant_instances = int(os.getenv("MAX_TENANT_INSTANCES", "50"))
+    
+    # 读取 Embedding 维度配置
+    embedding_dim = os.getenv("EMBEDDING_DIM", "1024")
 
     # 输出配置信息
     logger.info("=" * 70)
@@ -81,7 +84,7 @@ async def lifespan(app):
     logger.info("=" * 70)
     logger.info(f"🏢 Max Tenant Instances: {max_tenant_instances}")
     logger.info(f"🤖 LLM: {ark_model}")
-    logger.info(f"🔤 Embedding: {sf_embedding_model} (dim={4096})")
+    logger.info(f"🔤 Embedding: {sf_embedding_model} (dim={embedding_dim})")
     logger.info(f"🎯 Rerank: {rerank_model or 'Disabled'}")
     logger.info(f"📈 Query: top_k={top_k}, chunk_top_k={chunk_top_k}, max_async={max_async}")
     logger.info(f"💾 Tokens: entity={max_entity_tokens}, relation={max_relation_tokens}, total={max_total_tokens}")

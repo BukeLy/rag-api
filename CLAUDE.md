@@ -94,8 +94,8 @@ Environment variables are managed through `.env` (copy from `env.example`).
 
 **LLM & Embedding**:
 - `ARK_API_KEY / ARK_BASE_URL / ARK_MODEL`: LLM for text generation
-- `SF_API_KEY / SF_BASE_URL / SF_EMBEDDING_MODEL`: Embedding (4096-dim)
-- `EMBEDDING_DIM=4096`: **必须设置**（见下方关键陷阱）
+- `SF_API_KEY / SF_BASE_URL / SF_EMBEDDING_MODEL`: Embedding model
+- `EMBEDDING_DIM`: **必须与模型匹配**（默认 1024，见下方说明）
 
 **MinerU**:
 - `MINERU_MODE=remote`: 使用远程 MinerU API（推荐）
@@ -165,28 +165,43 @@ GET /task/{task_id}?tenant_id=your_tenant_id
 
 ### 🚨 Embedding 维度配置陷阱（极其重要）
 
-**问题描述**：向量插入失败，报错 `expected 1024 dimensions, not 4096`
+**核心原则**：`EMBEDDING_DIM` 必须与 Embedding 模型输出维度**严格匹配**
+
+**推荐配置**（env.example 默认）：
+- **Qwen3-Embedding-0.6B** → `EMBEDDING_DIM=1024`（轻量级，配合 Rerank 效果好）
+- **Qwen3-Embedding-8B** → `EMBEDDING_DIM=4096`（高精度，需要更多资源）
+
+**问题描述**：向量插入失败，报错 `expected 1024 dimensions, not 4096`（或反之）
 
 **根本原因**（2025-10-30 调试 2+ 小时发现）：
 
-1. **LightRAG 从环境变量读取维度**：
+1. **配置一致性要求**：
+   - `.env` 中的 `EMBEDDING_DIM`
+   - `docker-compose.yml` / `docker-compose.dev.yml` 中的环境变量
+   - 实际使用的 Embedding 模型输出维度
+   - 这三者**必须完全一致**
+
+2. **LightRAG 从环境变量读取维度**：
    ```python
    # lightrag/kg/postgres_impl.py
    content_vector VECTOR({os.environ.get("EMBEDDING_DIM", 1024)})
    ```
-   默认值是 **1024**，必须显式设置 `EMBEDDING_DIM=4096`。
+   默认值是 1024。现在 docker-compose 文件已改为动态读取 `.env`：
+   ```yaml
+   - EMBEDDING_DIM=${EMBEDDING_DIM:-1024}
+   ```
 
-2. **Docker volume 名称陷阱**：
+3. **Docker volume 名称陷阱**：
    - `docker-compose.dev.yml` 的项目名默认是**目录名** `rag-api`
    - Volume 前缀是 `rag-api_`（不是 `rag-api-dev_`）
    - 删除错误的 volume 名称导致数据库未重置！
 
-3. **表结构持久化**：
+4. **表结构持久化**：
    - PostgreSQL 表在首次启动时创建，维度固定
    - 即使修改 `EMBEDDING_DIM` 并重启，表结构不会改变
    - 必须**完全删除 volume** 才能重新初始化
 
-**正确的解决方案**：
+**修改维度时的正确步骤**：
 
 ```bash
 # 1. 停止所有服务
@@ -198,16 +213,18 @@ docker volume ls | grep -E "postgres|redis|neo4j"
 # 3. 删除正确的 volumes（注意前缀是 rag-api_ 而非 rag-api-dev_）
 docker volume rm rag-api_postgres_data rag-api_neo4j_data rag-api_redis_data rag-api_neo4j_logs
 
-# 4. 确认 docker-compose 配置正确
-grep -A 5 "EMBEDDING_DIM" docker-compose.dev.yml
-# 应该看到：
-#   environment:
-#     - EMBEDDING_DIM=4096
+# 4. 修改 .env 文件设置正确的维度
+# 例如切换到 4096 维度：
+# EMBEDDING_DIM=4096
+# SF_EMBEDDING_MODEL=Qwen/Qwen3-Embedding-8B
 
-# 5. 重新启动（这次会用正确的维度初始化）
+# 5. 确认 .env 配置
+grep -E "EMBEDDING_DIM|SF_EMBEDDING_MODEL" .env
+
+# 6. 重新启动（这次会用正确的维度初始化）
 docker compose -f docker-compose.dev.yml up -d
 
-# 6. 验证数据库维度正确
+# 7. 验证数据库维度正确
 docker exec rag-postgres-dev psql -U lightrag -d lightrag -c "
 SELECT attrelid::regclass AS table_name,
        attname AS column_name,
@@ -216,70 +233,86 @@ FROM pg_attribute
 WHERE attrelid::regclass::text LIKE 'lightrag_vdb%'
 AND attname = 'content_vector';
 "
-# 应该看到所有表都是 4096 维度
+# 应该看到所有表都是你设置的维度（1024 或 4096）
 ```
 
 ### 🚨 pgvector 索引限制（重要）
 
-**问题**：
+**问题**：使用 PostgreSQL + pgvector 时遇到索引限制
 ```
 ERROR: column cannot have more than 2000 dimensions for hnsw index
 ```
 
 **原因**：
 - pgvector 的 HNSW 和 IVFFlat 索引最多支持 **2000 维度**
-- 我们使用 4096 维度，无法创建索引
+- 如果使用 4096 维度模型（Qwen3-Embedding-8B），无法创建索引
 
 **影响**：
 - ✅ 数据可以正常插入和查询
 - ⚠️ 查询性能会受影响（无索引加速）
 
-**解决方案**：
-1. 接受无索引的性能（中小规模数据可接受）
-2. 考虑降维到 2000 以内（权衡精度损失）
-3. 等待 pgvector 未来版本支持
+**推荐方案**（按优先级）：
+1. **使用 1024 维度模型**（`Qwen3-Embedding-0.6B` + Rerank）：避免索引限制
+2. **切换到 Qdrant** 向量存储：无维度限制，支持 4096 维度 + HNSW 索引
+3. 接受无索引的性能（中小规模数据可接受）
+4. 等待 pgvector 未来版本支持更高维度索引
 
 ### 配置一致性检查清单
 
-部署前必须确保：
+部署前必须确保模型与维度配置匹配：
 
-**1. .env 文件**：
+**1. .env 文件**（选择一种配置）：
+
+**选项 A - 轻量级（推荐）**：
 ```bash
-EMBEDDING_DIM=4096
-SF_EMBEDDING_MODEL=Qwen/Qwen3-Embedding-8B  # 4096 维度模型
+EMBEDDING_DIM=1024
+SF_EMBEDDING_MODEL=Qwen/Qwen3-Embedding-0.6B  # 1024 维度
+RERANK_MODEL=Qwen/Qwen2-7B-Instruct  # 配合 Rerank 提升质量
 ```
 
-**2. docker-compose 文件**（两个文件都要检查）：
+**选项 B - 高精度**：
+```bash
+EMBEDDING_DIM=4096
+SF_EMBEDDING_MODEL=Qwen/Qwen3-Embedding-8B  # 4096 维度
+# 注意：PostgreSQL 无法为 4096 维度创建索引，建议使用 Qdrant
+```
+
+**2. docker-compose 文件**（已自动适配）：
 ```yaml
 # docker-compose.yml 和 docker-compose.dev.yml
+# ✅ 已修复：现在从 .env 动态读取
 services:
   rag-api:
     environment:
-      - EMBEDDING_DIM=4096
+      - EMBEDDING_DIM=${EMBEDDING_DIM:-1024}  # 从 .env 读取
 
   lightrag-webui:
     environment:
-      - EMBEDDING_DIM=4096
+      - EMBEDDING_DIM=${EMBEDDING_DIM:-1024}  # 从 .env 读取
 ```
 
-**3. 代码硬编码**（`src/multi_tenant.py`）：
+**3. 代码实现**（已正确实现）：
 ```python
-def _create_embedding_func(self):
-    return EmbeddingFunc(
-        embedding_dim=4096,  # 确保与配置一致
-        ...
-    )
+# src/multi_tenant.py 和 src/rag.py
+# ✅ 已正确：动态读取环境变量
+embedding_dim = int(os.getenv("EMBEDDING_DIM", "1024"))
 ```
 
 **4. 首次部署后验证**：
-```sql
--- 部署后立即验证
+```bash
+# 验证配置一致性
+grep EMBEDDING_DIM .env
+docker compose config | grep EMBEDDING_DIM
+
+# 验证数据库维度
+docker exec rag-postgres-dev psql -U lightrag -d lightrag -c "
 SELECT attrelid::regclass AS table_name,
        atttypmod AS dimensions
 FROM pg_attribute
 WHERE attrelid::regclass::text LIKE 'lightrag_vdb%'
 AND attname = 'content_vector';
--- 所有表的 dimensions 应该都是 4096
+"
+# 应该看到所有表的维度与 .env 中配置一致
 ```
 
 ### 其他常见陷阱
