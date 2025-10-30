@@ -53,3 +53,11 @@ deploy/ssl/
 
 # BuildKit 缓存文件（本地使用，不版本控制）
 .docker/*.hash
+
+# Internal Documentation & Reports (不公开的内部文档)
+performance_reports/
+docs/OPTIMIZATION_GUIDE.md
+docs/PRODUCTION_MIGRATION_GUIDE.md
+docs/PRODUCTION_MIGRATION_QUICKSTART.md
+docs/LIGHTRAG_IMPLEMENTATION_GUIDE.md
+docs/MINERU_REMOTE_API.md
