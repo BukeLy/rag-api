@@ -70,7 +70,7 @@ services:
       --snapshot_cron="0 */6 * * *"
       --maxmemory=2048mb
       --keys_output_limit=1024
-      --dbfilename=dump.rdb
+      --dbfilename=dump
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -128,16 +128,12 @@ services:
     volumes:
       - memgraph_data:/var/lib/memgraph
       - memgraph_log:/var/log/memgraph
-    environment:
-      # 内存配置
-      - MEMGRAPH="--memory-limit=1024"
-      # 日志级别
-      - MEMGRAPH="--log-level=WARNING"
-      # 持久化配置
-      - MEMGRAPH="--storage-snapshot-interval-sec=3600"
-      - MEMGRAPH="--storage-wal-enabled=true"
-      - MEMGRAPH="--storage-snapshot-on-exit=true"
-    entrypoint: ["/usr/lib/memgraph/memgraph"]
+    command: >
+      --memory-limit=1024
+      --log-level=WARNING
+      --storage-snapshot-interval-sec=3600
+      --storage-wal-enabled=true
+      --storage-snapshot-on-exit=true
     healthcheck:
       test: ["CMD-SHELL", "echo 'RETURN 1;' | mgconsole --host 127.0.0.1 --port 7687 || exit 1"]
       interval: 30s
