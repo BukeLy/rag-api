@@ -30,7 +30,7 @@ from src.file_url_service import get_file_service
 router = APIRouter()
 
 
-async def process_document_task(task_id: str, tenant_id: str, doc_id: str, temp_file_path: str, original_filename: str, parser: str = "auto"):
+async def process_document_task(task_id: str, tenant_id: str, doc_id: str, temp_file_path: str, original_filename: str, parser: Optional[str] = "auto"):
     """
     后台异步处理文档（支持多租户隔离）
 
@@ -40,7 +40,8 @@ async def process_document_task(task_id: str, tenant_id: str, doc_id: str, temp_
         doc_id: 文档ID
         temp_file_path: 临时文件路径
         original_filename: 原始文件名
-        parser: 解析器类型 ("mineru" / "docling" / "auto")
+        parser: 解析器类型 ("mineru" / "docling" / "auto" / None)
+                None 表示纯文本文件，直接插入无需解析
     """
     try:
         # 更新任务状态为处理中
@@ -71,6 +72,9 @@ async def process_document_task(task_id: str, tenant_id: str, doc_id: str, temp_
             logger.info(f"[Task {task_id}] [Tenant {tenant_id}] Text content inserted directly to LightRAG ({len(text_content)} characters)")
         else:
             # 非文本文件，需要使用解析器
+            if parser is None:
+                raise ValueError(f"Parser is None for non-text file: {original_filename}. This should not happen.")
+            
             mineru_mode = os.getenv("MINERU_MODE", "local")
             
             # 根据 MinerU 模式选择处理策略
