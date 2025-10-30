@@ -165,6 +165,7 @@ services:
       - "9621:9621"
     env_file:
       - .env
+    command: python -m lightrag.lightrag_server --host 0.0.0.0 --port 9621 --working-dir /app/rag_storage
     volumes:
       # 工作目录（外部存储模式下仅用于临时文件）
       - ./rag_local_storage:/app/rag_storage
@@ -204,7 +205,6 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
-    # 注意：使用容器默认的 entrypoint，通过环境变量传递配置
 
   # ==================== Nginx 反向代理（生产环境）====================
   nginx:
