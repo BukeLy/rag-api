@@ -76,8 +76,11 @@ class MultiTenantRAGManager:
 
     def _create_embedding_func(self):
         """创建共享的 Embedding 函数"""
+        # 从环境变量读取维度，避免硬编码
+        embedding_dim = int(os.getenv("EMBEDDING_DIM", "1024"))
+
         return EmbeddingFunc(
-            embedding_dim=4096,
+            embedding_dim=embedding_dim,
             func=lambda texts: openai_embed(
                 texts,
                 model=self.sf_embedding_model,

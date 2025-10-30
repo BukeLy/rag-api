@@ -1,0 +1,226 @@
+# 新存储架构 - 单机高性能方案
+# KV: DragonflyDB | Vector: Qdrant | Graph: Memgraph
+# 全部开源免费，支持商用，后续可平滑迁移到集群
+
+version: '3.8'
+
+services:
+  # ==================== rag-api ====================
+  rag-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: rag-api-new
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      # 代码热重载
+      - ./src:/app/src
+      - ./api:/app/api
+      - ./main.py:/app/main.py
+      - ./rag_local_storage:/app/rag_local_storage
+    env_file:
+      - .env
+    environment:
+      - TZ=Asia/Shanghai
+      - PYTHONUNBUFFERED=1
+      - UV_HTTP_TIMEOUT=60
+      # ⚠️ 新存储架构配置
+      - USE_EXTERNAL_STORAGE=true
+      - KV_STORAGE=RedisKVStorage            # DragonflyDB 兼容 Redis 协议
+      - VECTOR_STORAGE=QdrantStorage         # 切换到 Qdrant
+      - GRAPH_STORAGE=MemgraphStorage        # 切换到 Memgraph
+      # DragonflyDB 配置（Redis 协议兼容）
+      - REDIS_URI=redis://dragonflydb:6379/0
+      # Qdrant 配置
+      - QDRANT_URL=http://qdrant:6333
+      # Memgraph 配置
+      - MEMGRAPH_URI=bolt://memgraph:7687
+      # Embedding 维度（1024 维度配合 Rerank）
+      - EMBEDDING_DIM=1024
+    depends_on:
+      dragonflydb:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+      memgraph:
+        condition: service_healthy
+    networks:
+      - rag-network-new
+    command: ["uv", "run", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ==================== DragonflyDB（KV 存储）====================
+  dragonflydb:
+    image: docker.dragonflydb.io/dragonflydb/dragonfly:latest
+    container_name: rag-dragonflydb-new
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - dragonflydb_data:/data
+    command: >
+      dragonfly
+      --dir=/data
+      --snapshot_cron="0 */6 * * *"
+      --maxmemory=512mb
+      --keys_output_limit=1024
+      --dbfilename=dump.rdb
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - rag-network-new
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ==================== Qdrant（向量存储）====================
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: rag-qdrant-new
+    restart: unless-stopped
+    ports:
+      - "6333:6333"  # HTTP API
+      - "6334:6334"  # gRPC
+    volumes:
+      - qdrant_data:/qdrant/storage
+    environment:
+      # 性能优化配置
+      - QDRANT__SERVICE__GRPC_PORT=6334
+      - QDRANT__SERVICE__HTTP_PORT=6333
+      # 日志级别
+      - QDRANT__LOG_LEVEL=INFO
+      # 持久化配置
+      - QDRANT__STORAGE__STORAGE_PATH=/qdrant/storage
+      # 内存限制（可选）
+      # - QDRANT__SERVICE__MAX_REQUEST_SIZE_MB=32
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6333/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    networks:
+      - rag-network-new
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ==================== Memgraph（图存储）====================
+  memgraph:
+    image: memgraph/memgraph-platform:latest
+    container_name: rag-memgraph-new
+    restart: unless-stopped
+    ports:
+      - "7687:7687"  # Bolt
+      - "7444:7444"  # Memgraph Lab UI
+    volumes:
+      - memgraph_data:/var/lib/memgraph
+      - memgraph_log:/var/log/memgraph
+    environment:
+      # 内存配置
+      - MEMGRAPH="--memory-limit=1024"
+      # 日志级别
+      - MEMGRAPH="--log-level=WARNING"
+      # 持久化配置
+      - MEMGRAPH="--storage-snapshot-interval-sec=3600"
+      - MEMGRAPH="--storage-wal-enabled=true"
+      - MEMGRAPH="--storage-snapshot-on-exit=true"
+    entrypoint: ["/usr/lib/memgraph/memgraph"]
+    healthcheck:
+      test: ["CMD-SHELL", "echo 'RETURN 1;' | mgconsole --host 127.0.0.1 --port 7687 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    networks:
+      - rag-network-new
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ==================== LightRAG WebUI（可视化）====================
+  lightrag-webui:
+    image: ghcr.io/hkuds/lightrag:latest
+    container_name: lightrag-webui-new
+    restart: unless-stopped
+    ports:
+      - "9621:9621"
+    env_file:
+      - .env
+    environment:
+      - TZ=Asia/Shanghai
+      # ⚠️ WebUI 也要切换到新存储
+      - USE_EXTERNAL_STORAGE=true
+      - KV_STORAGE=RedisKVStorage
+      - VECTOR_STORAGE=QdrantStorage
+      - GRAPH_STORAGE=MemgraphStorage
+      # DragonflyDB 配置
+      - REDIS_URI=redis://dragonflydb:6379/0
+      # Qdrant 配置
+      - QDRANT_URL=http://qdrant:6333
+      # Memgraph 配置
+      - MEMGRAPH_URI=bolt://memgraph:7687
+      - MEMGRAPH_USERNAME=
+      - MEMGRAPH_PASSWORD=
+      # Embedding 配置
+      - EMBEDDING_DIM=${EMBEDDING_DIM:-1024}
+      - EMBEDDING_MODEL=${SF_EMBEDDING_MODEL:-Qwen/Qwen3-Embedding-0.6B}
+      # LLM 绑定配置
+      - LLM_BINDING=openai
+      - OPENAI_API_KEY=${ARK_API_KEY}
+      - OPENAI_BASE_URL=${ARK_BASE_URL}
+      - OPENAI_MODEL=${ARK_MODEL:-seed-1-6-250615}
+      # Embedding 绑定配置
+      - EMBEDDING_BINDING=openai
+      - EMBEDDING_OPENAI_API_KEY=${SF_API_KEY}
+      - EMBEDDING_OPENAI_BASE_URL=${SF_BASE_URL}
+      # Workspace 配置
+      - LIGHTRAG_WEBUI_WORKSPACE=${LIGHTRAG_WEBUI_WORKSPACE:-default}
+    depends_on:
+      dragonflydb:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+      memgraph:
+        condition: service_healthy
+    networks:
+      - rag-network-new
+    command:
+      - "--host"
+      - "0.0.0.0"
+      - "--port"
+      - "9621"
+      - "--working-dir"
+      - "/app/lightrag_working_dir"
+      - "--llm-binding"
+      - "openai"
+      - "--embedding-binding"
+      - "openai"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  rag-network-new:
+    driver: bridge
+
+volumes:
+  dragonflydb_data:
+  qdrant_data:
+  memgraph_data:
+  memgraph_log:
