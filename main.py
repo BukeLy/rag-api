@@ -46,7 +46,7 @@ app = FastAPI(
 
 ### 📞 联系方式
 
-- GitHub: [rag-api](https://github.com/your-org/rag-api)
+- GitHub: [rag-api](https://github.com/BukeLy/rag-api)
 - 文档: 查看项目 `docs/` 目录
 """,
     version="1.0.0",

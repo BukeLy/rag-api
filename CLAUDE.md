@@ -26,37 +26,79 @@ This is a **multi-tenant** multimodal RAG (Retrieval-Augmented Generation) API s
 
 ## Branch Strategy
 
-- **`main` branch** (Production): Streamlined for deployment
-  - Code baked into Docker image
-  - Essential scripts and documentation only
-  - Optimized for stability and performance
+- **`main` branch** (唯一主分支)
+  - 所有代码都在此分支开发和部署
+  - 生产环境和开发环境通过不同的 docker-compose 文件区分
+  - 新功能开发通过 Pull Request 流程合并
 
-- **`dev` branch** (Development): Feature-rich development environment
-  - Code mounted via volumes (hot reload enabled)
-  - Full test scripts and technical documentation
-  - Fast iteration without rebuilding images
+### 开发流程 (Pull Request Workflow)
+
+1. **创建功能分支**
+   ```bash
+   git checkout -b feature/your-feature-name
+   ```
+
+2. **开发和提交**
+   ```bash
+   git add .
+   git commit -m "feat: 功能描述"
+   ```
+
+3. **推送到远端并创建 PR**
+   ```bash
+   git push origin feature/your-feature-name
+   # 在 GitHub 上创建 Pull Request
+   ```
+
+4. **PR 合并后删除功能分支**
+   ```bash
+   git checkout main
+   git pull origin main
+   git branch -d feature/your-feature-name
+   git push origin --delete feature/your-feature-name
+   ```
 
 ## Deployment Commands
 
-**Note**: For development with hot reload, switch to `dev` branch:
+### 使用一键部署脚本（推荐）
+
 ```bash
-git checkout dev
-# See dev branch CLAUDE.md for development commands
+./deploy.sh
+# 会提示选择部署模式：
+# 1) 生产模式 (Production)
+# 2) 开发模式 (Development)
 ```
 
-### Production Deployment (main branch)
+### 生产模式部署
+
 ```bash
-# Start all services
-docker compose up -d
+# 启动服务
+docker compose -f docker-compose.yml up -d
 
-# View logs
-docker compose logs -f
+# 查看日志
+docker compose -f docker-compose.yml logs -f
 
-# Restart services
-docker compose restart
+# 重启服务
+docker compose -f docker-compose.yml restart
 
-# Stop services
-docker compose down
+# 停止服务
+docker compose -f docker-compose.yml down
+```
+
+### 开发模式部署（代码热重载）
+
+```bash
+# 启动服务（代码外挂，支持热重载）
+docker compose -f docker-compose.dev.yml up -d
+
+# 或使用快捷脚本
+./scripts/dev.sh
+
+# 查看日志
+docker compose -f docker-compose.dev.yml logs -f
+
+# 停止服务
+docker compose -f docker-compose.dev.yml down
 ```
 
 ### Testing & Monitoring
@@ -83,7 +125,7 @@ docker compose down
 - **Host**: 45.78.223.205
 - **SSH Access**: `ssh -i /Users/chengjie/Downloads/chengjie.pem root@45.78.223.205`
 - **Deployment Method**: Git-based deployment via GitHub
-- **Environment**: dev branch with code hot-reload (volumes mounted)
+- **Environment**: 使用开发模式（docker-compose.dev.yml）支持代码热重载
 
 ### Deployment Workflow
 
@@ -95,43 +137,47 @@ Local Machine ──git push──> GitHub ──git pull──> Remote Server (
 All code changes must be pushed to GitHub first to ensure synchronization across all three endpoints:
 1. Local development machine
 2. GitHub repository (central source of truth)
-3. Production server
+3. Testing server
 
 ### Deploying Code to Testing Server (45.78.223.205)
 
-**Important**: Testing server runs **dev branch** with code hot-reload enabled.
+**推荐方式：通过 PR 合并后部署**
 
 ```bash
-# 1. From local machine: Commit and push changes to GitHub
+# 1. 本地开发：创建功能分支
+git checkout -b feature/your-feature-name
+
+# 2. 开发并提交
 git add .
-git commit -m "feat: 描述你的更改"
-git push origin dev
+git commit -m "feat: 功能描述"
+git push origin feature/your-feature-name
 
-# 2. SSH into testing server
+# 3. 在 GitHub 创建 PR 并合并到 main
+
+# 4. SSH 到测试服务器并更新
 ssh -i /Users/chengjie/Downloads/chengjie.pem root@45.78.223.205
-
-# 3. On testing server: Pull latest changes
 cd ~/rag-api
-git pull origin dev
+git pull origin main
 
-# 4. Code changes take effect immediately (hot-reload via volumes)
-# Only restart if you changed dependencies or docker-compose.yml:
-docker compose restart  # Only if needed
+# 5. 代码变更立即生效（开发模式热重载）
+# 仅在修改依赖或配置时需要重启：
+docker compose -f docker-compose.dev.yml restart  # 仅在需要时
 ```
 
 ### Quick Deployment Commands
 
 ```bash
-# Deploy from local to testing server
-git push && ssh -i /Users/chengjie/Downloads/chengjie.pem root@45.78.223.205 "cd ~/rag-api && git pull origin dev"
+# 快速部署到测试服务器（PR 合并后）
+git push && ssh -i /Users/chengjie/Downloads/chengjie.pem root@45.78.223.205 "cd ~/rag-api && git pull origin main"
 ```
 
 **Important Notes**:
-- Testing server (45.78.223.205) runs **dev branch** with hot-reload
-- Code changes (src/, api/, main.py) take effect **immediately** without rebuild
-- Always push to GitHub before deploying to testing server
-- Never commit directly on the testing server
-- The SSH key `/Users/chengjie/Downloads/chengjie.pem` should have proper permissions (`chmod 600`)
+- 测试服务器使用**开发模式** (docker-compose.dev.yml) 支持热重载
+- 代码变更 (src/, api/, main.py) **立即生效**，无需重新构建
+- 始终先推送到 GitHub，再部署到测试服务器
+- 禁止直接在测试服务器上提交代码
+- SSH 密钥需要正确权限：`chmod 600 /Users/chengjie/Downloads/chengjie.pem`
+- 所有开发通过功能分支 + PR 流程完成
 
 ## Configuration
 
