@@ -165,7 +165,7 @@ services:
       - "9621:9621"
     env_file:
       - .env
-    command: python -m lightrag.lightrag_server --host 0.0.0.0 --port 9621 --working-dir /app/rag_storage
+    command: ["--host", "0.0.0.0", "--port", "9621", "--working-dir", "/app/rag_storage"]
     volumes:
       # 工作目录（外部存储模式下仅用于临时文件）
       - ./rag_local_storage:/app/rag_storage
