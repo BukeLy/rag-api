@@ -27,6 +27,16 @@ services:
       - TZ=Asia/Shanghai
       - PYTHONUNBUFFERED=1
       - UV_HTTP_TIMEOUT=60
+    # 依赖外部存储服务（健康检查通过后启动）
+    depends_on:
+      redis:
+        condition: service_healthy
+      neo4j:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    networks:
+      - rag-network-dev
     # 热重载命令
     command: ["uv", "run", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
     logging:
