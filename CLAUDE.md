@@ -359,11 +359,20 @@ The system uses a **shared LightRAG instance** (`global_lightrag_instance` in `s
    - Bypasses all parsers for optimal query performance
    - Solves read/write concurrency conflicts
    - Query modes: `naive` (fastest, 15-20s), `local`, `global`, `hybrid`, `mix` (slowest, most comprehensive)
+   - **Advanced parameters** (aligned with LightRAG official API):
+     - `conversation_history`: Multi-turn dialogue support
+     - `user_prompt`: Custom prompt templates
+     - `response_type`: Output format (paragraph/list/json)
+     - `only_need_context`: Debug mode (returns context only)
+     - `hl_keywords`/`ll_keywords`: Keyword extraction control
+     - `max_entity_tokens`/`max_relation_tokens`/`max_total_tokens`: Token limits
+   - **Stream query** (`/query/stream`): SSE-based real-time result streaming
 
 3. **Task Management** (`api/task.py`, `api/task_store.py`):
    - Async background processing with FastAPI BackgroundTasks
    - Task statuses: `pending`, `processing`, `completed`, `failed`
    - Shared in-memory `TASK_STORE` for status tracking
+   - `BATCH_STORE` for batch task mapping (fixed prefix matching bug)
    - Semaphore-based concurrency control (`DOCUMENT_PROCESSING_SEMAPHORE`)
 
 ### File Service for Remote MinerU
@@ -377,10 +386,12 @@ When `MINERU_MODE=remote`, the system:
 ### Parser Selection Logic
 
 Implemented in `src/rag.py:select_parser_by_file()`:
+- **Text files (.txt, .md)**: Returns `None` (direct LightRAG insertion, no parser needed)
 - **Images (.jpg, .png)**: MinerU (OCR capability)
-- **Text files (.txt, .md)**: Direct LightRAG insertion (no parser)
 - **PDF/Office < 500KB**: Docling (fast)
 - **PDF/Office > 500KB**: MinerU (powerful)
+
+**Note**: Function signature changed to `str | None` return type to explicitly indicate when no parser is needed.
 
 ## Multi-Tenant Usage
 
@@ -422,7 +433,8 @@ All routes are organized in `api/` directory and registered via `api/__init__.py
   - `GET /batch/{batch_id}?tenant_id=xxx`: Check batch progress
 
 - **Query**: `api/query.py`
-  - `POST /query?tenant_id=xxx`: Query the knowledge graph
+  - `POST /query?tenant_id=xxx`: Query the knowledge graph (supports 8 advanced parameters)
+  - `POST /query/stream?tenant_id=xxx`: Stream query results via SSE (Server-Sent Events)
 
 - **Task Management**: `api/task.py`
   - `GET /task/{task_id}?tenant_id=xxx`: Get task status
@@ -521,3 +533,56 @@ rag-api/
 ├── docs/                # Documentation (per Cursor rules)
 └── rag_local_storage/   # LightRAG working directory (git-ignored)
 ```
+
+## Recent Optimizations (2025-10-30)
+
+### API Enhancement & Code Refactoring
+
+**Completed improvements** to align with LightRAG official API while maintaining multi-tenant advantages:
+
+1. **Query Enhancement** (`api/query.py`, `api/models.py`):
+   - Added 8 advanced parameters aligned with LightRAG official API
+   - Support for multi-turn dialogue (`conversation_history`)
+   - Custom prompt templates (`user_prompt`)
+   - Response format control (`response_type`: paragraph/list/json)
+   - Debug mode (`only_need_context`)
+   - Keyword extraction control (`hl_keywords`, `ll_keywords`)
+   - Token limits (`max_entity_tokens`, `max_relation_tokens`, `max_total_tokens`)
+
+2. **Stream Query** (`api/query.py`):
+   - New endpoint: `POST /query/stream`
+   - SSE (Server-Sent Events) format for real-time streaming
+   - Dual mode: native streaming + fallback chunking
+   - Automatic `<think>` tag removal for clean output
+
+3. **Parser Selection Optimization** (`src/rag.py`):
+   - Changed `select_parser_by_file()` return type from `str` to `str | None`
+   - Text files (.txt, .md) now return `None` explicitly (no parser needed)
+   - More accurate logging: `direct_insert` instead of misleading `mineru`
+
+4. **Batch Task Tracking Fix** (`api/task_store.py`, `api/insert.py`):
+   - Added `BATCH_STORE` to replace unreliable prefix matching
+   - Functions: `create_batch()`, `get_batch()`, `delete_batch()`
+   - 100% accurate batch task mapping
+
+5. **File Extension Check Simplification** (`api/insert.py`):
+   - Removed unnecessary security validation
+   - Simplified from 7 lines to 1 line
+   - UUID-based filename ensures security
+
+6. **Documentation**:
+   - Created `docs/API_COMPARISON.md`: Comprehensive comparison with LightRAG official API
+   - Updated `docs/LIGHTRAG_WEBUI_INTEGRATION.md`: Multi-tenant limitations and roadmap
+   - **Key finding**: All 17 rag-api endpoints have differentiated value, 0 can be deleted
+
+### Why rag-api Still Matters
+
+Despite LightRAG official API's feature richness, rag-api provides **irreplaceable value**:
+
+- **Multi-tenant architecture**: LRU instance pool, workspace-based isolation
+- **Strong document parsing**: MinerU (OCR/tables/formulas) + Docling smart routing
+- **Batch processing**: `/batch` endpoint (up to 100 files)
+- **Production operations**: Tenant management, cache control, performance monitoring
+- **Extensibility**: Easy to add custom business logic
+
+See `docs/API_COMPARISON.md` for detailed analysis.

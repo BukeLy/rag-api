@@ -128,42 +128,42 @@ async def lifespan(app):
     logger.info("Shutting down Multi-Tenant RAG API...")
     # 清理多租户管理器（如需要）
 
-def select_parser_by_file(filename: str, file_size: int) -> str:
+def select_parser_by_file(filename: str, file_size: int) -> str | None:
     """
     根据文件特征智能选择解析器
-    
+
     策略：
-    - 纯文本 (.txt, .md) → 返回 "mineru"（实际会在处理函数中直接插入 LightRAG，不经过解析器）
+    - 纯文本 (.txt, .md) → 返回 None（直接插入 LightRAG，不需要解析器）
     - 图片文件 (.jpg, .png) → MinerU（OCR能力强）
     - PDF/Office 小文件 (< 500KB) → Docling（快速）
     - PDF/Office 大文件 (> 500KB) → MinerU（更强大）
     - 其他 → MinerU（默认）
-    
+
     注意：
     - Docling 只支持 PDF 和 Office 格式（.pdf, .docx, .xlsx, .pptx, .html）
     - 纯文本文件会被特殊处理：直接读取内容并插入 LightRAG，无需解析器
-    
+
     Args:
         filename: 文件名
         file_size: 文件大小（字节）
-    
+
     Returns:
-        "mineru" 或 "docling"
+        "mineru", "docling", 或 None（纯文本文件不需要解析器）
     """
     import os
     ext = os.path.splitext(filename)[1].lower()
-    
+
+    # 纯文本文件 → 不需要解析器（直接插入 LightRAG）
+    if ext in ['.txt', '.md', '.markdown']:
+        return None
+
     # 图片文件 → MinerU（需要 OCR）
     if ext in ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff']:
         return "mineru"
-    
-    # 纯文本文件 → MinerU（Docling 不支持 .txt）
-    if ext in ['.txt', '.md', '.markdown']:
-        return "mineru"
-    
+
     # PDF/Office 小文件 → Docling（快速）
     if ext in ['.pdf', '.docx', '.xlsx', '.pptx', '.html', '.htm'] and file_size < 500 * 1024:  # < 500KB
         return "docling"
-    
+
     # 大文件或其他 → MinerU
     return "mineru"

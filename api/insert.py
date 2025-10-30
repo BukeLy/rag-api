@@ -15,7 +15,7 @@ from src.rag import select_parser_by_file
 from src.tenant_deps import get_tenant_id
 from src.multi_tenant import get_tenant_lightrag
 from .models import TaskStatus, TaskInfo
-from .task_store import TASK_STORE, create_task
+from .task_store import TASK_STORE, create_task, create_batch, get_batch, get_task
 
 # 导入 RAG-Anything 异常类型
 try:
@@ -277,14 +277,8 @@ async def insert_document(
     # 保留原始文件名（仅用于日志）
     original_filename = file.filename or "unnamed_file"
     
-    # 安全地提取文件扩展名
-    if original_filename:
-        basename = os.path.basename(original_filename)
-        file_extension = Path(basename).suffix.lower()
-        if file_extension and not file_extension[1:].replace('_', '').replace('-', '').isalnum():
-            file_extension = ""
-    else:
-        file_extension = ""
+    # 提取文件扩展名（仅用于日志和解析器选择）
+    file_extension = Path(original_filename).suffix.lower() if original_filename else ""
     
     # 使用 UUID 生成安全的临时文件名
     safe_filename = f"{uuid.uuid4()}{file_extension}"
@@ -315,7 +309,8 @@ async def insert_document(
         selected_parser = parser
         if parser == "auto":
             selected_parser = select_parser_by_file(original_filename, file_size)
-            logger.info(f"Auto-selected parser for {original_filename} ({file_size} bytes): {selected_parser}")
+            parser_desc = selected_parser if selected_parser else "direct_insert (text file)"
+            logger.info(f"Auto-selected parser for {original_filename} ({file_size} bytes): {parser_desc}")
         
         # 生成任务 ID
         task_id = str(uuid.uuid4())
@@ -343,8 +338,9 @@ async def insert_document(
             parser=selected_parser
         )
 
-        logger.info(f"[Task {task_id}] [Tenant {tenant_id}] Created task for file: {original_filename} (size: {file_size} bytes, doc_id: {doc_id}, parser: {selected_parser})")
-        
+        parser_display = selected_parser if selected_parser else "direct_insert"
+        logger.info(f"[Task {task_id}] [Tenant {tenant_id}] Created task for file: {original_filename} (size: {file_size} bytes, doc_id: {doc_id}, parser: {parser_display})")
+
         # 立即返回 202 + task_id
         return {
             "task_id": task_id,
@@ -353,7 +349,7 @@ async def insert_document(
             "message": "Document upload accepted. Processing in background.",
             "doc_id": doc_id,
             "filename": original_filename,
-            "parser": selected_parser,
+            "parser": parser_display,
             "file_size": file_size
         }
     
@@ -517,11 +513,8 @@ async def insert_batch(
                 # 验证文件名
                 original_filename = file.filename or f"file_{idx}"
                 
-                # 安全地提取文件扩展名
-                basename = os.path.basename(original_filename)
-                file_extension = Path(basename).suffix.lower()
-                if file_extension and not file_extension[1:].replace('_', '').replace('-', '').isalnum():
-                    file_extension = ""
+                # 提取文件扩展名（仅用于日志和解析器选择）
+                file_extension = Path(original_filename).suffix.lower()
                 
                 # 生成临时文件路径
                 safe_filename = f"{uuid.uuid4()}{file_extension}"
@@ -548,6 +541,8 @@ async def insert_batch(
                 selected_parser = parser
                 if parser == "auto":
                     selected_parser = select_parser_by_file(original_filename, file_size)
+
+                parser_display = selected_parser if selected_parser else "direct_insert"
                 
                 # 生成任务 ID
                 task_id = str(uuid.uuid4())
@@ -575,14 +570,14 @@ async def insert_batch(
                     parser=selected_parser
                 )
 
-                logger.info(f"[Batch {batch_id}] [Tenant {tenant_id}] Created task {task_id} for file: {original_filename}")
-                
+                logger.info(f"[Batch {batch_id}] [Tenant {tenant_id}] Created task {task_id} for file: {original_filename} (parser: {parser_display})")
+
                 tasks.append({
                     "task_id": task_id,
                     "doc_id": doc_id,
                     "filename": original_filename,
                     "status": TaskStatus.PENDING,
-                    "parser": selected_parser,
+                    "parser": parser_display,
                     "file_size": file_size
                 })
             
@@ -594,6 +589,16 @@ async def insert_batch(
             raise HTTPException(status_code=400, detail="No valid files in batch")
 
         logger.info(f"[Batch {batch_id}] [Tenant {tenant_id}] Batch insert created: {len(tasks)} tasks")
+
+        # 记录批量任务映射（修复前缀匹配的bug）
+        task_ids = [task["task_id"] for task in tasks]
+        current_time = datetime.now().isoformat()
+        create_batch(
+            batch_id=batch_id,
+            tenant_id=tenant_id,
+            task_ids=task_ids,
+            created_at=current_time
+        )
 
         return {
             "batch_id": batch_id,
@@ -612,61 +617,98 @@ async def insert_batch(
 
 
 @router.get("/batch/{batch_id}")
-async def get_batch_status(batch_id: str):
+async def get_batch_status(
+    batch_id: str,
+    tenant_id: str = Depends(get_tenant_id)
+):
     """
-    查询批量任务进度
-    
+    查询批量任务进度（多租户隔离，使用 BATCH_STORE）
+
+    **多租户支持**：
+    - 🔒 **租户隔离**：只能查询本租户的批量任务
+    - 🎯 **必填参数**：`?tenant_id=your_tenant_id`
+
     **返回值：**
     ```json
     {
         "batch_id": "xxx-yyy-zzz",
+        "tenant_id": "tenant_a",
         "total_tasks": 5,
         "completed": 3,
         "failed": 1,
         "pending": 1,
+        "processing": 0,
         "progress": 0.6,
-        "tasks": [...]
+        "created_at": "2025-10-30T...",
+        "tasks": [
+            {
+                "task_id": "task-1",
+                "doc_id": "doc-1",
+                "filename": "file1.pdf",
+                "status": "completed",
+                "created_at": "...",
+                "updated_at": "..."
+            }
+        ]
     }
     ```
     """
-    # 注意：需要有效的 batch_id 追踪机制
-    # 这里简化实现，实际应该有 BATCH_STORE 来追踪批量任务
-    logger.info(f"Querying batch status: {batch_id}")
-    
-    # 搜索所有任务中与此 batch 相关的任务
-    # 这可以通过任务名称前缀或其他方式实现
+    logger.info(f"[Batch {batch_id}] [Tenant {tenant_id}] Querying batch status")
+
+    # 从 BATCH_STORE 获取批量任务信息（修复前缀匹配的bug）
+    batch_info = get_batch(batch_id, tenant_id)
+
+    if not batch_info:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Batch not found: {batch_id} (tenant: {tenant_id})"
+        )
+
+    # 获取所有关联的任务详情
+    task_ids = batch_info["task_ids"]
     related_tasks = []
-    
-    # 遍历所有租户的任务
-    for tenant_id_key, tasks_dict in TASK_STORE.items():
-        for task_id, task_info in tasks_dict.items():
-            # 简单的实现：如果 task_id 匹配某个模式
-            if task_id.startswith(batch_id[:8]):  # 简化匹配
-                related_tasks.append({
-                    "task_id": task_id,
-                    "doc_id": task_info.doc_id,
-                    "filename": task_info.filename,
-                    "status": task_info.status,
-                    "created_at": task_info.created_at,
-                    "updated_at": task_info.updated_at
-                })
-    
-    if not related_tasks:
-        raise HTTPException(status_code=404, detail=f"Batch not found: {batch_id}")
-    
+
+    for task_id in task_ids:
+        task_info = get_task(task_id, tenant_id)
+        if task_info:
+            related_tasks.append({
+                "task_id": task_id,
+                "doc_id": task_info.doc_id,
+                "filename": task_info.filename,
+                "status": task_info.status,
+                "created_at": task_info.created_at,
+                "updated_at": task_info.updated_at,
+                "error": task_info.error,  # 包含错误信息（如果有）
+                "result": task_info.result  # 包含结果信息（如果有）
+            })
+        else:
+            # 任务可能已被清理，记录警告
+            logger.warning(f"[Batch {batch_id}] Task {task_id} not found in TASK_STORE")
+            related_tasks.append({
+                "task_id": task_id,
+                "doc_id": "unknown",
+                "filename": "unknown",
+                "status": "unknown",
+                "created_at": batch_info["created_at"],
+                "updated_at": batch_info["created_at"]
+            })
+
     # 统计进度
     completed = sum(1 for t in related_tasks if t['status'] == TaskStatus.COMPLETED)
     failed = sum(1 for t in related_tasks if t['status'] == TaskStatus.FAILED)
     pending = sum(1 for t in related_tasks if t['status'] == TaskStatus.PENDING)
-    
+    processing = sum(1 for t in related_tasks if t['status'] == TaskStatus.PROCESSING)
+
     return {
         "batch_id": batch_id,
-        "total_tasks": len(related_tasks),
+        "tenant_id": tenant_id,
+        "total_tasks": batch_info["total"],
         "completed": completed,
         "failed": failed,
         "pending": pending,
-        "processing": len(related_tasks) - completed - failed - pending,
-        "progress": completed / len(related_tasks) if related_tasks else 0,
+        "processing": processing,
+        "progress": completed / batch_info["total"] if batch_info["total"] > 0 else 0,
+        "created_at": batch_info["created_at"],
         "tasks": related_tasks
     }
 

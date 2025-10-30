@@ -3,7 +3,7 @@ API 数据模型
 """
 
 from enum import Enum
-from typing import Dict, Optional
+from typing import Dict, Optional, List
 from pydantic import BaseModel, Field
 
 
@@ -88,10 +88,11 @@ class TaskInfo(BaseModel):
 
 class QueryRequest(BaseModel):
     """
-    查询请求模型
+    查询请求模型（增强版，对齐 LightRAG 官方 API）
 
-    用于向 RAG 系统提交查询请求
+    支持基础查询和高级参数，提供更精细的控制能力
     """
+    # ===== 基础参数 =====
     query: str = Field(
         ...,
         description="查询问题（自然语言）",
@@ -112,11 +113,97 @@ class QueryRequest(BaseModel):
         pattern="^(naive|local|global|hybrid|mix)$"
     )
 
+    # ===== 高级参数（v2.0 新增）=====
+    conversation_history: Optional[List[Dict]] = Field(
+        None,
+        description="""对话历史（支持多轮对话）
+
+格式示例：
+```json
+[
+  {"role": "user", "content": "什么是 AI？"},
+  {"role": "assistant", "content": "AI 是人工智能..."},
+  {"role": "user", "content": "它有哪些应用？"}
+]
+```
+""",
+        example=[
+            {"role": "user", "content": "什么是人工智能？"},
+            {"role": "assistant", "content": "人工智能是计算机科学的一个分支..."}
+        ]
+    )
+
+    user_prompt: Optional[str] = Field(
+        None,
+        description="自定义提示词（覆盖默认系统提示词）",
+        example="请以专家的口吻回答，并提供具体案例",
+        max_length=1000
+    )
+
+    response_type: Optional[str] = Field(
+        "paragraph",
+        description="""响应格式类型：
+- `paragraph`: 段落格式（默认，适合阅读）
+- `list`: 列表格式（结构化输出）
+- `json`: JSON 格式（结构化数据）
+""",
+        example="paragraph",
+        pattern="^(paragraph|list|json)$"
+    )
+
+    only_need_context: bool = Field(
+        False,
+        description="是否仅返回上下文（不生成 AI 回答），适合调试和自定义生成",
+        example=False
+    )
+
+    # ===== 关键词提取 =====
+    hl_keywords: Optional[List[str]] = Field(
+        None,
+        description="高级关键词（High-Level Keywords），用于指定重要的检索关键词",
+        example=["人工智能", "深度学习"],
+        max_length=10
+    )
+
+    ll_keywords: Optional[List[str]] = Field(
+        None,
+        description="低级关键词（Low-Level Keywords），用于指定次要的检索关键词",
+        example=["神经网络", "算法"],
+        max_length=20
+    )
+
+    # ===== Token 限制 =====
+    max_entity_tokens: Optional[int] = Field(
+        None,
+        description="实体上下文最大 token 数（用于控制输出长度）",
+        example=2000,
+        gt=0,
+        le=10000
+    )
+
+    max_relation_tokens: Optional[int] = Field(
+        None,
+        description="关系上下文最大 token 数（用于控制输出长度）",
+        example=2000,
+        gt=0,
+        le=10000
+    )
+
+    max_total_tokens: Optional[int] = Field(
+        None,
+        description="总上下文最大 token 数（用于控制整体输出长度）",
+        example=4000,
+        gt=0,
+        le=20000
+    )
+
     class Config:
         json_schema_extra = {
             "example": {
                 "query": "什么是人工智能？它有哪些应用场景？",
-                "mode": "naive"
+                "mode": "naive",
+                "response_type": "paragraph",
+                "only_need_context": False
             }
         }
 
