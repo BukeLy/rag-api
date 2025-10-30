@@ -4,13 +4,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Language Preference
 
-  **Default Response Language**: Chinese (Simplified)
-  - All responses, explanations, and documentation
-  should be in Chinese
-  - Thinking process can remain in English
-  - Code comments and variable names should follow
-  standard English conventions
-  - Git commits should be in Chinese
+**Default Response Language**: Chinese (Simplified)
+- All responses, explanations, and documentation should be in Chinese
+- Thinking process can remain in English
+- Code comments and variable names should follow standard English conventions
+- Git commits should be in Chinese
 
 ## Project Overview
 
@@ -22,7 +20,7 @@ This is a **multi-tenant** multimodal RAG (Retrieval-Augmented Generation) API s
 - **Shared resources**: LLM/Embedding functions shared across tenants
 - **MinerU parser**: Powerful multimodal parsing (OCR, tables, equations) with high memory usage
 - **Docling parser**: Lightweight fast parsing for simple documents
-- **Direct LightRAG query**: Bypasses parsers for 95% of text queries, optimizing performance
+- **Direct LightRAG query**: Bypasses parsers for optimal query performance
 
 ## Branch Strategy
 
@@ -31,490 +29,267 @@ This is a **multi-tenant** multimodal RAG (Retrieval-Augmented Generation) API s
   - 生产环境和开发环境通过不同的 docker-compose 文件区分
   - 新功能开发通过 Pull Request 流程合并
 
-### 开发流程 (Pull Request Workflow)
-
-1. **创建功能分支**
-   ```bash
-   git checkout -b feature/your-feature-name
-   ```
-
-2. **开发和提交**
-   ```bash
-   git add .
-   git commit -m "feat: 功能描述"
-   ```
-
-3. **推送到远端并创建 PR**
-   ```bash
-   git push origin feature/your-feature-name
-   # 在 GitHub 上创建 Pull Request
-   ```
-
-4. **PR 合并后删除功能分支**
-   ```bash
-   git checkout main
-   git pull origin main
-   git branch -d feature/your-feature-name
-   git push origin --delete feature/your-feature-name
-   ```
-
 ## Deployment Commands
 
-### 使用一键部署脚本（推荐）
-
+### 一键部署脚本（推荐）
 ```bash
 ./deploy.sh
-# 会提示选择部署模式：
-# 1) 生产模式 (Production)
-# 2) 开发模式 (Development)
+# 会提示选择：1) 生产模式 2) 开发模式
 ```
 
-### 生产模式部署
-
+### 生产模式
 ```bash
-# 启动服务
 docker compose -f docker-compose.yml up -d
-
-# 查看日志
 docker compose -f docker-compose.yml logs -f
-
-# 重启服务
-docker compose -f docker-compose.yml restart
-
-# 停止服务
 docker compose -f docker-compose.yml down
 ```
 
-### 开发模式部署（代码热重载）
-
+### 开发模式（代码热重载）
 ```bash
-# 启动服务（代码外挂，支持热重载）
 docker compose -f docker-compose.dev.yml up -d
-
-# 或使用快捷脚本
-./scripts/dev.sh
-
-# 查看日志
 docker compose -f docker-compose.dev.yml logs -f
-
-# 停止服务
 docker compose -f docker-compose.dev.yml down
-```
-
-### Testing & Monitoring
-```bash
-# Monitor service health
-./scripts/monitor.sh
-
-# Backup data
-./scripts/backup.sh
-
-# Update deployment
-./scripts/update.sh
-
-# Performance monitoring
-./scripts/monitor_performance.sh
-
-# Concurrent performance test
-./scripts/test_concurrent_perf.sh
 ```
 
 ## LightRAG WebUI（知识图谱可视化）
 
 项目集成了 LightRAG 官方 WebUI，与 rag-api 形成**互补关系**，完全兼容多租户架构。
 
-### 🎯 为什么需要两者？
+**访问方式**：
+- 本地：http://localhost:9621/webui/
+- 测试服务器：http://45.78.223.205:9621/webui/
 
-**rag-api 的独特价值**（WebUI 无法替代）：
-- 🖼️ **强大文档解析**：MinerU（OCR/表格/公式）+ Docling 智能选择
-- 📦 **批量处理**：`/batch` 端点支持 100 文件同时处理
-- 🏢 **多租户架构**：完整的租户隔离和实例池管理
-- 🤖 **编程集成**：RESTful API，适合自动化流程
-- ⚡ **性能优化**：定制并发控制、缓存策略
+**多租户切换**：
+- 修改 `.env` 中的 `LIGHTRAG_WEBUI_WORKSPACE=tenant_id`
+- 重启 WebUI：`docker compose restart lightrag-webui`
 
-**LightRAG WebUI 的独特价值**（rag-api 没有）：
-- 📊 **知识图谱可视化**：交互式查看实体和关系
-- 👥 **用户友好界面**：非技术用户也能使用
-- 🔍 **快速调试**：验证文档是否正确插入
-- 🎯 **演示展示**：适合向团队展示系统
-
-**推荐工作流**：
-```
-文档导入 → rag-api（批量+强解析+多租户）→ 外部存储 ← WebUI（可视化指定租户）
-                                             ↓
-                              生产查询 ← rag-api（性能优化）
-```
-
-### 🔑 多租户兼容性
-
-WebUI 通过 `LIGHTRAG_WEBUI_WORKSPACE` 环境变量访问指定租户的数据：
-- **默认 workspace**: `default`（可视化 `tenant_id=default` 的数据）
-- **切换租户**: 修改 `.env` 中的 `LIGHTRAG_WEBUI_WORKSPACE=tenant_a` 后重启 WebUI
-- **数据同步**: WebUI 和 rag-api 共享同一套外部存储（Redis/Neo4j/PostgreSQL）
-- **实时可见**: 通过 rag-api 插入的数据立即在 WebUI 中可见
-
-### 功能特性
-- **可视化知识图谱**：交互式查看实体和关系
-- **文档管理**：上传、查看和管理文档
-- **查询界面**：通过 UI 执行 RAG 查询
-- **多模式支持**：支持 naive、local、global、hybrid 等查询模式
-
-### 访问方式
-WebUI 服务默认在 **9621 端口**启动：
-```
-本地访问：http://localhost:9621/webui/
-远程服务器（dev）：http://45.78.223.205:9621/webui/
-API 文档：http://45.78.223.205:9621/docs
-```
-
-### 启动/停止 WebUI
-```bash
-# 单独启动 WebUI
-docker compose up -d lightrag-webui
-
-# 查看 WebUI 日志
-docker compose logs -f lightrag-webui
-
-# 切换到其他租户（修改 .env 后重启）
-docker compose restart lightrag-webui
-
-# 停止 WebUI（不影响 rag-api）
-docker compose stop lightrag-webui
-```
-
-### 访问控制（可选）
-在 `.env` 中配置：
-```bash
-# API Key 认证
-LIGHTRAG_API_KEY=your_secret_key
-
-# Web UI 登录账号（JSON 格式）
-LIGHTRAG_AUTH_ACCOUNTS='[{"username": "admin", "password": "your_password"}]'
-```
-
-详细文档请参考：[docs/LIGHTRAG_WEBUI_INTEGRATION.md](docs/LIGHTRAG_WEBUI_INTEGRATION.md)
+详细文档：[docs/LIGHTRAG_WEBUI_INTEGRATION.md](docs/LIGHTRAG_WEBUI_INTEGRATION.md)
 
 ## Remote Deployment
 
-### Testing Server
-- **Host**: 45.78.223.205
-- **SSH Access**: `ssh -i /Users/chengjie/Downloads/chengjie.pem root@45.78.223.205`
-- **Deployment Method**: Git-based deployment via GitHub
-- **Environment**: 使用开发模式（docker-compose.dev.yml）支持代码热重载
+**Testing Server**: 45.78.223.205
+**SSH Access**: `ssh -i /Users/chengjie/Downloads/chengjie.pem root@45.78.223.205`
 
-### Deployment Workflow
-
-**Three-Way Sync Architecture**:
-```
-Local Machine ──git push──> GitHub ──git pull──> Remote Server (45.78.223.205)
-```
-
-All code changes must be pushed to GitHub first to ensure synchronization across all three endpoints:
-1. Local development machine
-2. GitHub repository (central source of truth)
-3. Testing server
-
-### Deploying Code to Testing Server (45.78.223.205)
-
-**推荐方式：通过 PR 合并后部署**
-
+**部署流程**（通过 PR）：
 ```bash
-# 1. 本地开发：创建功能分支
-git checkout -b feature/your-feature-name
+# 1. 本地开发
+git checkout -b feature/xxx
+git commit -m "feat: xxx"
+git push origin feature/xxx
 
-# 2. 开发并提交
-git add .
-git commit -m "feat: 功能描述"
-git push origin feature/your-feature-name
+# 2. GitHub 创建 PR 并合并到 main
 
-# 3. 在 GitHub 创建 PR 并合并到 main
-
-# 4. SSH 到测试服务器并更新
+# 3. 服务器更新
 ssh -i /Users/chengjie/Downloads/chengjie.pem root@45.78.223.205
 cd ~/rag-api
 git pull origin main
-
-# 5. 代码变更立即生效（开发模式热重载）
-# 仅在修改依赖或配置时需要重启：
-docker compose -f docker-compose.dev.yml restart  # 仅在需要时
+# 代码变更立即生效（开发模式热重载）
 ```
-
-### Quick Deployment Commands
-
-```bash
-# 快速部署到测试服务器（PR 合并后）
-git push && ssh -i /Users/chengjie/Downloads/chengjie.pem root@45.78.223.205 "cd ~/rag-api && git pull origin main"
-```
-
-**Important Notes**:
-- 测试服务器使用**开发模式** (docker-compose.dev.yml) 支持热重载
-- 代码变更 (src/, api/, main.py) **立即生效**，无需重新构建
-- 始终先推送到 GitHub，再部署到测试服务器
-- 禁止直接在测试服务器上提交代码
-- SSH 密钥需要正确权限：`chmod 600 /Users/chengjie/Downloads/chengjie.pem`
-- 所有开发通过功能分支 + PR 流程完成
 
 ## Configuration
 
-Environment variables are managed through `.env` (copy from `env.example`):
+Environment variables are managed through `.env` (copy from `env.example`).
 
-### Required Configuration
-- **ARK_API_KEY / ARK_BASE_URL / ARK_MODEL**: LLM for text generation and entity extraction
-- **SF_API_KEY / SF_BASE_URL / SF_EMBEDDING_MODEL**: Embedding service (4096-dim vectors)
-- **RERANK_MODEL**: Optional reranker model to improve retrieval relevance
+### 核心配置
 
-### MinerU Modes
-- **local**: Runs MinerU locally (requires GPU, high memory)
-- **remote**: Uses remote MinerU API (recommended, saves resources)
-  - Requires **MINERU_API_TOKEN** and **FILE_SERVICE_BASE_URL**
-  - Model version: `pipeline` (stable) or `vlm` (faster, more accurate, recommended)
+**LLM & Embedding**:
+- `ARK_API_KEY / ARK_BASE_URL / ARK_MODEL`: LLM for text generation
+- `SF_API_KEY / SF_BASE_URL / SF_EMBEDDING_MODEL`: Embedding (4096-dim)
+- `EMBEDDING_DIM=4096`: **必须设置**（见下方关键陷阱）
 
-### External Storage Configuration
+**MinerU**:
+- `MINERU_MODE=remote`: 使用远程 MinerU API（推荐）
+- `MINERU_API_TOKEN` + `FILE_SERVICE_BASE_URL`: 远程模式必需
 
-**Important**: LightRAG 1.4.9.4 uses **environment variables** for external storage configuration, not initialization parameters.
+**External Storage**:
+```bash
+USE_EXTERNAL_STORAGE=true
+KV_STORAGE=RedisKVStorage
+VECTOR_STORAGE=PGVectorStorage
+GRAPH_STORAGE=Neo4JStorage
 
-To enable external storage:
+# Redis
+REDIS_URI=redis://redis:6379/0
 
-1. **Set storage toggle**:
-   ```bash
-   USE_EXTERNAL_STORAGE=true
-   KV_STORAGE=RedisKVStorage
-   VECTOR_STORAGE=PGVectorStorage
-   GRAPH_STORAGE=Neo4JStorage
-   ```
+# PostgreSQL
+POSTGRES_HOST=postgres
+POSTGRES_PORT=5432
+POSTGRES_DATABASE=lightrag
+POSTGRES_USER=lightrag
+POSTGRES_PASSWORD=your_password
 
-2. **Configure Redis** (for KV storage):
-   ```bash
-   REDIS_URI=redis://redis:6379/0  # URI format required
-   REDIS_WORKSPACE=default          # Optional
-   ```
+# Neo4j
+NEO4J_URI=bolt://neo4j:7687
+NEO4J_USERNAME=neo4j
+NEO4J_PASSWORD=your_password
+```
 
-3. **Configure PostgreSQL** (for vector storage):
-   ```bash
-   POSTGRES_HOST=postgres
-   POSTGRES_PORT=5432
-   POSTGRES_DATABASE=lightrag       # Note: POSTGRES_DATABASE not POSTGRES_DB
-   POSTGRES_USER=lightrag
-   POSTGRES_PASSWORD=your_password
-   POSTGRES_WORKSPACE=default
-   POSTGRES_MAX_CONNECTIONS=20
-   ```
-
-4. **Configure Neo4j** (for graph storage):
-   ```bash
-   NEO4J_URI=bolt://neo4j:7687
-   NEO4J_USERNAME=neo4j
-   NEO4J_PASSWORD=your_password
-   NEO4J_WORKSPACE=default
-   ```
-
-**Key Points**:
-- ✅ Storage backends read connection info from environment variables
-- ❌ Do NOT pass `*_cls_kwargs` parameters to LightRAG.__init__()
-- 📝 See `env.example` for complete configuration template
-
-### Performance Tuning
-
-**Current configuration is optimized for EC2 persistent containers.**
-
-#### Core Parameters
-- **TOP_K**: Number of entities/relations to retrieve (default: 20, was 60)
-- **CHUNK_TOP_K**: Number of text chunks to retrieve (default: 10, was 20)
-- **MAX_ASYNC**: LLM concurrent requests (default: 8, optimized from 4)
-- **DOCUMENT_PROCESSING_CONCURRENCY**: Concurrent document processing (1 for local, 10+ for remote)
-
-#### Deployment-Specific Recommendations
-
-**EC2/ECS Persistent Containers** (Current setup):
-- `MAX_ASYNC=8`: Fully leverage persistent HTTP connections
-- Worker warmup: Enabled in `src/rag.py:lifespan()` to reduce first query delay
-- Expected performance: First query ~15s (after warmup), subsequent queries 6-11s
-- Best for: Stable traffic (>5 req/hour), 7x24 services
-
-**Fargate Auto-Scaling** (Alternative):
-- `MAX_ASYNC=4`: Reduce cold start overhead
-- Worker warmup: Still beneficial but less effective due to frequent container restarts
-- Expected performance: First query ~35s, subsequent queries 10-15s
-- Best for: Variable traffic, cost optimization for low-frequency usage
-
-**Lambda/Serverless** (Not recommended):
-- Worker initialization delay (25-35s per cold start) significantly impacts user experience
-- HTTP connection pooling ineffective due to short container lifetime
-- See `docs/LIGHTRAG_WORKER_MECHANISM_SOURCE_CODE_ANALYSIS.md` for detailed analysis
-
-## Architecture Notes
-
-### Single LightRAG + Multiple Parsers Pattern
-
-The system uses a **shared LightRAG instance** (`global_lightrag_instance` in `src/rag.py:26`) that all parsers write to:
-
-1. **Document Insertion** (`/insert` endpoint in `api/insert.py`):
-   - Routes through RAGAnything parsers (MinerU or Docling)
-   - Parser selection: automatic based on file type/size, or manual
-   - Text files (.txt, .md) bypass parsers and insert directly to LightRAG
-   - Remote MinerU mode: uploads file to file service, calls remote API, processes markdown result
-
-2. **Query** (`/query` endpoint in `api/query.py`):
-   - **Directly accesses LightRAG** via `get_lightrag_instance()`
-   - Bypasses all parsers for optimal query performance
-   - Solves read/write concurrency conflicts
-   - Query modes: `naive` (fastest, 15-20s), `local`, `global`, `hybrid`, `mix` (slowest, most comprehensive)
-   - **Advanced parameters** (aligned with LightRAG official API):
-     - `conversation_history`: Multi-turn dialogue support
-     - `user_prompt`: Custom prompt templates
-     - `response_type`: Output format (paragraph/list/json)
-     - `only_need_context`: Debug mode (returns context only)
-     - `hl_keywords`/`ll_keywords`: Keyword extraction control
-     - `max_entity_tokens`/`max_relation_tokens`/`max_total_tokens`: Token limits
-   - **Stream query** (`/query/stream`): SSE-based real-time result streaming
-
-3. **Task Management** (`api/task.py`, `api/task_store.py`):
-   - Async background processing with FastAPI BackgroundTasks
-   - Task statuses: `pending`, `processing`, `completed`, `failed`
-   - Shared in-memory `TASK_STORE` for status tracking
-   - `BATCH_STORE` for batch task mapping (fixed prefix matching bug)
-   - Semaphore-based concurrency control (`DOCUMENT_PROCESSING_SEMAPHORE`)
-
-### File Service for Remote MinerU
-
-When `MINERU_MODE=remote`, the system:
-1. Uploads files to temporary HTTP-accessible storage (`src/file_url_service.py`)
-2. Passes file URLs to remote MinerU API (`src/mineru_client.py`)
-3. Polls for completion and processes markdown results (`src/mineru_result_processor.py`)
-4. Auto-cleanup of temporary files after configurable retention period
-
-### Parser Selection Logic
-
-Implemented in `src/rag.py:select_parser_by_file()`:
-- **Text files (.txt, .md)**: Returns `None` (direct LightRAG insertion, no parser needed)
-- **Images (.jpg, .png)**: MinerU (OCR capability)
-- **PDF/Office < 500KB**: Docling (fast)
-- **PDF/Office > 500KB**: MinerU (powerful)
-
-**Note**: Function signature changed to `str | None` return type to explicitly indicate when no parser is needed.
+**Performance**:
+- `TOP_K=20`: 减少实体检索数量（默认 60）
+- `CHUNK_TOP_K=10`: 减少文本块检索（默认 20）
+- `MAX_ASYNC=8`: LLM 并发请求数（默认 4）
 
 ## Multi-Tenant Usage
 
-**All API endpoints require `tenant_id` parameter:**
-
+所有 API 端点需要 `tenant_id` 参数：
 ```bash
-# Query
 POST /query?tenant_id=your_tenant_id
-
-# Document upload
 POST /insert?tenant_id=your_tenant_id
-
-# Task status
 GET /task/{task_id}?tenant_id=your_tenant_id
 ```
 
-### Tenant Isolation
+**Tenant Management**:
+- `GET /tenants/stats?tenant_id=xxx`: 租户统计
+- `DELETE /tenants/cache?tenant_id=xxx`: 清理租户缓存
+- `GET /tenants/pool/stats`: 实例池统计（管理员）
 
-- **Data isolation**: Each tenant's documents and queries are completely isolated
-- **Workspace-based**: Uses LightRAG's native workspace mechanism
-- **External storage**: Redis/PostgreSQL/Neo4j with tenant-specific namespaces
-  - Redis: `tenant_a:kv_store`
-  - PostgreSQL: `tenant_a:vectors`
-  - Neo4j: `tenant_a:GraphDB`
+## Architecture Notes
 
-### Tenant Management
+### Parser Selection Logic (`src/rag.py:select_parser_by_file()`)
+- **Text files (.txt, .md)**: 返回 `None`（直接插入 LightRAG，无需解析）
+- **Images (.jpg, .png)**: MinerU（OCR 能力）
+- **PDF/Office < 500KB**: Docling（快速）
+- **PDF/Office > 500KB**: MinerU（强大）
 
-- **GET /tenants/stats?tenant_id=xxx**: Get tenant statistics
-- **DELETE /tenants/cache?tenant_id=xxx**: Clear tenant instance cache
-- **GET /tenants/pool/stats**: Get instance pool statistics (admin)
+### Query Endpoints (`api/query.py`)
+- `POST /query`: 标准查询（支持 8 个高级参数）
+- `POST /query/stream`: 流式查询（SSE 格式）
+- 查询模式：`naive`（最快，15-20s）、`local`、`global`、`hybrid`、`mix`（最慢）
 
-## API Routes
+### Task Management (`api/task.py`, `api/task_store.py`)
+- 异步后台处理（FastAPI BackgroundTasks）
+- 状态：`pending` → `processing` → `completed`/`failed`
+- `BATCH_STORE`：批量任务精确追踪（修复了前缀匹配 bug）
 
-All routes are organized in `api/` directory and registered via `api/__init__.py`:
+## ⚠️ Critical Pitfalls（关键陷阱）
 
-- **Document Processing**: `api/insert.py`
-  - `POST /insert?tenant_id=xxx`: Single document upload (returns task_id)
-  - `POST /batch?tenant_id=xxx`: Batch document upload (up to 100 files)
-  - `GET /batch/{batch_id}?tenant_id=xxx`: Check batch progress
+### 🚨 Embedding 维度配置陷阱（极其重要）
 
-- **Query**: `api/query.py`
-  - `POST /query?tenant_id=xxx`: Query the knowledge graph (supports 8 advanced parameters)
-  - `POST /query/stream?tenant_id=xxx`: Stream query results via SSE (Server-Sent Events)
+**问题描述**：向量插入失败，报错 `expected 1024 dimensions, not 4096`
 
-- **Task Management**: `api/task.py`
-  - `GET /task/{task_id}?tenant_id=xxx`: Get task status
+**根本原因**（2025-10-30 调试 2+ 小时发现）：
 
-- **Tenant Management**: `api/tenant.py`
-  - `GET /tenants/stats?tenant_id=xxx`: Get tenant statistics
-  - `DELETE /tenants/cache?tenant_id=xxx`: Clear tenant cache
-  - `GET /tenants/pool/stats`: Get instance pool statistics
+1. **LightRAG 从环境变量读取维度**：
+   ```python
+   # lightrag/kg/postgres_impl.py
+   content_vector VECTOR({os.environ.get("EMBEDDING_DIM", 1024)})
+   ```
+   默认值是 **1024**，必须显式设置 `EMBEDDING_DIM=4096`。
 
-- **File Service**: `api/files.py`
-  - `GET /files/{file_id}/{filename}`: Download temporary files (for remote MinerU)
+2. **Docker volume 名称陷阱**：
+   - `docker-compose.dev.yml` 的项目名默认是**目录名** `rag-api`
+   - Volume 前缀是 `rag-api_`（不是 `rag-api-dev_`）
+   - 删除错误的 volume 名称导致数据库未重置！
 
-- **Performance Monitoring**: `api/monitor.py`
-  - System metrics collection via `src/metrics.py`
+3. **表结构持久化**：
+   - PostgreSQL 表在首次启动时创建，维度固定
+   - 即使修改 `EMBEDDING_DIM` 并重启，表结构不会改变
+   - 必须**完全删除 volume** 才能重新初始化
 
-## Important Implementation Details
+**正确的解决方案**：
 
-### Multi-Tenant Architecture
+```bash
+# 1. 停止所有服务
+docker compose -f docker-compose.dev.yml down
 
-**Core Components**:
-- `src/multi_tenant.py`: Multi-tenant instance manager (LRU cache)
-- `src/tenant_deps.py`: FastAPI dependency for tenant identification
-- `api/tenant.py`: Tenant management endpoints
+# 2. 列出所有 volumes（确认正确的名称）
+docker volume ls | grep -E "postgres|redis|neo4j"
 
-**Lifespan Management** (`src/rag.py:lifespan()`):
-- Initializes multi-tenant manager (lazy loading)
-- No shared LightRAG instance created at startup
-- Tenant instances created on-demand (first request)
-- Starts file cleanup background task
-- Starts performance monitoring
+# 3. 删除正确的 volumes（注意前缀是 rag-api_ 而非 rag-api-dev_）
+docker volume rm rag-api_postgres_data rag-api_neo4j_data rag-api_redis_data rag-api_neo4j_logs
 
-**Tenant Instance Lifecycle**:
-1. First request: Create LightRAG instance with `workspace=tenant_id`
-2. Subsequent requests: Reuse cached instance
-3. Pool full: Remove oldest instance (LRU strategy)
-4. Manual cleanup: `DELETE /tenants/cache?tenant_id=xxx`
+# 4. 确认 docker-compose 配置正确
+grep -A 5 "EMBEDDING_DIM" docker-compose.dev.yml
+# 应该看到：
+#   environment:
+#     - EMBEDDING_DIM=4096
 
-### Logging
-Unified logging via `src/logger.py` using loguru:
-- Structured JSON logs for production
-- Automatic log rotation based on `LOG_RETENTION_DAYS`
-- Log level controlled by `LOG_LEVEL` env var
+# 5. 重新启动（这次会用正确的维度初始化）
+docker compose -f docker-compose.dev.yml up -d
 
-### Error Handling in Document Processing
-`api/insert.py:process_document_task()` handles:
-- **MineruExecutionError**: Unsupported file format
-- **ValueError**: Empty files, validation errors
-- **OSError**: File system errors
-- Always cleans up temporary files in `finally` block
+# 6. 验证数据库维度正确
+docker exec rag-postgres-dev psql -U lightrag -d lightrag -c "
+SELECT attrelid::regclass AS table_name,
+       attname AS column_name,
+       atttypmod AS dimensions
+FROM pg_attribute
+WHERE attrelid::regclass::text LIKE 'lightrag_vdb%'
+AND attname = 'content_vector';
+"
+# 应该看到所有表都是 4096 维度
+```
 
-### Performance Optimizations Applied
-1. Reduced `TOP_K` from 60 to 20 (fewer entities retrieved)
-2. Reduced `CHUNK_TOP_K` from 20 to 10 (fewer text chunks)
-3. Increased `MAX_ASYNC` from 4 to 8 (faster entity merging)
-4. Enabled rerank for better relevance (adds 2-3s but improves quality)
-5. Direct LightRAG query path (bypasses parser overhead)
+### 🚨 pgvector 索引限制（重要）
 
-## Cursor Rules
+**问题**：
+```
+ERROR: column cannot have more than 2000 dimensions for hnsw index
+```
 
-From `.cursor/rules/docs-rules.mdc`:
-- All documentation files must be placed in `docs/` folder
+**原因**：
+- pgvector 的 HNSW 和 IVFFlat 索引最多支持 **2000 维度**
+- 我们使用 4096 维度，无法创建索引
 
-## Common Pitfalls
+**影响**：
+- ✅ 数据可以正常插入和查询
+- ⚠️ 查询性能会受影响（无索引加速）
 
-1. **multimodal_processed errors**: Delete `./rag_local_storage` to clear corrupted state
-2. **Remote MinerU failures**: Verify `FILE_SERVICE_BASE_URL` is set to public IP:8000, not localhost
-3. **Memory issues with local MinerU**: Switch to `MINERU_MODE=remote` or reduce `DOCUMENT_PROCESSING_CONCURRENCY` to 1
-4. **Slow queries (75s+)**: Increase `MAX_ASYNC` in `.env` or use `naive` query mode instead of `mix`
-5. **Empty file uploads**: API returns 400 with detailed error message
-6. **Docker network errors after config changes** (⚠️ CRITICAL):
-   - **Symptom**: Containers can't connect to each other (e.g., `Error -2 connecting to redis:6379. Name or service not known`)
-   - **Root Cause**: `docker compose restart` does NOT apply network configuration changes (like `depends_on`, `networks`)
-   - **Solution**: Use `docker compose up -d --force-recreate <service>` to recreate containers with new network config
-   - **Prevention**: After modifying `depends_on`, `networks`, or other compose file settings, always recreate affected containers
-   - **Disk Cleanup**: Before recreate, run `docker system prune -f && docker image prune -a -f --filter "until=24h"` to free up space (can save 5-10GB)
-7. **LightRAG WebUI Docker CMD vs ENTRYPOINT confusion**:
-   - **Symptom**: `lightrag_server.py: error: unrecognized arguments`
-   - **Root Cause**: LightRAG image has ENTRYPOINT=`["python", "-m", "lightrag.lightrag_server"]`, must only provide arguments in `command`
-   - **Correct**: `command: ["--host", "0.0.0.0", "--port", "9621", ...]`
-   - **Wrong**: `command: ["python", "-m", "lightrag.lightrag_server", "--host", ...]` (duplicates ENTRYPOINT)
+**解决方案**：
+1. 接受无索引的性能（中小规模数据可接受）
+2. 考虑降维到 2000 以内（权衡精度损失）
+3. 等待 pgvector 未来版本支持
+
+### 配置一致性检查清单
+
+部署前必须确保：
+
+**1. .env 文件**：
+```bash
+EMBEDDING_DIM=4096
+SF_EMBEDDING_MODEL=Qwen/Qwen3-Embedding-8B  # 4096 维度模型
+```
+
+**2. docker-compose 文件**（两个文件都要检查）：
+```yaml
+# docker-compose.yml 和 docker-compose.dev.yml
+services:
+  rag-api:
+    environment:
+      - EMBEDDING_DIM=4096
+
+  lightrag-webui:
+    environment:
+      - EMBEDDING_DIM=4096
+```
+
+**3. 代码硬编码**（`src/multi_tenant.py`）：
+```python
+def _create_embedding_func(self):
+    return EmbeddingFunc(
+        embedding_dim=4096,  # 确保与配置一致
+        ...
+    )
+```
+
+**4. 首次部署后验证**：
+```sql
+-- 部署后立即验证
+SELECT attrelid::regclass AS table_name,
+       atttypmod AS dimensions
+FROM pg_attribute
+WHERE attrelid::regclass::text LIKE 'lightrag_vdb%'
+AND attname = 'content_vector';
+-- 所有表的 dimensions 应该都是 4096
+```
+
+### 其他常见陷阱
+
+1. **multimodal_processed errors**: 删除 `./rag_local_storage` 清除损坏状态
+2. **Remote MinerU failures**: 验证 `FILE_SERVICE_BASE_URL` 是公网 IP:8000
+3. **Memory issues with local MinerU**: 切换到 `MINERU_MODE=remote`
+4. **Slow queries (75s+)**: 增加 `MAX_ASYNC` 或使用 `naive` 模式
+5. **Docker network errors**: 修改 `depends_on`/`networks` 后必须 `up -d --force-recreate`
+6. **LightRAG WebUI CMD vs ENTRYPOINT**: 只提供参数，不要重复 `python -m` 命令
 
 ## File Structure
 
@@ -522,78 +297,48 @@ From `.cursor/rules/docs-rules.mdc`:
 rag-api/
 ├── main.py              # FastAPI app entry point
 ├── api/                 # API route modules
-│   ├── __init__.py      # Router aggregation (includes tenant router)
-│   ├── insert.py        # Document insertion endpoints (multi-tenant)
-│   ├── query.py         # Query endpoints (multi-tenant)
-│   ├── task.py          # Task status endpoints (multi-tenant)
-│   ├── tenant.py        # Tenant management endpoints (NEW)
-│   ├── files.py         # File service endpoints
-│   ├── monitor.py       # Performance monitoring endpoints
-│   ├── models.py        # Pydantic models
-│   └── task_store.py    # In-memory task tracking (tenant-isolated)
+│   ├── insert.py        # Document insertion (multi-tenant)
+│   ├── query.py         # Query endpoints (+ stream)
+│   ├── task.py          # Task status endpoints
+│   ├── tenant.py        # Tenant management
+│   ├── files.py         # File service (remote MinerU)
+│   ├── monitor.py       # Performance monitoring
+│   └── models.py        # Pydantic models
 ├── src/                 # Core business logic
-│   ├── rag.py           # Multi-tenant lifecycle management
-│   ├── multi_tenant.py  # Multi-tenant instance manager (NEW)
-│   ├── tenant_deps.py   # Tenant dependency injection (NEW)
+│   ├── rag.py           # Multi-tenant lifecycle
+│   ├── multi_tenant.py  # Instance manager (LRU cache)
+│   ├── tenant_deps.py   # Tenant dependency injection
 │   ├── logger.py        # Unified logging
-│   ├── metrics.py       # Performance metrics collection
+│   ├── metrics.py       # Performance metrics
 │   ├── file_url_service.py        # Temporary file HTTP service
 │   ├── mineru_client.py           # Remote MinerU API client
 │   └── mineru_result_processor.py # MinerU result processor
 ├── scripts/             # Maintenance and test scripts
-├── docs/                # Documentation (per Cursor rules)
+├── docs/                # Documentation
 └── rag_local_storage/   # LightRAG working directory (git-ignored)
 ```
 
 ## Recent Optimizations (2025-10-30)
 
-### API Enhancement & Code Refactoring
+### Query Enhancement & Stream Support
+- Added 8 advanced parameters aligned with LightRAG official API
+- New endpoint: `POST /query/stream` (SSE format)
+- Support for multi-turn dialogue, custom prompts, response format control
 
-**Completed improvements** to align with LightRAG official API while maintaining multi-tenant advantages:
+### Batch Task Tracking Fix
+- Added `BATCH_STORE` to replace unreliable prefix matching
+- 100% accurate batch task mapping
 
-1. **Query Enhancement** (`api/query.py`, `api/models.py`):
-   - Added 8 advanced parameters aligned with LightRAG official API
-   - Support for multi-turn dialogue (`conversation_history`)
-   - Custom prompt templates (`user_prompt`)
-   - Response format control (`response_type`: paragraph/list/json)
-   - Debug mode (`only_need_context`)
-   - Keyword extraction control (`hl_keywords`, `ll_keywords`)
-   - Token limits (`max_entity_tokens`, `max_relation_tokens`, `max_total_tokens`)
+### Parser Selection Optimization
+- Text files (.txt, .md) now return `None` (no parser needed)
+- More accurate logging: `direct_insert` instead of misleading `mineru`
 
-2. **Stream Query** (`api/query.py`):
-   - New endpoint: `POST /query/stream`
-   - SSE (Server-Sent Events) format for real-time streaming
-   - Dual mode: native streaming + fallback chunking
-   - Automatic `<think>` tag removal for clean output
+### Documentation
+- Created `docs/API_COMPARISON.md`: Comprehensive comparison with LightRAG official API
+- **Key finding**: All 17 rag-api endpoints have differentiated value
+- rag-api provides irreplaceable value: multi-tenant, strong parsing, batch processing, production ops
 
-3. **Parser Selection Optimization** (`src/rag.py`):
-   - Changed `select_parser_by_file()` return type from `str` to `str | None`
-   - Text files (.txt, .md) now return `None` explicitly (no parser needed)
-   - More accurate logging: `direct_insert` instead of misleading `mineru`
+---
 
-4. **Batch Task Tracking Fix** (`api/task_store.py`, `api/insert.py`):
-   - Added `BATCH_STORE` to replace unreliable prefix matching
-   - Functions: `create_batch()`, `get_batch()`, `delete_batch()`
-   - 100% accurate batch task mapping
-
-5. **File Extension Check Simplification** (`api/insert.py`):
-   - Removed unnecessary security validation
-   - Simplified from 7 lines to 1 line
-   - UUID-based filename ensures security
-
-6. **Documentation**:
-   - Created `docs/API_COMPARISON.md`: Comprehensive comparison with LightRAG official API
-   - Updated `docs/LIGHTRAG_WEBUI_INTEGRATION.md`: Multi-tenant limitations and roadmap
-   - **Key finding**: All 17 rag-api endpoints have differentiated value, 0 can be deleted
-
-### Why rag-api Still Matters
-
-Despite LightRAG official API's feature richness, rag-api provides **irreplaceable value**:
-
-- **Multi-tenant architecture**: LRU instance pool, workspace-based isolation
-- **Strong document parsing**: MinerU (OCR/tables/formulas) + Docling smart routing
-- **Batch processing**: `/batch` endpoint (up to 100 files)
-- **Production operations**: Tenant management, cache control, performance monitoring
-- **Extensibility**: Easy to add custom business logic
-
-See `docs/API_COMPARISON.md` for detailed analysis.
+**最后更新**：2025-10-30
+**关键教训**：维度配置不是可以后改的普通参数，而是数据库初始化的基石。一旦数据库创建完成，修改维度等同于推倒重来。Docker volume 名称由项目名决定，不是配置文件名！
