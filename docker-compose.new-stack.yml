@@ -68,7 +68,7 @@ services:
       dragonfly
       --dir=/data
       --snapshot_cron="0 */6 * * *"
-      --maxmemory=512mb
+      --maxmemory=2048mb
       --keys_output_limit=1024
       --dbfilename=dump.rdb
     healthcheck:
