@@ -127,9 +127,7 @@ services:
       - "7444:7444"  # Memgraph Lab UI
     volumes:
       - memgraph_data:/var/lib/memgraph
-      - memgraph_log:/var/log/memgraph
-    # 注意：memgraph-platform 使用 supervisord，无法直接传递 Memgraph 参数
-    # 使用默认配置启动，性能足够支持开发测试
+      # 注意：移除日志 volume 以避免权限问题，使用 docker logs 查看日志
     healthcheck:
       test: ["CMD-SHELL", "echo 'RETURN 1;' | mgconsole --host 127.0.0.1 --port 7687 || exit 1"]
       interval: 30s
