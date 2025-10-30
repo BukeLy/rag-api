@@ -128,12 +128,8 @@ services:
     volumes:
       - memgraph_data:/var/lib/memgraph
       - memgraph_log:/var/log/memgraph
-    command: >
-      --memory-limit=1024
-      --log-level=WARNING
-      --storage-snapshot-interval-sec=3600
-      --storage-wal-enabled=true
-      --storage-snapshot-on-exit=true
+    # 注意：memgraph-platform 使用 supervisord，无法直接传递 Memgraph 参数
+    # 使用默认配置启动，性能足够支持开发测试
     healthcheck:
       test: ["CMD-SHELL", "echo 'RETURN 1;' | mgconsole --host 127.0.0.1 --port 7687 || exit 1"]
       interval: 30s
