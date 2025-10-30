@@ -8,6 +8,10 @@
 
 set -e  # 遇到错误立即退出
 
+# 全局变量
+COMPOSE_FILE="docker-compose.yml"  # 默认使用生产模式
+DEPLOY_MODE="production"           # 部署模式: production 或 development
+
 # 颜色输出
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -55,6 +59,38 @@ check_root() {
             exit 1
         fi
     fi
+}
+
+# 选择部署模式
+select_deploy_mode() {
+    echo ""
+    log_info "请选择部署模式:"
+    echo "  1) 生产模式 (Production) - 标准容器部署，适合生产环境"
+    echo "  2) 开发模式 (Development) - 外挂代码库，支持热重载，适合开发调试"
+    echo ""
+    read -p "请输入选择 (1/2, 默认: 1): " -n 1 -r
+    echo ""
+    
+    case $REPLY in
+        2)
+            COMPOSE_FILE="docker-compose.dev.yml"
+            DEPLOY_MODE="development"
+            log_success "已选择: 开发模式 (使用 docker-compose.dev.yml)"
+            log_warning "开发模式会将本地代码挂载到容器中，修改代码会自动重载"
+            ;;
+        1|"")
+            COMPOSE_FILE="docker-compose.yml"
+            DEPLOY_MODE="production"
+            log_success "已选择: 生产模式 (使用 docker-compose.yml)"
+            ;;
+        *)
+            log_error "无效的选择，使用默认的生产模式"
+            COMPOSE_FILE="docker-compose.yml"
+            DEPLOY_MODE="production"
+            ;;
+    esac
+    
+    echo ""
 }
 
 # 安装 Docker
@@ -203,13 +239,14 @@ start_services() {
     docker system prune -f || true
     docker builder prune -f || true
     
+    log_info "使用配置文件: $COMPOSE_FILE"
     log_info "构建 Docker 镜像..."
-    docker compose build
+    docker compose -f $COMPOSE_FILE build
     
     log_info "启动服务..."
-    docker compose up -d
+    docker compose -f $COMPOSE_FILE up -d
     
-    log_success "服务已启动"
+    log_success "服务已启动 (模式: $DEPLOY_MODE)"
     
     # 显示磁盘使用情况
     log_info "当前磁盘使用: $(df -h / | tail -1 | awk '{print $3 "/" $2 " (" $5 ")"}')"
@@ -236,7 +273,7 @@ wait_for_service() {
 # 显示服务状态
 show_status() {
     log_info "服务状态:"
-    docker compose ps
+    docker compose -f $COMPOSE_FILE ps
     
     echo ""
     log_info "服务健康检查:"
@@ -250,6 +287,9 @@ show_info() {
     log_success "🎉 RAG API 部署完成！"
     echo "======================================================================"
     echo ""
+    echo "🚀 部署模式: $DEPLOY_MODE"
+    echo "📄 配置文件: $COMPOSE_FILE"
+    echo ""
     echo "📍 服务地址:"
     echo "   本地访问: http://localhost:8000"
     echo "   API 文档: http://localhost:8000/docs"
@@ -258,10 +298,19 @@ show_info() {
     echo "   监控服务:   ./scripts/monitor.sh"
     echo "   备份数据:   ./scripts/backup.sh"
     echo "   更新部署:   ./scripts/update.sh"
-    echo "   查看日志:   docker compose logs -f"
-    echo "   重启服务:   docker compose restart"
-    echo "   停止服务:   docker compose down"
+    echo "   查看日志:   docker compose -f $COMPOSE_FILE logs -f"
+    echo "   重启服务:   docker compose -f $COMPOSE_FILE restart"
+    echo "   停止服务:   docker compose -f $COMPOSE_FILE down"
     echo ""
+    
+    if [ "$DEPLOY_MODE" = "development" ]; then
+        echo "💡 开发模式提示:"
+        echo "   - 代码已挂载到容器，修改代码会自动重载"
+        echo "   - 适合本地开发和调试"
+        echo "   - 不建议用于生产环境"
+        echo ""
+    fi
+    
     echo "📁 重要目录:"
     echo "   向量数据库: ./rag_local_storage"
     echo "   输出文件:   ./output"
@@ -284,13 +333,16 @@ show_info() {
 main() {
     echo ""
     echo "======================================================================"
-    echo "              RAG API 一键部署脚本 v1.0"
+    echo "              RAG API 一键部署脚本 v1.1"
     echo "======================================================================"
     echo ""
     
     # 检查环境
     detect_os
     check_root
+    
+    # 选择部署模式
+    select_deploy_mode
     
     # 安装依赖
     install_docker
@@ -312,7 +364,7 @@ main() {
         log_error "部署失败，请检查错误信息"
         echo ""
         echo "查看详细日志:"
-        echo "  docker compose logs"
+        echo "  docker compose -f $COMPOSE_FILE logs"
         exit 1
     fi
 }
