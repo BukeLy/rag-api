@@ -84,16 +84,14 @@
 
 #### rag-api: `POST /query`
 
-**优势**：
+**优势**：✅ **已对齐 LightRAG 官方功能**（v2.0 已完成）
 - ✅ **多租户隔离**：每个租户独立查询
-
-**劣势**：⚠️ **功能较弱**（对比 LightRAG 官方）
-- ❌ 缺少 `conversation_history`（对话历史）
-- ❌ 缺少 `user_prompt`（自定义提示词）
-- ❌ 缺少 `response_type`（响应格式控制）
-- ❌ 缺少 `only_need_context`（仅返回上下文）
-- ❌ 缺少 `hl_keywords` / `ll_keywords`（关键词提取）
-- ❌ 缺少 token 限制参数
+- ✅ **支持多轮对话**（`conversation_history`）
+- ✅ **自定义提示词**（`user_prompt`）
+- ✅ **响应格式控制**（`response_type`：paragraph/list/json）
+- ✅ **仅返回上下文**（`only_need_context`，调试模式）
+- ✅ **关键词提取**（`hl_keywords` / `ll_keywords`）
+- ✅ **Token 限制**（`max_entity_tokens`, `max_relation_tokens`, `max_total_tokens`）
 
 **LightRAG 官方**: `POST /query`
 
@@ -104,25 +102,25 @@
 - ✅ **细粒度控制**（`max_entity_tokens`、`max_relation_tokens`）
 - ❌ 单 workspace（无多租户）
 
-**可替代性结论**：⚠️ **部分可替代**（单租户场景下官方功能更强）
-
-**改进计划**：
-- 🔄 **v2.0 计划**：为 rag-api 添加以上高级参数，对齐官方功能
+**可替代性结论**：❌ **不可替代**（rag-api 功能同等 + 多租户优势）
 
 **使用场景建议**：
-- ✅ 多租户场景 → **使用 rag-api**
-- ✅ 需要对话历史/自定义提示词 + 单租户 → 考虑 LightRAG 官方
-- ⏳ 等待 rag-api v2.0 更新
+- ✅ 多租户场景 → **使用 rag-api**（必需）
+- ✅ 需要高级查询功能 + 多租户 → **使用 rag-api**
+- ✅ 单租户 + 需要高级查询功能 → 两者功能相当，rag-api 额外提供监控/批量处理
 
 ---
 
 ### 4. 流式查询
 
-#### rag-api: `POST /query/stream` ⏳（计划添加）
+#### rag-api: `POST /query/stream` ✅（已实现）
 
 **优势**：
 - ✅ **多租户隔离**
 - ✅ **SSE 流式输出**（实时推送查询结果）
+- ✅ **支持所有高级参数**（与 `/query` 端点功能一致）
+- ✅ **双模式支持**：原生流式 + Fallback 分块输出
+- ✅ **自动清理 `<think>` 标签**（输出更干净）
 
 **LightRAG 官方**: `POST /query/stream`
 
@@ -130,11 +128,12 @@
 - ✅ SSE 流式输出
 - ❌ 单 workspace
 
-**可替代性结论**：❌ **不可替代**（因为多租户）
+**可替代性结论**：❌ **不可替代**（因为多租户 + 生产级实现）
 
 **使用场景建议**：
-- ✅ 多租户 + 需要流式输出 → **使用 rag-api**（v2.0）
-- ✅ 单租户 + 需要流式输出 → 可考虑 LightRAG 官方
+- ✅ 多租户 + 需要流式输出 → **使用 rag-api**（必需）
+- ✅ 聊天界面实时显示 → **使用 rag-api**
+- ✅ 单租户 + 需要流式输出 → 可考虑 LightRAG 官方，但 rag-api 提供更完善的错误处理
 
 ---
 
@@ -245,10 +244,10 @@
 |------|---------|--------------|---------|-----------|
 | **文档上传** | `POST /insert` | `/documents/upload` | ❌ 不可替代 | MinerU/Docling/多租户 |
 | **批量上传** | `POST /batch` | **无** | ❌ 不可替代 | rag-api 独有 |
-| **标准查询** | `POST /query` | `/query` | ⚠️ 部分可替代 | 多租户（功能待增强） |
-| **流式查询** | `POST /query/stream` ⏳ | `/query/stream` | ❌ 不可替代 | 多租户 |
+| **标准查询** | `POST /query` | `/query` | ❌ 不可替代 | 多租户 + 同等功能（v2.0 已完成） |
+| **流式查询** | `POST /query/stream` ✅ | `/query/stream` | ❌ 不可替代 | 多租户 + 生产级实现 |
 | **任务状态** | `GET /task/{id}` | `/documents/track_status/{id}` | ⚠️ 单租户可替代 | 多租户隔离 |
-| **批量状态** | `GET /batch/{id}` | **无** | ❌ 不可替代 | rag-api 独有 |
+| **批量状态** | `GET /batch/{id}` | **无** | ❌ 不可替代 | BATCH_STORE 精确追踪 |
 | **文件服务** | `GET /files/*` | **无** | ❌ 不可替代 | Remote MinerU 必需 |
 | **租户管理** | `GET /tenants/*` | **无** | ❌ 不可替代 | 多租户管理必需 |
 | **监控** | `GET /monitor/*` | `GET /health` | ❌ 不可替代 | 生产运维必需 |
@@ -256,8 +255,8 @@
 ### 关键结论
 
 1. **0 个端点可以删除**：所有 rag-api 端点都有差异化价值
-2. **核心优势**：多租户架构、强文档解析、批量处理、生产运维
-3. **待改进**：查询功能需要增强（对齐官方高级参数）
+2. **核心优势**：多租户架构、强文档解析、批量处理、生产运维、完整查询功能
+3. **v2.0 已完成**：✅ 查询功能增强（9个高级参数），✅ 流式查询，✅ BATCH_STORE 修复
 
 ---
 
@@ -283,30 +282,37 @@
 
 ---
 
-## 🔄 rag-api v2.0 改进计划
+## ✅ rag-api v2.0 已完成功能
 
-### 查询功能增强
+### 查询功能增强（已实现）
 
-**目标**：对齐 LightRAG 官方的高级参数
+**状态**：✅ **已完成**（2025-10-30）
 
-**新增参数**：
+**已实现参数**：
 ```python
 class QueryRequest(BaseModel):
     query: str
     mode: str = "naive"
 
-    # 新增（v2.0）
-    conversation_history: Optional[List[Dict]] = None  # 对话历史
-    user_prompt: Optional[str] = None  # 自定义提示词
-    response_type: Optional[str] = "paragraph"  # paragraph/list/json
-    only_need_context: bool = False  # 仅返回上下文
-    hl_keywords: Optional[List[str]] = None  # 高级关键词
-    ll_keywords: Optional[List[str]] = None  # 低级关键词
-    max_entity_tokens: Optional[int] = None  # 实体上下文 token 限制
-    max_relation_tokens: Optional[int] = None  # 关系上下文 token 限制
+    # v2.0 已实现
+    conversation_history: Optional[List[Dict]] = None  # ✅ 对话历史
+    user_prompt: Optional[str] = None  # ✅ 自定义提示词
+    response_type: Optional[str] = "paragraph"  # ✅ paragraph/list/json
+    only_need_context: bool = False  # ✅ 仅返回上下文
+    hl_keywords: Optional[List[str]] = None  # ✅ 高级关键词
+    ll_keywords: Optional[List[str]] = None  # ✅ 低级关键词
+    max_entity_tokens: Optional[int] = None  # ✅ 实体上下文 token 限制
+    max_relation_tokens: Optional[int] = None  # ✅ 关系上下文 token 限制
+    max_total_tokens: Optional[int] = None  # ✅ 总 token 限制
 ```
 
-**时间线**：2-3 周内完成
+### 其他 v2.0 完成功能
+
+1. **流式查询端点**：✅ `POST /query/stream`（SSE 格式）
+2. **BATCH_STORE 修复**：✅ 100% 准确的批量任务追踪
+3. **监控端点简化**：✅ 从 7 个简化为 2 个
+4. **Parser 逻辑优化**：✅ 纯文本返回 `None`，日志更准确
+5. **WebUI 集成**：✅ LightRAG 官方 WebUI 部署
 
 ---
 
