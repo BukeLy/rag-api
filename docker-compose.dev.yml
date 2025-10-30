@@ -35,6 +35,92 @@ services:
         max-size: "10m"
         max-file: "3"
 
+  # ==================== Redis（KV 存储 + 缓存）====================
+  redis:
+    image: redis:7-alpine
+    container_name: rag-redis-dev
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: >
+      redis-server
+      --appendonly yes
+      --maxmemory 512mb
+      --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - rag-network-dev
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ==================== Neo4j（图存储）====================
+  neo4j:
+    image: neo4j:5-community
+    container_name: rag-neo4j-dev
+    restart: unless-stopped
+    ports:
+      - "7474:7474"  # HTTP
+      - "7687:7687"  # Bolt
+    volumes:
+      - neo4j_data:/data
+      - neo4j_logs:/logs
+    environment:
+      - NEO4J_AUTH=neo4j/${NEO4J_PASSWORD}
+      - NEO4J_server_memory_heap_initial__size=512m
+      - NEO4J_server_memory_heap_max__size=1G
+      - NEO4J_server_memory_pagecache_size=512m
+      # 允许从容器外访问
+      - NEO4J_server_default__listen__address=0.0.0.0
+    healthcheck:
+      test: ["CMD", "cypher-shell", "-u", "neo4j", "-p", "${NEO4J_PASSWORD}", "RETURN 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    networks:
+      - rag-network-dev
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ==================== PostgreSQL（向量存储）====================
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: rag-postgres-dev
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init_postgres.sql:/docker-entrypoint-initdb.d/init.sql
+    environment:
+      - POSTGRES_DB=lightrag
+      - POSTGRES_USER=lightrag
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_INITDB_ARGS=--encoding=UTF-8 --lc-collate=C --lc-ctype=C
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U lightrag -d lightrag"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - rag-network-dev
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
   # ==================== LightRAG WebUI（知识图谱可视化）====================
   lightrag-webui:
     image: ghcr.io/hkuds/lightrag:latest
@@ -63,6 +149,16 @@ services:
       # 认证配置（可选）
       - LIGHTRAG_API_KEY=${LIGHTRAG_API_KEY:-}
       - AUTH_ACCOUNTS=${LIGHTRAG_AUTH_ACCOUNTS:-}
+    # 依赖外部存储服务（与 rag-api 共享同一套数据库）
+    depends_on:
+      redis:
+        condition: service_healthy
+      neo4j:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    networks:
+      - rag-network-dev
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:9621/docs"]
       interval: 10s
@@ -75,6 +171,18 @@ services:
         max-size: "10m"
         max-file: "3"
 
+# ==================== 持久化卷 ====================
+volumes:
+  redis_data:
+    driver: local
+  neo4j_data:
+    driver: local
+  neo4j_logs:
+    driver: local
+  postgres_data:
+    driver: local
+
+# ==================== 网络 ====================
 networks:
-  default:
-    name: rag-network-dev
+  rag-network-dev:
+    driver: bridge
