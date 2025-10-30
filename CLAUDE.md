@@ -10,6 +10,24 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Code comments and variable names should follow standard English conventions
 - Git commits should be in Chinese
 
+## Development Guidelines
+
+### BUG Documentation Policy
+
+**⚠️ 重要准则**：每次发现 BUG 都必须记录在本文件的 "Known Bugs and Fixes" 章节中。
+
+**记录内容应包括**：
+1. **BUG 描述**：简洁说明问题现象
+2. **根本原因**：分析为什么会出现这个问题
+3. **修复方案**：如何解决这个问题
+4. **发现日期**：便于追溯和统计
+5. **相关文件**：涉及哪些配置或代码文件
+
+**目的**：
+- 避免重复犯错
+- 积累项目经验
+- 帮助新开发者快速了解常见问题
+
 ## Project Overview
 
 This is a **multi-tenant** multimodal RAG (Retrieval-Augmented Generation) API service built with FastAPI, combining RAG-Anything and LightRAG for document processing and intelligent querying.
@@ -350,6 +368,58 @@ rag-api/
 ├── docs/                # Documentation
 └── rag_local_storage/   # LightRAG working directory (git-ignored)
 ```
+
+## Known Bugs and Fixes
+
+### ❌ BUG #1: Memgraph 环境变量配置错误（2025-10-31）
+
+**问题描述**：
+在 `docker-compose.new-stack.yml` 中，Memgraph 配置使用了多个同名环境变量，导致只有最后一个生效。
+
+**错误配置**（[docker-compose.new-stack.yml:131-139](docker-compose.new-stack.yml#L131-L139)）：
+```yaml
+environment:
+  # 内存配置
+  - MEMGRAPH="--memory-limit=1024"
+  # 日志级别
+  - MEMGRAPH="--log-level=WARNING"
+  # 持久化配置
+  - MEMGRAPH="--storage-snapshot-interval-sec=3600"
+  - MEMGRAPH="--storage-wal-enabled=true"
+  - MEMGRAPH="--storage-snapshot-on-exit=true"
+entrypoint: ["/usr/lib/memgraph/memgraph"]
+```
+
+**根本原因**：
+- Docker Compose 中，同名环境变量会相互覆盖
+- 最终只有 `MEMGRAPH="--storage-snapshot-on-exit=true"` 生效
+- 其他关键参数（内存限制、日志级别、快照间隔等）全部丢失
+- 导致 Memgraph 容器反复重启，健康检查失败
+
+**正确配置**：
+```yaml
+command: >
+  --memory-limit=1024
+  --log-level=WARNING
+  --storage-snapshot-interval-sec=3600
+  --storage-wal-enabled=true
+  --storage-snapshot-on-exit=true
+```
+
+**修复方案**：
+1. 移除 `environment` 和 `entrypoint` 字段
+2. 使用 `command` 字段传递所有启动参数（参考 DragonflyDB 配置方式）
+
+**教训**：
+- Docker Compose 配置中不要使用重复的环境变量名
+- 对于需要多个启动参数的服务，应使用 `command` 而非 `environment`
+- 配置错误可能导致容器反复重启但日志中无明显错误信息
+
+**相关 commit**:
+- 修复提交：`0e2dd96` - fix(memgraph): 修复环境变量配置错误
+- 涉及文件：`docker-compose.new-stack.yml`
+
+---
 
 ## Recent Optimizations (2025-10-30)
 
