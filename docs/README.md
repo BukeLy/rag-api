@@ -20,7 +20,6 @@
 | 文档 | 描述 | 适用人群 |
 |------|------|---------|
 | [PR_WORKFLOW.md](PR_WORKFLOW.md) | Pull Request 工作流程 | 贡献者、开发者 |
-| [SCREENSHOTS_GUIDE.md](SCREENSHOTS_GUIDE.md) | 截图添加指南 | 文档维护者 |
 
 ---
 
@@ -129,9 +128,6 @@ git push origin main
 **如何贡献代码？**
 → 查看 [PR_WORKFLOW.md](PR_WORKFLOW.md)
 
-**如何添加截图？**
-→ 查看 [SCREENSHOTS_GUIDE.md](SCREENSHOTS_GUIDE.md)
-
 **性能优化建议？**（内部）
 → 查看 `OPTIMIZATION_GUIDE.md`
 
@@ -146,8 +142,8 @@ git push origin main
 ## 📊 文档统计
 
 ### 公开文档
-- 总计：**6 个文档**
-- 总字数：约 **20,000 字**
+- 总计：**5 个文档**
+- 总字数：约 **18,000 字**
 - 主要语言：中文
 
 ### 内部文档
