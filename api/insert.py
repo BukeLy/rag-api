@@ -637,17 +637,19 @@ async def get_batch_status(batch_id: str):
     # 这可以通过任务名称前缀或其他方式实现
     related_tasks = []
     
-    for task_id, task_info in TASK_STORE.items():
-        # 简单的实现：如果 task_id 匹配某个模式
-        if task_id.startswith(batch_id[:8]):  # 简化匹配
-            related_tasks.append({
-                "task_id": task_id,
-                "doc_id": task_info.doc_id,
-                "filename": task_info.filename,
-                "status": task_info.status,
-                "created_at": task_info.created_at,
-                "updated_at": task_info.updated_at
-            })
+    # 遍历所有租户的任务
+    for tenant_id_key, tasks_dict in TASK_STORE.items():
+        for task_id, task_info in tasks_dict.items():
+            # 简单的实现：如果 task_id 匹配某个模式
+            if task_id.startswith(batch_id[:8]):  # 简化匹配
+                related_tasks.append({
+                    "task_id": task_id,
+                    "doc_id": task_info.doc_id,
+                    "filename": task_info.filename,
+                    "status": task_info.status,
+                    "created_at": task_info.created_at,
+                    "updated_at": task_info.updated_at
+                })
     
     if not related_tasks:
         raise HTTPException(status_code=404, detail=f"Batch not found: {batch_id}")
