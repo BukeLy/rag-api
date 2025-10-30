@@ -181,6 +181,15 @@ services:
       - LIGHTRAG_VECTOR_STORAGE=${VECTOR_STORAGE:-NanoVectorDB}
       - LIGHTRAG_GRAPH_STORAGE=${GRAPH_STORAGE:-NetworkXStorage}
       - LIGHTRAG_DOC_STATUS_STORAGE=${DOC_STATUS_STORAGE:-JsonDocStatusStorage}
+      # LLM 配置（与 rag-api 保持一致）
+      - LLM_MODEL=${ARK_MODEL}
+      - OPENAI_API_KEY=${ARK_API_KEY}
+      - OPENAI_BASE_URL=${ARK_BASE_URL}
+      # Embedding 配置（关键：必须与 rag-api 使用相同维度）
+      - EMBEDDING_MODEL=${SF_EMBEDDING_MODEL:-Qwen/Qwen3-Embedding-8B}
+      - EMBEDDING_API_KEY=${SF_API_KEY}
+      - EMBEDDING_BASE_URL=${SF_BASE_URL}
+      - EMBEDDING_DIM=4096
       # 认证配置（可选）
       - LIGHTRAG_API_KEY=${LIGHTRAG_API_KEY:-}
       - AUTH_ACCOUNTS=${LIGHTRAG_AUTH_ACCOUNTS:-}
