@@ -504,6 +504,17 @@ From `.cursor/rules/docs-rules.mdc`:
 3. **Memory issues with local MinerU**: Switch to `MINERU_MODE=remote` or reduce `DOCUMENT_PROCESSING_CONCURRENCY` to 1
 4. **Slow queries (75s+)**: Increase `MAX_ASYNC` in `.env` or use `naive` query mode instead of `mix`
 5. **Empty file uploads**: API returns 400 with detailed error message
+6. **Docker network errors after config changes** (⚠️ CRITICAL):
+   - **Symptom**: Containers can't connect to each other (e.g., `Error -2 connecting to redis:6379. Name or service not known`)
+   - **Root Cause**: `docker compose restart` does NOT apply network configuration changes (like `depends_on`, `networks`)
+   - **Solution**: Use `docker compose up -d --force-recreate <service>` to recreate containers with new network config
+   - **Prevention**: After modifying `depends_on`, `networks`, or other compose file settings, always recreate affected containers
+   - **Disk Cleanup**: Before recreate, run `docker system prune -f && docker image prune -a -f --filter "until=24h"` to free up space (can save 5-10GB)
+7. **LightRAG WebUI Docker CMD vs ENTRYPOINT confusion**:
+   - **Symptom**: `lightrag_server.py: error: unrecognized arguments`
+   - **Root Cause**: LightRAG image has ENTRYPOINT=`["python", "-m", "lightrag.lightrag_server"]`, must only provide arguments in `command`
+   - **Correct**: `command: ["--host", "0.0.0.0", "--port", "9621", ...]`
+   - **Wrong**: `command: ["python", "-m", "lightrag.lightrag_server", "--host", ...]` (duplicates ENTRYPOINT)
 
 ## File Structure
 
