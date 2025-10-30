@@ -52,8 +52,8 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan,
     contact={
-        "name": "RAG API Team",
-        "email": "support@example.com",
+        "name": "BukeLy",
+        "email": "buledream233@gmail.com",
     },
     license_info={
         "name": "MIT",
