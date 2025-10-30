@@ -119,6 +119,81 @@ docker compose -f docker-compose.dev.yml down
 ./scripts/test_concurrent_perf.sh
 ```
 
+## LightRAG WebUI（知识图谱可视化）
+
+项目集成了 LightRAG 官方 WebUI，与 rag-api 形成**互补关系**，完全兼容多租户架构。
+
+### 🎯 为什么需要两者？
+
+**rag-api 的独特价值**（WebUI 无法替代）：
+- 🖼️ **强大文档解析**：MinerU（OCR/表格/公式）+ Docling 智能选择
+- 📦 **批量处理**：`/batch` 端点支持 100 文件同时处理
+- 🏢 **多租户架构**：完整的租户隔离和实例池管理
+- 🤖 **编程集成**：RESTful API，适合自动化流程
+- ⚡ **性能优化**：定制并发控制、缓存策略
+
+**LightRAG WebUI 的独特价值**（rag-api 没有）：
+- 📊 **知识图谱可视化**：交互式查看实体和关系
+- 👥 **用户友好界面**：非技术用户也能使用
+- 🔍 **快速调试**：验证文档是否正确插入
+- 🎯 **演示展示**：适合向团队展示系统
+
+**推荐工作流**：
+```
+文档导入 → rag-api（批量+强解析+多租户）→ 外部存储 ← WebUI（可视化指定租户）
+                                             ↓
+                              生产查询 ← rag-api（性能优化）
+```
+
+### 🔑 多租户兼容性
+
+WebUI 通过 `LIGHTRAG_WEBUI_WORKSPACE` 环境变量访问指定租户的数据：
+- **默认 workspace**: `default`（可视化 `tenant_id=default` 的数据）
+- **切换租户**: 修改 `.env` 中的 `LIGHTRAG_WEBUI_WORKSPACE=tenant_a` 后重启 WebUI
+- **数据同步**: WebUI 和 rag-api 共享同一套外部存储（Redis/Neo4j/PostgreSQL）
+- **实时可见**: 通过 rag-api 插入的数据立即在 WebUI 中可见
+
+### 功能特性
+- **可视化知识图谱**：交互式查看实体和关系
+- **文档管理**：上传、查看和管理文档
+- **查询界面**：通过 UI 执行 RAG 查询
+- **多模式支持**：支持 naive、local、global、hybrid 等查询模式
+
+### 访问方式
+WebUI 服务默认在 **9621 端口**启动：
+```
+本地访问：http://localhost:9621/webui/
+远程服务器（dev）：http://45.78.223.205:9621/webui/
+API 文档：http://45.78.223.205:9621/docs
+```
+
+### 启动/停止 WebUI
+```bash
+# 单独启动 WebUI
+docker compose up -d lightrag-webui
+
+# 查看 WebUI 日志
+docker compose logs -f lightrag-webui
+
+# 切换到其他租户（修改 .env 后重启）
+docker compose restart lightrag-webui
+
+# 停止 WebUI（不影响 rag-api）
+docker compose stop lightrag-webui
+```
+
+### 访问控制（可选）
+在 `.env` 中配置：
+```bash
+# API Key 认证
+LIGHTRAG_API_KEY=your_secret_key
+
+# Web UI 登录账号（JSON 格式）
+LIGHTRAG_AUTH_ACCOUNTS='[{"username": "admin", "password": "your_password"}]'
+```
+
+详细文档请参考：[docs/LIGHTRAG_WEBUI_INTEGRATION.md](docs/LIGHTRAG_WEBUI_INTEGRATION.md)
+
 ## Remote Deployment
 
 ### Testing Server

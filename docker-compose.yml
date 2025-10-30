@@ -156,6 +156,57 @@ services:
         max-size: "10m"
         max-file: "3"
 
+  # ==================== LightRAG WebUI（知识图谱可视化）====================
+  lightrag-webui:
+    image: ghcr.io/hkuds/lightrag:latest
+    container_name: lightrag-webui
+    restart: unless-stopped
+    ports:
+      - "9621:9621"
+    env_file:
+      - .env
+    volumes:
+      # 工作目录（外部存储模式下仅用于临时文件）
+      - ./rag_local_storage:/app/rag_storage
+      - ./logs/lightrag-webui:/app/logs
+    environment:
+      - TZ=Asia/Shanghai
+      - PYTHONUNBUFFERED=1
+      # ⚠️  多租户兼容：WebUI 访问指定 workspace 的数据
+      # 默认为 "default"，可修改为任意 tenant_id 以可视化该租户的数据
+      - WORKSPACE=${LIGHTRAG_WEBUI_WORKSPACE:-default}
+      # 存储后端配置（从 .env 映射，确保与 rag-api 一致）
+      - LIGHTRAG_KV_STORAGE=${KV_STORAGE:-JsonKVStorage}
+      - LIGHTRAG_VECTOR_STORAGE=${VECTOR_STORAGE:-NanoVectorDB}
+      - LIGHTRAG_GRAPH_STORAGE=${GRAPH_STORAGE:-NetworkXStorage}
+      - LIGHTRAG_DOC_STATUS_STORAGE=${DOC_STATUS_STORAGE:-JsonDocStatusStorage}
+      # 认证配置（可选）
+      - LIGHTRAG_API_KEY=${LIGHTRAG_API_KEY:-}
+      - AUTH_ACCOUNTS=${LIGHTRAG_AUTH_ACCOUNTS:-}
+    # 依赖外部存储服务（与 rag-api 共享同一套数据库）
+    depends_on:
+      redis:
+        condition: service_healthy
+      neo4j:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    networks:
+      - rag-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9621/docs"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    # 注意：让服务从 WORKSPACE 环境变量读取，支持多租户数据隔离
+    command: ["lightrag-server", "--host", "0.0.0.0", "--port", "9621", "--working-dir", "/app/rag_storage"]
+
   # ==================== Nginx 反向代理（生产环境）====================
   nginx:
     image: nginx:alpine
