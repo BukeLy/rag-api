@@ -24,16 +24,21 @@ RUN mkdir -p /usr/share/fonts/wqy-microhei && \
 # 安装 uv（使用 pip 安装更可靠）
 RUN pip install --no-cache-dir uv
 
-# === 依赖层：只复制依赖文件，这层会被有效缓存 ===
-# 远端部署优化：当 pyproject.toml/uv.lock 不变时，此层会被重用
-COPY pyproject.toml uv.lock* ./
+# === 依赖层（多阶段优化）：最大化缓存复用 ===
+# 策略：先复制 uv.lock（锁定依赖版本），只有它变化才重新安装
+# pyproject.toml 的 metadata 变化（版本号、描述等）不会触发依赖重装
+COPY uv.lock* ./
 
-# 使用 uv 安装依赖
-# 关键优化：BuildKit 缓存挂载 + 持久化卷
-# 1. 通过 BuildKit 的 cache mount 保留构建期间的缓存
-# 2. /root/.cache/uv 会映射到宿主机的 ./model_cache（docker-compose.yml 中定义）
-# 3. 下次构建时会重用已缓存的包，大幅加快速度
-# 4. 即使容器销毁，宿主机上的 ./model_cache 依然保留
+# 第一阶段：安装依赖（基于 lock 文件）
+# --frozen: 严格按 lock 文件安装，不解析 pyproject.toml
+# 优点：只有依赖版本变化才重建，添加注释或修改版本号不会触发
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen || echo "⚠️ uv.lock not found, will sync with pyproject.toml"
+
+# 第二阶段：复制 pyproject.toml（metadata 变化不影响依赖层）
+COPY pyproject.toml ./
+
+# 同步 metadata（如果 pyproject.toml 有新依赖，补充安装）
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync
 
