@@ -15,4 +15,6 @@ dependencies = [
     "redis>=5.0.0",        # for RedisKVStorage
     "asyncpg>=0.29.0",     # for PGVectorStorage
     "neo4j>=5.14.0",       # for Neo4JStorage
+    "qdrant-client>=1.7.0",  # for QdrantVectorDBStorage
+    "gqlalchemy>=1.4.0",   # for MemgraphStorage
 ]
