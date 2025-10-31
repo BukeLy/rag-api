@@ -583,7 +583,7 @@ class MinerUClient:
         
         # 等待完成（如果需要）
         if wait_for_completion:
-            result = await self.wait_for_completion(result.batch_id, timeout)
+            result = await self.wait_for_completion(result.task_id, timeout)
         
         return result
     
@@ -611,7 +611,7 @@ class MinerUClient:
         
         # 等待完成（如果需要）
         if wait_for_completion:
-            result = self.wait_for_completion_sync(result.batch_id, timeout)
+            result = self.wait_for_completion_sync(result.task_id, timeout)
         
         return result
 
