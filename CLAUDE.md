@@ -12,6 +12,64 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Development Guidelines
 
+### 🚨 第三方服务集成行为准则（Claude Code 必须严格遵守）
+
+**场景**：集成任何第三方服务、库或框架时（如 LightRAG WebUI、MCP 服务器等）
+
+**必须执行的步骤（按顺序）**：
+
+1. **源码优先原则**（⚠️ 最高优先级）
+   - ✅ **必做**：查看第三方服务的源码，确认环境变量、配置项的**准确命名**
+   - ✅ **必做**：查看参数读取逻辑（如 `get_env_value()`, `os.getenv()` 等）
+   - ❌ **禁止**：根据常识或文档猜测配置名称
+   - ❌ **禁止**：假设配置命名符合"常规惯例"
+
+2. **本地测试验证**（部署前必须完成）
+   - ✅ **必做**：使用 `docker exec` 或 Python 脚本模拟环境变量读取
+   - ✅ **必做**：验证**所有相关配置**（如 LLM + Embedding 必须一起检查）
+   - ✅ **必做**：记录测试命令和结果
+   - ❌ **禁止**：只测试部分配置就认为全部正确
+
+3. **配置完整性检查**
+   - ✅ **必做**：检查配置文件中的**所有相关环境变量**
+   - ✅ **必做**：确认每个环境变量都有对应的源码依据
+   - ✅ **必做**：检查是否有重复或冲突的配置
+   - ❌ **禁止**：只修改部分配置就提交
+
+4. **分步部署验证**
+   - ✅ **必做**：提交前再次确认所有修改
+   - ✅ **必做**：部署后验证容器内环境变量：`docker exec <container> env | grep <关键词>`
+   - ✅ **必做**：查看服务启动日志，确认无错误
+   - ✅ **必做**：进行实际功能测试（如上传文档、API 调用等）
+   - ❌ **禁止**：假设配置修改后"应该能工作"
+
+5. **错误记录与总结**
+   - ✅ **必做**：每次遇到配置错误都记录到 CLAUDE.md 的 "Known Bugs and Fixes"
+   - ✅ **必做**：记录错误原因、修复方案、验证方法、经验教训
+   - ✅ **必做**：更新相关文档和配置注释
+   - ❌ **禁止**：犯同样的错误两次
+
+**用户明确要求时的处理**：
+- 当用户说"确认好了再部署"时：
+  - ✅ **必做**：严格执行上述所有步骤
+  - ✅ **必做**：向用户报告每个步骤的验证结果
+  - ✅ **必做**：等待用户明确确认后再部署
+  - ❌ **禁止**：跳过任何验证步骤
+
+**违反准则的后果**：
+- 浪费用户时间
+- 降低用户信任
+- 需要多次往返调试
+- 可能影响生产环境
+
+**本准则的目标**：
+- 一次性做对
+- 减少调试时间
+- 提高配置可靠性
+- 积累可复用的经验
+
+---
+
 ### BUG Documentation Policy
 
 **⚠️ 重要准则**：每次发现 BUG 都必须记录在本文件的 "Known Bugs and Fixes" 章节中。
@@ -425,6 +483,92 @@ command: >
 **相关 commit**:
 - 修复提交：`0e2dd96` - fix(memgraph): 修复环境变量配置错误
 - 涉及文件：`docker-compose.new-stack.yml`
+
+---
+
+### ❌ BUG #2: LightRAG WebUI API 配置环境变量命名错误（2025-10-31）
+
+**问题描述**：
+- WebUI 上传文档时出现 401 认证错误
+- LLM 和 Embedding API 请求都发送到 OpenAI 官方 API
+- 使用了错误的 API Key 或默认 base URL
+
+**错误配置**（docker-compose.dev.yml）：
+```yaml
+# ❌ 错误：使用了不存在的环境变量名
+- OPENAI_API_KEY=${ARK_API_KEY}
+- OPENAI_BASE_URL=${ARK_BASE_URL}
+- OPENAI_MODEL=${ARK_MODEL}
+- EMBEDDING_OPENAI_API_KEY=${SF_API_KEY}
+- EMBEDDING_OPENAI_BASE_URL=${SF_BASE_URL}
+```
+
+**根本原因**：
+1. **环境变量命名不匹配**：
+   - LightRAG WebUI 读取的是 `LLM_BINDING_*` 和 `EMBEDDING_BINDING_*`
+   - 但配置文件使用了 `OPENAI_*` 和 `EMBEDDING_OPENAI_*`
+
+2. **环境变量未生效**：
+   - LightRAG 源码中使用 `get_env_value("LLM_BINDING_API_KEY")` 读取
+   - 但容器中只有 `OPENAI_API_KEY`，导致读取失败
+   - 最终使用默认值：base_url = "https://api.openai.com/v1"
+
+3. **请求发送到错误的 API**：
+   - 使用 ARK_API_KEY 但发送到 OpenAI 官方 API
+   - 导致 401 错误："Incorrect API key provided"
+
+**正确配置**（已验证）：
+```yaml
+# ✅ 正确：使用 LightRAG 源码中定义的环境变量名
+# LLM 配置（使用 ARK）
+- LLM_BINDING=openai
+- LLM_BINDING_API_KEY=${ARK_API_KEY}
+- LLM_BINDING_HOST=${ARK_BASE_URL}
+- LLM_MODEL=${ARK_MODEL:-seed-1-6-250615}
+
+# Embedding 配置（使用硅基流动）
+- EMBEDDING_BINDING=openai
+- EMBEDDING_BINDING_API_KEY=${SF_API_KEY}
+- EMBEDDING_BINDING_HOST=${SF_BASE_URL}
+- EMBEDDING_MODEL=${SF_EMBEDDING_MODEL:-Qwen/Qwen3-Embedding-0.6B}
+- EMBEDDING_DIM=${EMBEDDING_DIM:-1024}
+```
+
+**验证方法**（源码确认）：
+```python
+# lightrag/api/config.py 第 404-409 行
+args.llm_binding_host = get_env_value(
+    "LLM_BINDING_HOST", get_default_host(args.llm_binding)
+)
+args.embedding_binding_host = get_env_value(
+    "EMBEDDING_BINDING_HOST", get_default_host(args.embedding_binding)
+)
+args.llm_binding_api_key = get_env_value("LLM_BINDING_API_KEY", None)
+args.embedding_binding_api_key = get_env_value("EMBEDDING_BINDING_API_KEY", "")
+```
+
+**修复步骤**：
+1. ✅ 查看 LightRAG 源码确认正确的环境变量名
+2. ✅ 使用 Docker exec 测试环境变量读取是否生效
+3. ✅ 修改 docker-compose.dev.yml 使用正确命名
+4. ⚠️ **关键**：必须 `docker compose up -d` 重新创建容器（`restart` 不会重新加载环境变量）
+5. ✅ 验证容器内环境变量：`docker exec <container> env | grep BINDING`
+
+**教训**：
+1. **查源码优先**：集成第三方服务时，必须先查看其源码确认环境变量命名
+2. **分步验证**：
+   - 先本地测试环境变量命名（用 Python 脚本模拟）
+   - 再部署到容器验证
+   - 最后测试实际功能
+3. **容器环境变量更新**：`docker compose restart` 不会重新加载 `.env`，必须 `up -d`
+4. **全面检查**：LLM 和 Embedding 通常需要相同的配置模式，修改时要一起检查
+5. **记录错误**：每次遇到配置问题都要记录到 CLAUDE.md，避免重复犯错
+
+**相关文件**：
+- `docker-compose.dev.yml`：WebUI 服务配置
+- `lightrag/api/config.py`：LightRAG 环境变量读取逻辑
+
+**发现日期**：2025-10-31
 
 ---
 
