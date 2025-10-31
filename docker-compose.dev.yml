@@ -90,7 +90,10 @@ services:
 
   # ==================== Qdrant（向量存储）====================
   qdrant:
-    image: qdrant/qdrant:latest
+    build:
+      context: .
+      dockerfile: Dockerfile.qdrant
+    image: rag-qdrant:latest
     container_name: rag-qdrant
     restart: unless-stopped
     ports:
@@ -107,7 +110,7 @@ services:
       # 持久化配置
       - QDRANT__STORAGE__STORAGE_PATH=/qdrant/storage
     healthcheck:
-      test: ["CMD-SHELL", "timeout 1 bash -c '</dev/tcp/localhost/6333' || exit 1"]
+      test: ["CMD", "curl", "-f", "http://localhost:6333/healthz"]
       interval: 30s
       timeout: 10s
       retries: 5
