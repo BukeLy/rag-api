@@ -26,6 +26,7 @@ services:
       - ./output:/app/output
       - ./logs:/app/logs
       - ./model_cache:/root/.cache
+      - rag_files:/tmp/rag-files  # 持久化临时文件（用于 MinerU remote）
     environment:
       - TZ=Asia/Shanghai
       - PYTHONUNBUFFERED=1
@@ -239,6 +240,8 @@ volumes:
   qdrant_data:
     driver: local
   memgraph_data:
+    driver: local
+  rag_files:
     driver: local
 
 # ==================== 网络 ====================

@@ -7,6 +7,7 @@ requires-python = ">=3.10"
 dependencies = [
     "lightrag-hku==1.4.9.4",
     "raganything[all]>=1.2.8",
+    "docling>=1.0.0",      # for Docling parser CLI
     "aiohttp>=3.9.0",
     "requests>=2.31.0",
     "loguru>=0.7.0",
