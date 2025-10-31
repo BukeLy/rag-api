@@ -118,9 +118,15 @@ docker compose up -d
 
 ### BUG #4: Docling Parser 不可用（2025-11-01）
 **问题**：`parser=docling` 失败，报错 "docling command not found"
-**根因**：`raganything[all]` 不包含 `docling` CLI 可执行文件，仅有 Python 包
-**修复**：待实现 - 在 `pyproject.toml` 添加 `docling` 作为独立依赖，或修改 RAG-Anything 改用 Python API
-**临时方案**：使用 `parser=auto` 或 `parser=mineru`（需增加 `MINERU_POLL_TIMEOUT=1200`）
+**根因**：
+1. RAG-Anything 通过 `subprocess.run(["docling", ...])` 调用 Docling CLI 工具（不是 Python API）
+2. `raganything[all]` 不包含 Docling CLI 可执行文件
+3. Docling 是独立的 CLI 工具，需要单独安装
+**修复**：✅ 在 `pyproject.toml` 添加 `docling>=1.0.0` 依赖
+**关键发现**：
+- Docling 不是 Python 包依赖，是通过 subprocess 调用的 CLI 工具
+- 必须 `pip install docling` 才能获得 CLI 可执行文件
+- 部署流程：修改 pyproject.toml → git push → 服务器 git pull → Docker 重新构建
 
 ### BUG #5: FileURLService 临时文件存储非持久化（2025-11-01）
 **问题**：MinerU remote 模式失败，错误 "failed to read file"，文件 URL 返回 404
@@ -128,11 +134,15 @@ docker compose up -d
 1. 文件存储在容器内 `/tmp/rag-files`，容器重启后丢失
 2. `file_mapping` 使用内存字典，重启后映射关系丢失
 3. MinerU API 访问文件 URL 时文件已不存在
-**修复**：
-1. 将 `/tmp/rag-files` 挂载为 Docker volume
-2. 使用 Redis 持久化 `file_mapping`
-3. 增加文件过期时间至 3 小时（匹配 MinerU 任务超时）
-**临时方案**：确保容器不重启，或上传文件后立即处理（避免跨重启）
+**修复**：✅ 将 `/tmp/rag-files` 挂载为 Docker volume
+- 在 `docker-compose.yml` 和 `docker-compose.dev.yml` 添加 `rag_files` volume
+- 挂载路径：`rag_files:/tmp/rag-files`
+- 容器重启后文件持久化保留
+**关键发现**：
+- Docker volume 前缀是**目录名**（如 `rag-api_rag_files`），不是项目名
+- volume 必须同时在 `services.rag-api.volumes` 和顶层 `volumes` 中定义
+- 生产和开发环境需同步配置，保持一致性
+**未来优化**：使用 Redis 持久化 `file_mapping`，支持水平扩展
 
 ---
 
@@ -149,3 +159,4 @@ docker compose up -d
 1. 维度配置是数据库初始化基石，修改需删除 volume 重建（Docker volume 前缀是**目录名**）
 2. `MINERU_MODE=local` 导致 43 分钟宕机，生产必须 `remote`，Office 文件转换可能膨胀 10-20 倍
 3. 临时文件存储需持久化：`/tmp` 目录在容器重启后清空，MinerU 远程模式依赖文件 URL 长期有效
+4. 第三方工具调用方式需查源码：Docling 是 CLI 工具（subprocess），不是 Python API，需单独安装
