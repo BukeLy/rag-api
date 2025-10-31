@@ -1,44 +1,56 @@
-# Development Environment Docker Compose
+# 开发环境 Docker Compose
+# 架构: DragonflyDB + Qdrant + Memgraph（新存储架构）
 # 特性：代码外挂、热重载、快速迭代
+
 services:
+  # ==================== RAG API ====================
   rag-api:
     build:
       context: .
-      dockerfile: Dockerfile.dev
-    container_name: rag-api-dev
+      dockerfile: Dockerfile
+    container_name: rag-api
     restart: unless-stopped
     ports:
       - "8000:8000"
-    env_file:
-      - .env
     volumes:
-      # ===代码挂载（Dev环境特色）===
+      # ===代码热重载（Dev环境特色）===
       # 修改代码立即生效，无需重新构建镜像
-      - ./main.py:/app/main.py
       - ./src:/app/src
       - ./api:/app/api
-
+      - ./main.py:/app/main.py
       # ===数据目录挂载===
       - ./rag_local_storage:/app/rag_local_storage
       - ./output:/app/output
       - ./logs:/app/logs
       - ./model_cache:/root/.cache
+    env_file:
+      - .env
     environment:
       - TZ=Asia/Shanghai
       - PYTHONUNBUFFERED=1
       - UV_HTTP_TIMEOUT=60
-      # ⚠️  关键配置：Embedding 维度（必须与模型一致）
-      - EMBEDDING_DIM=${EMBEDDING_DIM:-1024}
-    # 依赖外部存储服务（健康检查通过后启动）
+      # ⚠️ 新存储架构配置
+      - USE_EXTERNAL_STORAGE=true
+      - KV_STORAGE=RedisKVStorage            # DragonflyDB 兼容 Redis 协议
+      - VECTOR_STORAGE=QdrantStorage         # Qdrant 向量存储
+      - GRAPH_STORAGE=MemgraphStorage        # Memgraph 图存储
+      # DragonflyDB 配置（Redis 协议兼容）
+      - REDIS_URI=redis://dragonflydb:6379/0
+      # Qdrant 配置
+      - QDRANT_URL=http://qdrant:6333
+      # Memgraph 配置
+      - MEMGRAPH_URI=bolt://memgraph:7687
+      # Embedding 维度（1024 维度配合 Rerank）
+      - EMBEDDING_DIM=1024
     depends_on:
-      redis:
+      dragonflydb:
         condition: service_healthy
-      neo4j:
+      qdrant:
         condition: service_healthy
-      postgres:
+      memgraph:
         condition: service_healthy
     networks:
-      - rag-network-dev
+      - rag-network
     # 热重载命令
     command: ["uv", "run", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
     logging:
@@ -47,173 +59,164 @@ services:
         max-size: "10m"
         max-file: "3"
 
-  # ==================== Redis（KV 存储 + 缓存）====================
-  redis:
-    image: redis:7-alpine
-    container_name: rag-redis-dev
+  # ==================== DragonflyDB（KV 存储）====================
+  dragonflydb:
+    image: docker.dragonflydb.io/dragonflydb/dragonfly:latest
+    container_name: rag-dragonflydb
     restart: unless-stopped
     ports:
       - "6379:6379"
     volumes:
-      - redis_data:/data
+      - dragonflydb_data:/data
     command: >
-      redis-server
-      --appendonly yes
-      --maxmemory 512mb
-      --maxmemory-policy allkeys-lru
+      dragonfly
+      --dir=/data
+      --snapshot_cron="0 */6 * * *"
+      --maxmemory=2048mb
+      --keys_output_limit=1024
+      --dbfilename=dump
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
     networks:
-      - rag-network-dev
+      - rag-network
     logging:
       driver: "json-file"
       options:
         max-size: "10m"
         max-file: "3"
 
-  # ==================== Neo4j（图存储）====================
-  neo4j:
-    image: neo4j:5-community
-    container_name: rag-neo4j-dev
+  # ==================== Qdrant（向量存储）====================
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: rag-qdrant
     restart: unless-stopped
     ports:
-      - "7474:7474"  # HTTP
-      - "7687:7687"  # Bolt
+      - "6333:6333"  # HTTP API
+      - "6334:6334"  # gRPC
     volumes:
-      - neo4j_data:/data
-      - neo4j_logs:/logs
+      - qdrant_data:/qdrant/storage
     environment:
-      - NEO4J_AUTH=neo4j/${NEO4J_PASSWORD}
-      - NEO4J_server_memory_heap_initial__size=512m
-      - NEO4J_server_memory_heap_max__size=1G
-      - NEO4J_server_memory_pagecache_size=512m
-      # 允许从容器外访问
-      - NEO4J_server_default__listen__address=0.0.0.0
+      # 性能优化配置
+      - QDRANT__SERVICE__GRPC_PORT=6334
+      - QDRANT__SERVICE__HTTP_PORT=6333
+      # 日志级别
+      - QDRANT__LOG_LEVEL=INFO
+      # 持久化配置
+      - QDRANT__STORAGE__STORAGE_PATH=/qdrant/storage
     healthcheck:
-      test: ["CMD", "cypher-shell", "-u", "neo4j", "-p", "${NEO4J_PASSWORD}", "RETURN 1"]
+      test: ["CMD", "curl", "-f", "http://localhost:6333/healthz"]
       interval: 30s
       timeout: 10s
       retries: 5
+      start_period: 30s
     networks:
-      - rag-network-dev
+      - rag-network
     logging:
       driver: "json-file"
       options:
         max-size: "10m"
         max-file: "3"
 
-  # ==================== PostgreSQL（向量存储）====================
-  postgres:
-    image: pgvector/pgvector:pg16
-    container_name: rag-postgres-dev
+  # ==================== Memgraph（图存储）====================
+  memgraph:
+    image: memgraph/memgraph-platform:latest
+    container_name: rag-memgraph
     restart: unless-stopped
     ports:
-      - "5432:5432"
+      - "7687:7687"  # Bolt
+      - "7444:7444"  # Memgraph Lab UI
     volumes:
-      - postgres_data:/var/lib/postgresql/data
-      - ./scripts/init_postgres.sql:/docker-entrypoint-initdb.d/init.sql
-    environment:
-      - POSTGRES_DB=lightrag
-      - POSTGRES_USER=lightrag
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-      - POSTGRES_INITDB_ARGS=--encoding=UTF-8 --lc-collate=C --lc-ctype=C
+      - memgraph_data:/var/lib/memgraph
+      # 注意：移除日志 volume 以避免权限问题，使用 docker logs 查看日志
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U lightrag -d lightrag"]
-      interval: 10s
-      timeout: 5s
+      test: ["CMD-SHELL", "echo 'RETURN 1;' | mgconsole --host 127.0.0.1 --port 7687 || exit 1"]
+      interval: 30s
+      timeout: 10s
       retries: 5
+      start_period: 30s
     networks:
-      - rag-network-dev
+      - rag-network
     logging:
       driver: "json-file"
       options:
         max-size: "10m"
         max-file: "3"
 
-  # ==================== LightRAG WebUI（知识图谱可视化）====================
+  # ==================== LightRAG WebUI（可视化）====================
   lightrag-webui:
     image: ghcr.io/hkuds/lightrag:latest
-    container_name: lightrag-webui-dev
+    container_name: lightrag-webui
     restart: unless-stopped
     ports:
       - "9621:9621"
     env_file:
       - .env
+    environment:
+      - TZ=Asia/Shanghai
+      # ⚠️ WebUI 也要切换到新存储
+      - USE_EXTERNAL_STORAGE=true
+      - KV_STORAGE=RedisKVStorage
+      - VECTOR_STORAGE=QdrantStorage
+      - GRAPH_STORAGE=MemgraphStorage
+      # DragonflyDB 配置
+      - REDIS_URI=redis://dragonflydb:6379/0
+      # Qdrant 配置
+      - QDRANT_URL=http://qdrant:6333
+      # Memgraph 配置
+      - MEMGRAPH_URI=bolt://memgraph:7687
+      - MEMGRAPH_USERNAME=
+      - MEMGRAPH_PASSWORD=
+      # Embedding 配置
+      - EMBEDDING_DIM=${EMBEDDING_DIM:-1024}
+      - EMBEDDING_MODEL=${SF_EMBEDDING_MODEL:-Qwen/Qwen3-Embedding-0.6B}
+      # LLM 绑定配置
+      - LLM_BINDING=openai
+      - OPENAI_API_KEY=${ARK_API_KEY}
+      - OPENAI_BASE_URL=${ARK_BASE_URL}
+      - OPENAI_MODEL=${ARK_MODEL:-seed-1-6-250615}
+      # Embedding 绑定配置
+      - EMBEDDING_BINDING=openai
+      - EMBEDDING_OPENAI_API_KEY=${SF_API_KEY}
+      - EMBEDDING_OPENAI_BASE_URL=${SF_BASE_URL}
+      # Workspace 配置
+      - LIGHTRAG_WEBUI_WORKSPACE=${LIGHTRAG_WEBUI_WORKSPACE:-default}
+    depends_on:
+      dragonflydb:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+      memgraph:
+        condition: service_healthy
+    networks:
+      - rag-network
     command:
       - "--host"
       - "0.0.0.0"
       - "--port"
       - "9621"
       - "--working-dir"
-      - "/app/rag_storage"
+      - "/app/lightrag_working_dir"
       - "--llm-binding"
       - "openai"
       - "--embedding-binding"
       - "openai"
-    volumes:
-      # 工作目录（外部存储模式下仅用于临时文件）
-      - ./rag_local_storage:/app/rag_storage
-      - ./logs/lightrag-webui:/app/logs
-    environment:
-      - TZ=Asia/Shanghai
-      - PYTHONUNBUFFERED=1
-      # ⚠️  多租户兼容：WebUI 访问指定 workspace 的数据
-      # 默认为 "default"，可修改为任意 tenant_id 以可视化该租户的数据
-      - WORKSPACE=${LIGHTRAG_WEBUI_WORKSPACE:-default}
-      # 存储后端配置（从 .env 映射，确保与 rag-api 一致）
-      - LIGHTRAG_KV_STORAGE=${KV_STORAGE:-JsonKVStorage}
-      - LIGHTRAG_VECTOR_STORAGE=${VECTOR_STORAGE:-NanoVectorDB}
-      - LIGHTRAG_GRAPH_STORAGE=${GRAPH_STORAGE:-NetworkXStorage}
-      - LIGHTRAG_DOC_STATUS_STORAGE=${DOC_STATUS_STORAGE:-JsonDocStatusStorage}
-      # LLM 配置（与 rag-api 保持一致）
-      - LLM_MODEL=${ARK_MODEL}
-      - OPENAI_API_KEY=${ARK_API_KEY}
-      - OPENAI_BASE_URL=${ARK_BASE_URL}
-      # Embedding 配置（关键：必须与 rag-api 使用相同维度）
-      - EMBEDDING_MODEL=${SF_EMBEDDING_MODEL:-Qwen/Qwen3-Embedding-8B}
-      - EMBEDDING_API_KEY=${SF_API_KEY}
-      - EMBEDDING_BASE_URL=${SF_BASE_URL}
-      - EMBEDDING_DIM=${EMBEDDING_DIM:-1024}
-      # 认证配置（可选）
-      - LIGHTRAG_API_KEY=${LIGHTRAG_API_KEY:-}
-      - AUTH_ACCOUNTS=${LIGHTRAG_AUTH_ACCOUNTS:-}
-    # 依赖外部存储服务（与 rag-api 共享同一套数据库）
-    depends_on:
-      redis:
-        condition: service_healthy
-      neo4j:
-        condition: service_healthy
-      postgres:
-        condition: service_healthy
-    networks:
-      - rag-network-dev
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9621/docs"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
-      start_period: 30s
     logging:
       driver: "json-file"
       options:
         max-size: "10m"
         max-file: "3"
 
-# ==================== 持久化卷 ====================
-volumes:
-  redis_data:
-    driver: local
-  neo4j_data:
-    driver: local
-  neo4j_logs:
-    driver: local
-  postgres_data:
-    driver: local
-
-# ==================== 网络 ====================
 networks:
-  rag-network-dev:
+  rag-network:
     driver: bridge
+
+volumes:
+  dragonflydb_data:
+    driver: local
+  qdrant_data:
+    driver: local
+  memgraph_data:
+    driver: local
