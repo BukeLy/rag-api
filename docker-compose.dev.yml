@@ -185,6 +185,11 @@ services:
       - EMBEDDING_DIM=${EMBEDDING_DIM:-1024}
       # Workspace 配置
       - LIGHTRAG_WEBUI_WORKSPACE=${LIGHTRAG_WEBUI_WORKSPACE:-default}
+      # ⚠️ 性能和超时优化（解决 LLM 超时问题）
+      - MAX_ASYNC=${MAX_ASYNC:-16}           # LLM 并发请求数（默认 4 → 16）
+      - LLM_TIMEOUT=${LLM_TIMEOUT:-900}      # LLM 超时时间秒（默认 360 → 900）
+      - TOP_K=${TOP_K:-20}                   # 实体检索数量
+      - CHUNK_TOP_K=${CHUNK_TOP_K:-10}       # 文本块检索数量
     depends_on:
       dragonflydb:
         condition: service_healthy
