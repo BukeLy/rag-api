@@ -86,7 +86,10 @@ docker compose -f docker-compose.dev.yml down
 ## Remote Deployment
 
 **Testing Server**: 45.78.223.205
-**SSH Access**: `ssh -i /Users/chengjie/Downloads/chengjie.pem root@45.78.223.205`
+
+**SSH Access**:
+- MacOS: `ssh -i /Users/chengjie/Downloads/chengjie.pem root@45.78.223.205`
+- Windows: `ssh -i "C:\Users\jay.huang\Desktop\Scripts\chengjie.pem" root@45.78.223.205`
 
 **部署流程**（通过 PR）：
 ```bash
@@ -97,8 +100,12 @@ git push origin feature/xxx
 
 # 2. GitHub 创建 PR 并合并到 main
 
-# 3. 服务器更新
+# 3. 服务器更新（根据你的操作系统选择对应的 SSH 命令）
+# MacOS:
 ssh -i /Users/chengjie/Downloads/chengjie.pem root@45.78.223.205
+# Windows:
+ssh -i "C:\Users\jay.huang\Desktop\Scripts\chengjie.pem" root@45.78.223.205
+
 cd ~/rag-api
 git pull origin main
 # 代码变更立即生效（开发模式热重载）
