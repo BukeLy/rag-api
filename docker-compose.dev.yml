@@ -29,19 +29,19 @@ services:
       - TZ=Asia/Shanghai
       - PYTHONUNBUFFERED=1
       - UV_HTTP_TIMEOUT=60
-      # ⚠️ 新存储架构配置
-      - USE_EXTERNAL_STORAGE=true
-      - KV_STORAGE=RedisKVStorage            # DragonflyDB 兼容 Redis 协议
-      - VECTOR_STORAGE=QdrantStorage         # Qdrant 向量存储
-      - GRAPH_STORAGE=MemgraphStorage        # Memgraph 图存储
-      # DragonflyDB 配置（Redis 协议兼容）
-      - REDIS_URI=redis://dragonflydb:6379/0
-      # Qdrant 配置
-      - QDRANT_URL=http://qdrant:6333
-      # Memgraph 配置
-      - MEMGRAPH_URI=bolt://memgraph:7687
-      # Embedding 维度（1024 维度配合 Rerank）
-      - EMBEDDING_DIM=1024
+      # ⚠️ 新存储架构配置（✅ 从 .env 读取）
+      - USE_EXTERNAL_STORAGE=${USE_EXTERNAL_STORAGE:-true}
+      - KV_STORAGE=${KV_STORAGE:-RedisKVStorage}
+      - VECTOR_STORAGE=${VECTOR_STORAGE:-QdrantStorage}
+      - GRAPH_STORAGE=${GRAPH_STORAGE:-MemgraphStorage}
+      # DragonflyDB 配置（✅ 从 .env 读取）
+      - REDIS_URI=${REDIS_URI:-redis://dragonflydb:6379/0}
+      # Qdrant 配置（✅ 从 .env 读取）
+      - QDRANT_URL=${QDRANT_URL:-http://qdrant:6333}
+      # Memgraph 配置（✅ 从 .env 读取）
+      - MEMGRAPH_URI=${MEMGRAPH_URI:-bolt://memgraph:7687}
+      # Embedding 维度（✅ 从 .env 读取）
+      - EMBEDDING_DIM=${EMBEDDING_DIM:-1024}
     depends_on:
       dragonflydb:
         condition: service_healthy
