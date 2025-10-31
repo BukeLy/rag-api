@@ -1,0 +1,9 @@
+# 自定义 Qdrant 镜像 - 添加 curl 支持健康检查
+FROM qdrant/qdrant:latest
+
+# 安装 curl（用于健康检查）
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends curl && \
+    rm -rf /var/lib/apt/lists/*
+
+# 保持原有的启动命令和配置

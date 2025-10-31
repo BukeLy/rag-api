@@ -16,6 +16,10 @@ from .models import TaskInfo
 # 结构: {tenant_id: {task_id: TaskInfo}}
 TASK_STORE: Dict[str, Dict[str, TaskInfo]] = {}
 
+# 批量任务存储（修复前缀匹配的bug）
+# 结构: {tenant_id: {batch_id: {"task_ids": [task_id1, task_id2, ...], "total": int, "created_at": str}}}
+BATCH_STORE: Dict[str, Dict[str, Dict]] = {}
+
 # 并发控制信号量（动态配置，根据 MinerU 模式）
 # 读取 MinerU 模式
 mineru_mode = os.getenv("MINERU_MODE", "local")
@@ -111,4 +115,59 @@ def get_tenant_tasks(tenant_id: str) -> Dict[str, TaskInfo]:
         Dict[str, TaskInfo]: 租户的所有任务
     """
     return TASK_STORE.get(tenant_id, {})
+
+
+# ===== 批量任务管理函数（新增）=====
+
+def create_batch(batch_id: str, tenant_id: str, task_ids: list, created_at: str) -> None:
+    """
+    创建批量任务记录
+
+    Args:
+        batch_id: 批量任务ID
+        tenant_id: 租户ID
+        task_ids: 关联的任务ID列表
+        created_at: 创建时间
+    """
+    if tenant_id not in BATCH_STORE:
+        BATCH_STORE[tenant_id] = {}
+
+    BATCH_STORE[tenant_id][batch_id] = {
+        "task_ids": task_ids,
+        "total": len(task_ids),
+        "created_at": created_at
+    }
+    logger.debug(f"Batch created: {batch_id} for tenant: {tenant_id} ({len(task_ids)} tasks)")
+
+
+def get_batch(batch_id: str, tenant_id: str) -> Dict:
+    """
+    获取批量任务信息
+
+    Args:
+        batch_id: 批量任务ID
+        tenant_id: 租户ID
+
+    Returns:
+        Dict: 批量任务信息（包含 task_ids、total、created_at），如果不存在则返回 None
+    """
+    return BATCH_STORE.get(tenant_id, {}).get(batch_id)
+
+
+def delete_batch(batch_id: str, tenant_id: str) -> bool:
+    """
+    删除批量任务记录
+
+    Args:
+        batch_id: 批量任务ID
+        tenant_id: 租户ID
+
+    Returns:
+        bool: 是否成功删除
+    """
+    if tenant_id in BATCH_STORE and batch_id in BATCH_STORE[tenant_id]:
+        del BATCH_STORE[tenant_id][batch_id]
+        logger.debug(f"Batch deleted: {batch_id} for tenant: {tenant_id}")
+        return True
+    return False
 

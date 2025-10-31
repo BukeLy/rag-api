@@ -76,8 +76,11 @@ class MultiTenantRAGManager:
 
     def _create_embedding_func(self):
         """创建共享的 Embedding 函数"""
+        # 从环境变量读取维度，避免硬编码
+        embedding_dim = int(os.getenv("EMBEDDING_DIM", "1024"))
+
         return EmbeddingFunc(
-            embedding_dim=4096,
+            embedding_dim=embedding_dim,
             func=lambda texts: openai_embed(
                 texts,
                 model=self.sf_embedding_model,
@@ -156,12 +159,11 @@ class MultiTenantRAGManager:
         # 准备存储配置
         storage_kwargs = {}
         if self.use_external_storage:
-            if self.kv_storage == "RedisKVStorage":
-                storage_kwargs["kv_storage"] = "RedisKVStorage"
-            if self.vector_storage == "PGVectorStorage":
-                storage_kwargs["vector_storage"] = "PGVectorStorage"
-            if self.graph_storage == "Neo4JStorage":
-                storage_kwargs["graph_storage"] = "Neo4JStorage"
+            # 直接传递配置值，支持所有存储类型（Redis, Qdrant, Memgraph, PostgreSQL, Neo4j 等）
+            storage_kwargs["kv_storage"] = self.kv_storage
+            storage_kwargs["vector_storage"] = self.vector_storage
+            storage_kwargs["graph_storage"] = self.graph_storage
+            logger.info(f"[{tenant_id}] Using external storage: KV={self.kv_storage}, Vector={self.vector_storage}, Graph={self.graph_storage}")
 
         # 创建 LightRAG 实例（使用 workspace 隔离）
         instance = LightRAG(

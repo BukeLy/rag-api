@@ -4,14 +4,33 @@
 # RAG API 智能更新脚本 (远端 SSH 部署优化)
 # 用途: 拉取最新代码，利用 Docker 缓存快速重建
 # 部署流程: git push → SSH pull → build → run
-# 特性: 
+# 特性:
 #   1. 自动启用 BuildKit，获得更好的缓存和并行构建
 #   2. 利用持久化卷 model_cache 保留包缓存（跨容器）
 #   3. 智能检测是否需要完整重建
 #   4. 详细的构建时间和缓存统计
+#   5. 支持清理旧数据（--clean 参数）
+#
+# 用法:
+#   bash update.sh           # 常规更新（保留数据）
+#   bash update.sh --clean   # 清理所有 volumes 后更新（删除 DragonflyDB/Qdrant/Memgraph 数据）
 ###############################################################################
 
 set -e
+
+# 解析命令行参数
+CLEAN_DATA=false
+for arg in "$@"; do
+    case $arg in
+        --clean)
+            CLEAN_DATA=true
+            shift
+            ;;
+        *)
+            # 未知参数
+            ;;
+    esac
+done
 
 # 颜色输出
 GREEN='\033[0;32m'
@@ -139,11 +158,17 @@ PRUNE_OUTPUT=$(docker system df 2>/dev/null || echo "")
 echo -e "${GREEN}✓ 旧镜像已清理${NC}"
 echo ""
 
-# 5. 停止当前服务
+# 5. 停止当前服务（可选清理数据）
 echo -e "${YELLOW}[5/7] 停止当前服务...${NC}"
-docker compose down > /dev/null 2>&1 || true
+if [ "$CLEAN_DATA" = true ]; then
+    echo -e "${RED}  ⚠ 清理模式：将删除所有 volumes（DragonflyDB、Qdrant、Memgraph 数据）${NC}"
+    docker compose down -v > /dev/null 2>&1 || true
+    echo -e "${GREEN}✓ 服务已停止，数据已清理${NC}"
+else
+    docker compose down > /dev/null 2>&1 || true
+    echo -e "${GREEN}✓ 服务已停止（保留数据）${NC}"
+fi
 sleep 2  # 等待容器完全停止
-echo -e "${GREEN}✓ 服务已停止${NC}"
 echo ""
 
 # 6. 重新构建镜像
@@ -223,5 +248,6 @@ echo "  查看服务状态:     docker compose ps"
 echo "  查看实时日志:     docker compose logs -f rag-api"
 echo "  查看性能统计:     docker stats --no-stream"
 echo "  查看缓存大小:     du -sh ./model_cache"
+echo "  清理数据更新:     bash ./scripts/update.sh --clean"
 echo "  清理缓存重建:     rm -rf ./model_cache && bash ./scripts/update.sh"
 echo ""

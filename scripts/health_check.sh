@@ -11,9 +11,9 @@
 #
 # 配置：从 .env 文件读取
 #   - API_URL: API 服务地址（默认 http://localhost:8000）
-#   - REDIS_HOST: Redis 主机地址
-#   - POSTGRES_HOST: PostgreSQL 主机地址
-#   - NEO4J_URI: Neo4j 连接 URI
+#   - REDIS_HOST: DragonflyDB/Redis 主机地址
+#   - QDRANT_URL: Qdrant 连接 URL
+#   - MEMGRAPH_URI: Memgraph 连接 URI
 # ============================================================
 
 set -e  # 遇到错误时退出
@@ -34,13 +34,14 @@ fi
 API_URL=${API_URL:-"http://localhost:8000"}
 REDIS_HOST=${REDIS_HOST:-"localhost"}
 REDIS_PORT=${REDIS_PORT:-6379}
-POSTGRES_HOST=${POSTGRES_HOST:-"localhost"}
-POSTGRES_PORT=${POSTGRES_PORT:-5432}
-POSTGRES_USER=${POSTGRES_USER:-"lightrag"}
-POSTGRES_DB=${POSTGRES_DB:-"lightrag"}
-NEO4J_URI=${NEO4J_URI:-"bolt://localhost:7687"}
-NEO4J_USERNAME=${NEO4J_USERNAME:-"neo4j"}
+QDRANT_URL=${QDRANT_URL:-"http://localhost:6333"}
+MEMGRAPH_URI=${MEMGRAPH_URI:-"bolt://localhost:7687"}
+MEMGRAPH_USERNAME=${MEMGRAPH_USERNAME:-""}
+MEMGRAPH_PASSWORD=${MEMGRAPH_PASSWORD:-""}
 USE_EXTERNAL_STORAGE=${USE_EXTERNAL_STORAGE:-"false"}
+KV_STORAGE=${KV_STORAGE:-"JsonKVStorage"}
+VECTOR_STORAGE=${VECTOR_STORAGE:-"NanoVectorDB"}
+GRAPH_STORAGE=${GRAPH_STORAGE:-"NetworkXStorage"}
 
 VERBOSE=false
 if [ "$1" == "--verbose" ]; then
@@ -87,7 +88,7 @@ check_api() {
 }
 
 check_redis() {
-    echo -n "🔴 Redis ($REDIS_HOST:$REDIS_PORT): "
+    echo -n "🐉 DragonflyDB/Redis ($REDIS_HOST:$REDIS_PORT): "
 
     if command -v redis-cli > /dev/null 2>&1; then
         if result=$(redis-cli -h "$REDIS_HOST" -p "$REDIS_PORT" ping 2>&1); then
@@ -115,24 +116,20 @@ check_redis() {
     return 1
 }
 
-check_postgres() {
-    echo -n "🐘 PostgreSQL ($POSTGRES_HOST:$POSTGRES_PORT): "
+check_qdrant() {
+    echo -n "🎯 Qdrant ($QDRANT_URL): "
 
-    if command -v pg_isready > /dev/null 2>&1; then
-        if pg_isready -h "$POSTGRES_HOST" -p "$POSTGRES_PORT" -U "$POSTGRES_USER" > /dev/null 2>&1; then
-            print_success "OK"
+    if response=$(curl -sf "$QDRANT_URL/healthz" 2>&1); then
+        print_success "OK"
 
-            if [ "$VERBOSE" = true ] && [ -n "$POSTGRES_PASSWORD" ]; then
-                db_size=$(PGPASSWORD="$POSTGRES_PASSWORD" psql -h "$POSTGRES_HOST" -p "$POSTGRES_PORT" -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "SELECT pg_size_pretty(pg_database_size('$POSTGRES_DB'));")
-                table_count=$(PGPASSWORD="$POSTGRES_PASSWORD" psql -h "$POSTGRES_HOST" -p "$POSTGRES_PORT" -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='public';")
-                echo "   DB Size: $db_size"
-                echo "   Tables: $table_count"
-            fi
-            return 0
+        if [ "$VERBOSE" = true ]; then
+            collections=$(curl -sf "$QDRANT_URL/collections" 2>/dev/null | grep -o '"result":\[.*\]' | grep -o '\[.*\]' | tr -d '[]' || echo "0")
+            echo "   Collections: $collections"
         fi
+        return 0
     else
         # Fallback: 使用 Docker Compose
-        if docker compose exec -T postgres pg_isready -U "$POSTGRES_USER" > /dev/null 2>&1; then
+        if docker compose exec -T qdrant curl -sf http://localhost:6333/healthz > /dev/null 2>&1; then
             print_success "OK (via Docker)"
             return 0
         fi
@@ -142,20 +139,21 @@ check_postgres() {
     return 1
 }
 
-check_neo4j() {
-    echo -n "🔵 Neo4j ($NEO4J_URI): "
+check_memgraph() {
+    echo -n "🧠 Memgraph ($MEMGRAPH_URI): "
 
     # 解析主机地址
-    NEO4J_HOST=$(echo "$NEO4J_URI" | sed 's|bolt://||' | cut -d: -f1)
-    NEO4J_PORT=$(echo "$NEO4J_URI" | sed 's|bolt://||' | cut -d: -f2)
+    MEMGRAPH_HOST=$(echo "$MEMGRAPH_URI" | sed 's|bolt://||' | cut -d: -f1)
+    MEMGRAPH_PORT=$(echo "$MEMGRAPH_URI" | sed 's|bolt://||' | cut -d: -f2)
 
-    if command -v cypher-shell > /dev/null 2>&1 && [ -n "$NEO4J_PASSWORD" ]; then
-        if cypher-shell -a "$NEO4J_URI" -u "$NEO4J_USERNAME" -p "$NEO4J_PASSWORD" "RETURN 1" > /dev/null 2>&1; then
+    # 尝试使用 mgconsole 或 cypher-shell
+    if command -v mgconsole > /dev/null 2>&1; then
+        if echo "RETURN 1;" | mgconsole --host "$MEMGRAPH_HOST" --port "$MEMGRAPH_PORT" > /dev/null 2>&1; then
             print_success "OK"
 
             if [ "$VERBOSE" = true ]; then
-                node_count=$(cypher-shell -a "$NEO4J_URI" -u "$NEO4J_USERNAME" -p "$NEO4J_PASSWORD" --format plain "MATCH (n) RETURN count(n) AS count" | tail -n 1)
-                edge_count=$(cypher-shell -a "$NEO4J_URI" -u "$NEO4J_USERNAME" -p "$NEO4J_PASSWORD" --format plain "MATCH ()-[r]->() RETURN count(r) AS count" | tail -n 1)
+                node_count=$(echo "MATCH (n) RETURN count(n) AS count;" | mgconsole --host "$MEMGRAPH_HOST" --port "$MEMGRAPH_PORT" --output-format=csv 2>/dev/null | tail -n 1)
+                edge_count=$(echo "MATCH ()-[r]->() RETURN count(r) AS count;" | mgconsole --host "$MEMGRAPH_HOST" --port "$MEMGRAPH_PORT" --output-format=csv 2>/dev/null | tail -n 1)
                 echo "   Nodes: $node_count"
                 echo "   Edges: $edge_count"
             fi
@@ -163,7 +161,7 @@ check_neo4j() {
         fi
     else
         # Fallback: 使用 Docker Compose
-        if docker compose exec -T neo4j cypher-shell -u "$NEO4J_USERNAME" -p "$NEO4J_PASSWORD" "RETURN 1" > /dev/null 2>&1; then
+        if docker compose exec -T memgraph bash -c "echo 'RETURN 1;' | mgconsole --host 127.0.0.1 --port 7687" > /dev/null 2>&1; then
             print_success "OK (via Docker)"
             return 0
         fi
@@ -204,9 +202,9 @@ main() {
     echo "  - API URL: $API_URL"
     echo "  - External Storage: $USE_EXTERNAL_STORAGE"
     if [ "$USE_EXTERNAL_STORAGE" = "true" ]; then
-        echo "  - Redis: $REDIS_HOST:$REDIS_PORT"
-        echo "  - PostgreSQL: $POSTGRES_HOST:$POSTGRES_PORT"
-        echo "  - Neo4j: $NEO4J_URI"
+        echo "  - KV Storage: $KV_STORAGE ($REDIS_HOST:$REDIS_PORT)"
+        echo "  - Vector Storage: $VECTOR_STORAGE ($QDRANT_URL)"
+        echo "  - Graph Storage: $GRAPH_STORAGE ($MEMGRAPH_URI)"
     fi
 
     echo ""
@@ -221,9 +219,9 @@ main() {
 
     # 如果启用了外部存储，检查数据库
     if [ "$USE_EXTERNAL_STORAGE" = "true" ]; then
-        check_redis || failed_services+=("Redis")
-        check_postgres || failed_services+=("PostgreSQL")
-        check_neo4j || failed_services+=("Neo4j")
+        check_redis || failed_services+=("DragonflyDB")
+        check_qdrant || failed_services+=("Qdrant")
+        check_memgraph || failed_services+=("Memgraph")
     else
         print_warning "External storage disabled, skipping database checks"
     fi

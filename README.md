@@ -379,6 +379,7 @@ curl -X POST "http://localhost:8000/batch?tenant_id=your_tenant" \
 #### 3️⃣ 智能查询
 
 ```bash
+# 标准查询
 curl -X POST "http://localhost:8000/query?tenant_id=your_tenant" \
   -H "Content-Type: application/json" \
   -d '{
@@ -393,6 +394,20 @@ curl -X POST "http://localhost:8000/query?tenant_id=your_tenant" \
   "sources": [...],
   "time_taken": 8.5
 }
+
+# 流式查询（SSE）
+curl -N -X POST "http://localhost:8000/query/stream?tenant_id=your_tenant" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "文档中的核心观点是什么？",
+    "mode": "hybrid"
+  }'
+
+# 返回（实时流式输出）
+data: {"chunk": "根据", "done": false}
+data: {"chunk": "文档内容", "done": false}
+data: {"chunk": "...", "done": false}
+data: {"done": true}
 ```
 
 #### 4️⃣ 任务状态查询
@@ -853,6 +868,8 @@ DOCUMENT_PROCESSING_CONCURRENCY=1
 - [📙 部署模式说明](docs/DEPLOY_MODES.md) - 生产模式 vs 开发模式
 - [📕 PR 工作流程](docs/PR_WORKFLOW.md) - 贡献代码的流程指南
 - [📔 外部存储部署](docs/DEPLOYMENT_EXTERNAL_STORAGE.md) - Redis/PostgreSQL/Neo4j 配置
+- [📊 API 对比分析](docs/API_COMPARISON.md) - rag-api vs LightRAG 官方 API 对比
+- [🌐 WebUI 集成指南](docs/LIGHTRAG_WEBUI_INTEGRATION.md) - 知识图谱可视化集成
 
 ---
 
