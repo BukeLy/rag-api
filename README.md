@@ -47,6 +47,7 @@ RAG API 是一个企业级的检索增强生成（RAG）服务，结合了 **RAG
   - TXT、Markdown 文本
   
 - ✅ **智能解析**
+  - 纯文本（.txt, .md）→ 直接插入（极快 ~1秒，跳过解析器）
   - OCR 文字识别
   - 表格结构化提取
   - 数学公式识别
@@ -377,24 +378,37 @@ curl -X POST "http://localhost:8000/batch?tenant_id=your_tenant" \
 }
 ```
 
-#### 3️⃣ 智能查询
+#### 3️⃣ 智能查询（Query API v2.0）
+
+**新增高级功能**：
+- ✨ **对话历史**：支持多轮对话上下文
+- ✨ **自定义提示词**：定制回答风格
+- ✨ **响应格式控制**：paragraph/list/json
+- ✨ **关键词精准检索**：hl_keywords/ll_keywords
+- ✨ **流式输出**：实时查看生成过程
 
 ```bash
-# 标准查询
+# 基础查询
 curl -X POST "http://localhost:8000/query?tenant_id=your_tenant" \
   -H "Content-Type: application/json" \
   -d '{
     "query": "文档中的核心观点是什么？",
-    "mode": "hybrid",
-    "top_k": 10
+    "mode": "hybrid"
   }'
 
-# 返回
-{
-  "answer": "根据文档内容...",
-  "sources": [...],
-  "time_taken": 8.5
-}
+# 高级查询（多轮对话 + 自定义提示词）
+curl -X POST "http://localhost:8000/query?tenant_id=your_tenant" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "能详细展开第二点吗？",
+    "mode": "hybrid",
+    "conversation_history": [
+      {"role": "user", "content": "有哪些要点？"},
+      {"role": "assistant", "content": "主要有三点..."}
+    ],
+    "user_prompt": "请用专业的学术语言回答",
+    "response_type": "list"
+  }'
 
 # 流式查询（SSE）
 curl -N -X POST "http://localhost:8000/query/stream?tenant_id=your_tenant" \
@@ -407,7 +421,6 @@ curl -N -X POST "http://localhost:8000/query/stream?tenant_id=your_tenant" \
 # 返回（实时流式输出）
 data: {"chunk": "根据", "done": false}
 data: {"chunk": "文档内容", "done": false}
-data: {"chunk": "...", "done": false}
 data: {"done": true}
 ```
 
@@ -447,6 +460,18 @@ curl "http://localhost:8000/tenants/pool/stats"
 | `global` | ⚡⚡⚡ | ⭐⭐⭐⭐ | 全局知识图谱推理 |
 | `hybrid` | ⚡⚡⚡ | ⭐⭐⭐⭐⭐ | 混合检索（推荐） |
 | `mix` | ⚡⚡ | ⭐⭐⭐⭐⭐ | 复杂问题，深度分析 |
+
+### Query API v2.0 高级参数
+
+| 参数 | 类型 | 说明 | 示例 |
+|------|------|------|------|
+| `conversation_history` | List[Dict] | 多轮对话上下文 | `[{"role": "user", "content": "..."}]` |
+| `user_prompt` | str | 自定义提示词 | "请用专业的学术语言回答" |
+| `response_type` | str | 响应格式 | "paragraph", "list", "json" |
+| `hl_keywords` | List[str] | 高优先级关键词 | `["人工智能", "机器学习"]` |
+| `ll_keywords` | List[str] | 低优先级关键词 | `["应用", "案例"]` |
+| `only_need_context` | bool | 仅返回上下文（调试） | `true` |
+| `max_entity_tokens` | int | 实体 Token 限制 | `6000` |
 
 完整 API 文档访问：http://localhost:8000/docs
 
