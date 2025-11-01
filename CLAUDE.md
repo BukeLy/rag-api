@@ -5,6 +5,68 @@
 - 代码注释和变量名使用英文
 - Git commit 使用中文
 
+## 🧰 MCP Servers 使用指南
+
+**已接入的 MCP Servers 及使用场景**：
+
+### 1. **context7** - 库文档检索
+**使用场景**：需要查看第三方库的最新文档和代码示例时
+- 集成新库前查看 API 文档（如 FastAPI、LightRAG）
+- 调试第三方库问题，查看官方文档说明
+- 学习库的最佳实践和示例代码
+
+**使用方法**：
+```bash
+# 1. 先解析库 ID
+mcp__context7__resolve-library-id(libraryName="fastapi")
+# 2. 获取文档
+mcp__context7__get-library-docs(context7CompatibleLibraryID="/tiangolo/fastapi", topic="webhooks")
+```
+
+### 2. **memory** - 知识图谱
+**使用场景**：需要记忆和关联项目中的实体关系时
+- 记录项目中的关键架构决策和原因
+- 追踪多个微服务之间的依赖关系
+- 记忆用户偏好和历史选择
+
+**使用方法**：
+```bash
+# 创建实体和关系
+mcp__memory__create_entities(entities=[{"name": "RAG-API", "entityType": "Service", "observations": ["FastAPI backend"]}])
+mcp__memory__create_relations(relations=[{"from": "RAG-API", "to": "LightRAG", "relationType": "depends_on"}])
+# 搜索
+mcp__memory__search_nodes(query="FastAPI")
+```
+
+### 3. **git** - Git 操作
+**使用场景**：需要进行 Git 版本控制操作时（⚠️ 优先使用内置 Bash git 命令）
+- 查看 blame 信息：`git_blame(file="main.py", startLine=10, endLine=20)`
+- 高级 Git 操作（如 cherry-pick、worktree）
+- 需要结构化 Git 数据时
+
+**注意**：简单 git 操作（status、commit、push）优先用 Bash 工具
+
+### 4. **aws-knowledge** - AWS 知识库
+**使用场景**：需要 AWS 服务相关文档和区域信息时（本项目暂不涉及）
+- 查询 AWS 服务在某区域的可用性
+- 搜索 AWS 官方文档
+- 获取 AWS 最佳实践
+
+### 5. **filesystem** - 文件系统操作
+**使用场景**：需要批量文件操作或高级文件信息时
+- 批量读取多个文件：`read_multiple_files(paths=[...])`
+- 查看目录树结构：`directory_tree(path="./src")`
+- 获取文件详细元数据：`get_file_info(path="file.py")`
+
+**注意**：单文件读写优先用内置 Read/Write/Edit 工具，MCP 版本用于高级场景
+
+---
+
+**使用原则**：
+- **优先内置工具**：Read/Write/Edit/Bash 性能更好
+- **MCP 补充能力**：库文档检索、知识图谱、批量操作
+- **按需选择**：根据任务复杂度选择合适工具
+
 ## 🚨 第三方服务集成准则
 
 **核心流程**（严格执行）：

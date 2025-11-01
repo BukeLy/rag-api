@@ -108,6 +108,69 @@ class MultiTenantRAGManager:
             logger.warning("lightrag.rerank not available")
             return None
 
+    def _create_vision_model_func(self):
+        """创建共享的 Vision Model 函数（用于图片理解）"""
+        import aiohttp
+
+        async def seed_vision_model_func(prompt: str, image_data: str, system_prompt: str) -> str:
+            """
+            使用 Seed-1.6 VLM 理解图片内容
+
+            Args:
+                prompt: 主要提示词（如"请描述这张图片"）
+                image_data: base64 编码的图片数据
+                system_prompt: 系统提示词
+
+            Returns:
+                str: 图片描述文本
+            """
+            payload = {
+                "model": self.ark_model,  # seed-1-6-250615
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": prompt},
+                            {
+                                "type": "image_url",
+                                "image_url": {"url": f"data:image/png;base64,{image_data}"}
+                            }
+                        ]
+                    }
+                ],
+                "max_tokens": 500,
+                "temperature": 0.1
+            }
+
+            headers = {
+                "Authorization": f"Bearer {self.ark_api_key}",
+                "Content-Type": "application/json"
+            }
+
+            try:
+                async with aiohttp.ClientSession() as session:
+                    async with session.post(
+                        f"{self.ark_base_url}/chat/completions",
+                        json=payload,
+                        headers=headers,
+                        timeout=aiohttp.ClientTimeout(total=30)
+                    ) as response:
+                        if response.status != 200:
+                            error_text = await response.text()
+                            logger.error(f"VLM API error ({response.status}): {error_text}")
+                            raise Exception(f"VLM API error: {error_text}")
+
+                        result = await response.json()
+                        content = result["choices"][0]["message"]["content"]
+                        logger.debug(f"VLM response: {content[:100]}...")
+                        return content
+            except Exception as e:
+                logger.error(f"Failed to call VLM API: {e}")
+                raise
+
+        return seed_vision_model_func
+
     async def get_instance(self, tenant_id: str) -> LightRAG:
         """
         获取指定租户的 LightRAG 实例（懒加载）
@@ -155,6 +218,7 @@ class MultiTenantRAGManager:
         llm_func = self._create_llm_func()
         embedding_func = self._create_embedding_func()
         rerank_func = self._create_rerank_func()
+        vision_func = self._create_vision_model_func()  # 🆕 创建 VLM 函数
 
         # 准备存储配置
         storage_kwargs = {}
@@ -186,7 +250,10 @@ class MultiTenantRAGManager:
         if rerank_func:
             instance.rerank_model_func = rerank_func
 
-        logger.info(f"✓ LightRAG instance created for tenant: {tenant_id} (workspace={tenant_id})")
+        # 🆕 附加 Vision Model 函数（供 RAG-Anything 使用）
+        instance.vision_model_func = vision_func
+
+        logger.info(f"✓ LightRAG instance created for tenant: {tenant_id} (workspace={tenant_id}, VLM enabled)")
         return instance
 
     def remove_instance(self, tenant_id: str) -> bool:

@@ -95,13 +95,24 @@ async def process_document_task(task_id: str, tenant_id: str, doc_id: str, temp_
                 config = RAGAnythingConfig(
                     working_dir="./rag_local_storage",
                     parser=parser,
-                    enable_image_processing=(parser == "mineru"),
+                    enable_image_processing=True,  # 🔥 启用图片处理（所有 parser 都支持）
                     enable_table_processing=(parser == "mineru"),
                     enable_equation_processing=(parser == "mineru"),
                 )
-                rag_anything = RAGAnything(config=config, lightrag=lightrag_instance)
+
+                # 🆕 从 LightRAG 实例获取 vision_model_func
+                vision_func = getattr(lightrag_instance, 'vision_model_func', None)
+
+                if vision_func is None:
+                    logger.warning(f"[Task {task_id}] [Tenant {tenant_id}] vision_model_func not found, image understanding disabled")
+
+                rag_anything = RAGAnything(
+                    config=config,
+                    lightrag=lightrag_instance,
+                    vision_model_func=vision_func  # 🆕 传递 VLM 函数
+                )
                 await rag_anything.process_document_complete(file_path=temp_file_path, output_dir="./output")
-                logger.info(f"[Task {task_id}] [Tenant {tenant_id}] Document parsed using {parser} parser (mode: {mineru_mode})")
+                logger.info(f"[Task {task_id}] [Tenant {tenant_id}] Document parsed using {parser} parser with VLM (mode: {mineru_mode})")
         
         # 处理成功
         if tenant_id in TASK_STORE and task_id in TASK_STORE[tenant_id]:
