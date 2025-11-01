@@ -76,9 +76,9 @@ RAG API 是一个企业级的检索增强生成（RAG）服务，结合了 **RAG
   - 上下文增强
 
 - ✅ **外部存储**
-  - Redis（KV 存储）
-  - PostgreSQL（向量存储）
-  - Neo4j（图数据库）
+  - DragonflyDB（KV 存储）
+  - Qdrant（向量存储）
+  - Memgraph（图数据库）
 
 </td>
 </tr>
@@ -120,9 +120,9 @@ graph TB
     end
     
     subgraph "存储层"
-        Redis[(Redis<br/>KV 存储)]
-        PG[(PostgreSQL<br/>向量数据库)]
-        Neo4j[(Neo4j<br/>图数据库)]
+        DragonflyDB[(DragonflyDB<br/>KV 存储)]
+        Qdrant[(Qdrant<br/>向量数据库)]
+        Memgraph[(Memgraph<br/>图数据库)]
         Local[(本地文件<br/>临时存储)]
     end
     
@@ -148,9 +148,9 @@ graph TB
     LightRAG --> KG
     LightRAG --> Vector
     
-    KG --> Redis
-    KG --> Neo4j
-    Vector --> PG
+    KG --> DragonflyDB
+    KG --> Memgraph
+    Vector --> Qdrant
     LightRAG --> Local
     
     LightRAG --> LLM
@@ -228,9 +228,9 @@ graph LR
 <td width="33%">
 
 **💾 存储 & 数据库**
-- Redis
-- PostgreSQL + pgvector
-- Neo4j
+- DragonflyDB（Redis 协议兼容）
+- Qdrant（向量数据库）
+- Memgraph（图数据库）
 - 本地文件系统
 
 </td>
@@ -323,10 +323,11 @@ ARK_API_KEY=your_ark_api_key
 ARK_BASE_URL=https://ark.cn-beijing.volces.com/api/v3
 ARK_MODEL=ep-xxx-xxx
 
-# Embedding 服务（硅基流动）
+# Embedding 服务（火山引擎）
 SF_API_KEY=your_sf_api_key
-SF_BASE_URL=https://api.siliconflow.cn/v1
-SF_EMBEDDING_MODEL=BAAI/bge-m3
+SF_BASE_URL=https://api-vikingdb.volces.com/api/embeddings/v2
+SF_EMBEDDING_MODEL=Qwen/Qwen3-Embedding-0.6B
+EMBEDDING_DIM=1024
 
 # MinerU 模式（推荐远程模式）
 MINERU_MODE=remote
@@ -558,28 +559,25 @@ chmod +x deploy.sh
 
 #### 外部存储配置
 
-支持 Redis + PostgreSQL + Neo4j 外部存储：
+支持 DragonflyDB + Qdrant + Memgraph 外部存储（默认已启用）：
 
 ```bash
 # 在 .env 中配置
 USE_EXTERNAL_STORAGE=true
 
-# Redis 配置
+# DragonflyDB 配置（KV 存储）
 KV_STORAGE=RedisKVStorage
-REDIS_URI=redis://redis:6379/0
+REDIS_URI=redis://dragonflydb:6379/0
 
-# PostgreSQL 配置
-VECTOR_STORAGE=PGVectorStorage
-POSTGRES_HOST=postgres
-POSTGRES_DATABASE=lightrag
-POSTGRES_USER=lightrag
-POSTGRES_PASSWORD=your_password
+# Qdrant 配置（向量存储）
+VECTOR_STORAGE=QdrantVectorDBStorage
+QDRANT_URL=http://qdrant:6333
 
-# Neo4j 配置
-GRAPH_STORAGE=Neo4JStorage
-NEO4J_URI=bolt://neo4j:7687
-NEO4J_USERNAME=neo4j
-NEO4J_PASSWORD=your_password
+# Memgraph 配置（图存储）
+GRAPH_STORAGE=MemgraphStorage
+MEMGRAPH_URI=bolt://memgraph:7687
+MEMGRAPH_USERNAME=
+MEMGRAPH_PASSWORD=
 ```
 
 详细配置参考 [外部存储部署文档](docs/DEPLOYMENT_EXTERNAL_STORAGE.md)。
@@ -815,6 +813,26 @@ docker compose restart
 ```bash
 # 查看支持的格式
 curl http://localhost:8000/docs
+```
+</details>
+
+<details>
+<summary><b>Q3.5: Embedding 维度错误？</b></summary>
+
+如果遇到维度相关错误，需要清理数据并重建：
+
+```bash
+# 停止服务
+docker compose down
+
+# 删除所有 volume（清空数据库）
+docker volume rm rag-api_dragonflydb_data rag-api_qdrant_data rag-api_memgraph_data
+
+# 修改 .env 中的 EMBEDDING_DIM
+EMBEDDING_DIM=1024  # 或 4096，必须与模型匹配
+
+# 重新启动
+docker compose up -d
 ```
 </details>
 

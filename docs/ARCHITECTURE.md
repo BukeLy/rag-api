@@ -57,9 +57,9 @@ flowchart TD
     I1 --> M[(外部存储<br/>租户隔离命名空间)]
     L --> M
 
-    M --> N1[Redis: tenant_a:kv_store]
-    M --> N2[PostgreSQL: tenant_a:vectors]
-    M --> N3[Neo4j: tenant_a:GraphDB]
+    M --> N1[DragonflyDB: tenant_a:kv_store]
+    M --> N2[Qdrant: tenant_a:vectors]
+    M --> N3[Memgraph: tenant_a:GraphDB]
 
     style M fill:#e1f5ff
     style J fill:#fff4e1
@@ -78,14 +78,14 @@ flowchart TD
     C --> D3[tenant_c ...]
 
     D1 --> E1[LightRAG<br/>workspace=tenant_a]
-    E1 --> F1[Redis: tenant_a:*]
-    E1 --> F2[PostgreSQL: tenant_a:*]
-    E1 --> F3[Neo4j: tenant_a:*]
+    E1 --> F1[DragonflyDB: tenant_a:*]
+    E1 --> F2[Qdrant: tenant_a:*]
+    E1 --> F3[Memgraph: tenant_a:*]
 
     D2 --> E2[LightRAG<br/>workspace=tenant_b]
-    E2 --> G1[Redis: tenant_b:*]
-    E2 --> G2[PostgreSQL: tenant_b:*]
-    E2 --> G3[Neo4j: tenant_b:*]
+    E2 --> G1[DragonflyDB: tenant_b:*]
+    E2 --> G2[Qdrant: tenant_b:*]
+    E2 --> G3[Memgraph: tenant_b:*]
 
     F1 & F2 & F3 --> H[完全隔离的知识图谱]
     G1 & G2 & G3 --> H
@@ -403,9 +403,9 @@ LightRAG(
 
 **效果**:
 - 文件存储:`./rag_local_storage/tenant_a/`, `./rag_local_storage/tenant_b/`
-- Redis 键:`tenant_a:kv_store`, `tenant_b:kv_store`
-- PostgreSQL 表:`tenant_a:vectors`, `tenant_b:vectors`
-- Neo4j 图:`tenant_a:GraphDB`, `tenant_b:GraphDB`
+- DragonflyDB 键:`tenant_a:kv_store`, `tenant_b:kv_store`
+- Qdrant Collection:`tenant_a:vectors`, `tenant_b:vectors`
+- Memgraph 图:`tenant_a:GraphDB`, `tenant_b:GraphDB`
 
 **2. 实例池管理(LRU 缓存)**
 
@@ -652,8 +652,8 @@ LightRAG(
 | 类型 | 模型 | 提供商 | 用途 |
 |------|------|--------|------|
 | LLM | seed-1-6-250615 | 豆包/火山引擎 | 实体提取、答案生成 |
-| Embedding | Qwen/Qwen3-Embedding-8B | 硅基流动 | 向量化(4096维) |
-| Rerank | Qwen/Qwen3-Reranker-8B | 硅基流动 | 重排序 |
+| Embedding | Qwen/Qwen3-Embedding-0.6B | 火山引擎 | 向量化(1024维) |
+| Rerank | Qwen/Qwen2-7B-Instruct | 火山引擎 | 重排序 |
 | Vision | seed-1-6-250615 | 豆包/火山引擎 | 图片描述 |
 
 ---
@@ -710,9 +710,9 @@ graph TB
 
     C --> D[(外部存储<br/>租户隔离)]
 
-    D --> E[Redis]
-    D --> F[PostgreSQL<br/>pgvector]
-    D --> G[Neo4j]
+    D --> E[DragonflyDB]
+    D --> F[Qdrant]
+    D --> G[Memgraph]
 
     E --> E1[tenant_a:kv_store]
     E --> E2[tenant_b:kv_store]
@@ -943,7 +943,7 @@ MAX_TOTAL_TOKENS=30000
 DOCUMENT_PROCESSING_CONCURRENCY=1
 ```
 
-#### 外部存储配置(可选)
+#### 外部存储配置（默认已启用）
 
 ```bash
 # 外部存储开关
@@ -951,23 +951,20 @@ USE_EXTERNAL_STORAGE=true
 
 # 存储类型选择
 KV_STORAGE=RedisKVStorage
-VECTOR_STORAGE=PGVectorStorage
-GRAPH_STORAGE=Neo4JStorage
+VECTOR_STORAGE=QdrantVectorDBStorage
+GRAPH_STORAGE=MemgraphStorage
 
-# Redis 配置
-REDIS_URI=redis://redis:6379/0
+# DragonflyDB 配置
+REDIS_URI=redis://dragonflydb:6379/0
 
-# PostgreSQL 配置
-POSTGRES_HOST=postgres
-POSTGRES_PORT=5432
-POSTGRES_DATABASE=lightrag
-POSTGRES_USER=lightrag
-POSTGRES_PASSWORD=your_password
+# Qdrant 配置
+QDRANT_URL=http://qdrant:6333
+# QDRANT_API_KEY=your_api_key  # 生产环境建议启用
 
-# Neo4j 配置
-NEO4J_URI=bolt://neo4j:7687
-NEO4J_USERNAME=neo4j
-NEO4J_PASSWORD=your_password
+# Memgraph 配置
+MEMGRAPH_URI=bolt://memgraph:7687
+MEMGRAPH_USERNAME=
+MEMGRAPH_PASSWORD=
 ```
 
 ---

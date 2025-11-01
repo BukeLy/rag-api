@@ -1,293 +1,412 @@
-# 远端外部存储功能部署指南
+# 外部存储部署指南
 
-## 📋 问题回顾
+## 📋 存储架构说明
 
-**之前的错误**：
-```
-TypeError: LightRAG.__init__() got an unexpected keyword argument 'kv_storage_cls_kwargs'
-```
+RAG API 采用高性能外部存储架构：**DragonflyDB + Qdrant + Memgraph**。
 
-**根本原因**：LightRAG 1.4.9.4 通过环境变量读取外部存储配置，而非初始化参数。
+### 存储组件
 
-**修复状态**：✅ 已在 dev 分支完成修复（commit: 0a8c377）
+| 组件 | 用途 | 特点 |
+|------|------|------|
+| **DragonflyDB** | KV 存储 | • Redis 协议兼容<br/>• 高性能（25x Redis）<br/>• 自动快照备份 |
+| **Qdrant** | 向量存储 | • 专业向量数据库<br/>• 无维度限制<br/>• 分布式扩展 |
+| **Memgraph** | 图存储 | • 高性能图计算<br/>• Cypher 兼容<br/>• 实时分析 |
 
 ---
 
-## 🚀 部署步骤
+## 🚀 快速开始
 
-### 1️⃣ 连接到测试服务器
+### 前提条件
+
+- Docker 和 Docker Compose 已安装
+- 已克隆 rag-api 项目
+
+### 一键部署（推荐）
 
 ```bash
-ssh -i /Users/chengjie/Downloads/chengjie.pem root@45.78.223.205
-cd ~/rag-api
+# 1. 克隆项目
+git clone https://github.com/BukeLy/rag-api.git
+cd rag-api
+
+# 2. 配置环境变量
+cp env.example .env
+nano .env  # 填入你的 API 密钥
+
+# 3. 运行一键部署脚本
+chmod +x deploy.sh
+./deploy.sh
+
+# 选择模式 1（生产模式）
+# 脚本会自动启动：
+# - rag-api 服务
+# - DragonflyDB
+# - Qdrant
+# - Memgraph
+# - LightRAG WebUI
+
+# 4. 验证服务
+curl http://localhost:8000/
 ```
 
-### 2️⃣ 停止服务并清理所有数据 ⚠️
+---
 
-**重要**：按用户要求，清理所有现有数据，确保干净部署。
+## 📝 环境变量配置
 
-```bash
-# 停止所有服务
-docker compose down
+### 必需配置
 
-# 删除所有容器卷（包括 Redis、PostgreSQL、Neo4j 数据）
-docker compose down -v
-
-# 清理本地文件存储目录
-rm -rf rag_local_storage
-
-# 可选：清理日志文件（如果需要）
-# rm -rf logs/*
-
-# 验证清理结果
-ls -la rag_local_storage 2>/dev/null && echo "⚠️ 文件夹仍存在！" || echo "✅ 本地存储已清理"
-docker volume ls | grep rag && echo "⚠️ 卷仍存在！" || echo "✅ Docker 卷已清理"
-```
-
-### 3️⃣ 拉取最新代码
+在 `.env` 文件中配置以下参数：
 
 ```bash
-# 确保在 dev 分支
-git checkout dev
-
-# 拉取最新修复
-git pull origin dev
-
-# 验证是否获取了修复提交
-git log --oneline -1
-# 应显示：0a8c377 fix: 修复外部存储初始化错误（LightRAG 1.4.9.4 兼容性）
-```
-
-### 4️⃣ 更新 .env 配置
-
-**选项 A：启用外部存储（推荐）**
-
-编辑 `.env` 文件，添加/修改以下配置：
-
-```bash
-# === 外部存储配置 ===
+# ====== 存储架构配置 ======
 USE_EXTERNAL_STORAGE=true
+
+# KV 存储：DragonflyDB（Redis 协议兼容）
 KV_STORAGE=RedisKVStorage
-VECTOR_STORAGE=PGVectorStorage
-GRAPH_STORAGE=Neo4JStorage
+REDIS_URI=redis://dragonflydb:6379/0
 
-# Redis 配置（注意：使用 REDIS_URI 而非分离的 host/port）
-REDIS_URI=redis://redis:6379/0
-REDIS_WORKSPACE=default
+# 向量存储：Qdrant（无维度限制，支持 4096 维度）
+VECTOR_STORAGE=QdrantVectorDBStorage
+QDRANT_URL=http://qdrant:6333
+# QDRANT_API_KEY=your_api_key  # 生产环境建议启用
 
-# PostgreSQL 配置（注意：使用 POSTGRES_DATABASE 而非 POSTGRES_DB）
-POSTGRES_HOST=postgres
-POSTGRES_PORT=5432
-POSTGRES_DATABASE=lightrag
-POSTGRES_USER=lightrag
-POSTGRES_PASSWORD=<安全密码>  # 请替换为安全密码
-POSTGRES_WORKSPACE=default
-POSTGRES_MAX_CONNECTIONS=20
+# 图存储：Memgraph（比 Neo4j 快 50 倍）
+GRAPH_STORAGE=MemgraphStorage
+MEMGRAPH_URI=bolt://memgraph:7687
+MEMGRAPH_USERNAME=  # Memgraph 默认无认证
+MEMGRAPH_PASSWORD=
 
-# Neo4j 配置
-NEO4J_URI=bolt://neo4j:7687
-NEO4J_USERNAME=neo4j
-NEO4J_PASSWORD=<安全密码>  # 请替换为安全密码
-NEO4J_WORKSPACE=default
+# ====== Embedding 维度配置（极其重要）======
+# 必须与模型匹配：
+# - Qwen3-Embedding-0.6B → 1024 维度（当前配置，配合 Rerank 效果好）
+# - Qwen3-Embedding-8B → 4096 维度（更高精度，需更多资源）
+EMBEDDING_DIM=1024
+
+# ====== LLM 配置（豆包大模型）======
+ARK_API_KEY=your_ark_api_key_here
+ARK_BASE_URL=https://ark.cn-beijing.volces.com/api/v3
+ARK_MODEL=seed-1-6-250615
+
+# ====== Embedding 配置（火山引擎）======
+SF_API_KEY=your_sf_api_key_here
+SF_BASE_URL=https://api-vikingdb.volces.com/api/embeddings/v2
+SF_EMBEDDING_MODEL=Qwen/Qwen3-Embedding-0.6B  # 1024 维度
 ```
 
-**快速配置命令**（复制现有密码）：
+---
+
+## 🐳 Docker 部署
+
+### 生产模式
 
 ```bash
-# 从现有 .env 获取密码
-NEO4J_PASS=$(grep "^NEO4J_PASSWORD=" .env | cut -d'=' -f2)
-POSTGRES_PASS=$(grep "^POSTGRES_PASSWORD=" .env | cut -d'=' -f2)
+# 启动所有服务
+docker compose -f docker-compose.yml up -d
 
-# 批量更新配置
-cat >> .env <<EOF
+# 查看日志
+docker compose logs -f
 
-# === 外部存储配置（修复后的配置）===
-USE_EXTERNAL_STORAGE=true
-KV_STORAGE=RedisKVStorage
-VECTOR_STORAGE=PGVectorStorage
-GRAPH_STORAGE=Neo4JStorage
-
-# Redis 配置
-REDIS_URI=redis://redis:6379/0
-REDIS_WORKSPACE=default
-
-# PostgreSQL 配置
-POSTGRES_HOST=postgres
-POSTGRES_PORT=5432
-POSTGRES_DATABASE=lightrag
-POSTGRES_USER=lightrag
-POSTGRES_PASSWORD=$POSTGRES_PASS
-POSTGRES_WORKSPACE=default
-POSTGRES_MAX_CONNECTIONS=20
-
-# Neo4j 配置
-NEO4J_URI=bolt://neo4j:7687
-NEO4J_USERNAME=neo4j
-NEO4J_PASSWORD=$NEO4J_PASS
-NEO4J_WORKSPACE=default
-EOF
-```
-
-**选项 B：暂时使用文件存储（保守方案）**
-
-如果想先测试代码修复是否有效，可以先不启用外部存储：
-
-```bash
-USE_EXTERNAL_STORAGE=false
-# 其他配置保持不变
-```
-
-### 5️⃣ 启动服务
-
-```bash
-# 构建并启动所有服务
-docker compose up -d --build
-
-# 实时查看日志（检查是否有错误）
-docker compose logs -f rag-api
-```
-
-### 6️⃣ 验证部署
-
-**检查服务状态**：
-
-```bash
+# 验证服务状态
 docker compose ps
-# 所有服务应显示 healthy 状态
+
+# 预期输出：
+# NAME                COMMAND             SERVICE          STATUS
+# rag-api             "uv run uvicorn..." rag-api          Up (healthy)
+# rag-dragonflydb     "dragonfly..."      dragonflydb      Up (healthy)
+# rag-qdrant          "/qdrant/qdrant..." qdrant           Up (healthy)
+# rag-memgraph        "docker-entry..."   memgraph         Up (healthy)
+# lightrag-webui      "python -m..."      lightrag-webui   Up
 ```
 
-**检查日志关键信息**：
+### 开发模式（代码热重载）
 
-如果启用了外部存储，应看到：
+```bash
+# 启动开发环境
+docker compose -f docker-compose.dev.yml up -d
 
-```
-🔌 Using external storage backends:
-   - KV Storage: RedisKVStorage
-   - Vector Storage: PGVectorStorage
-   - Graph Storage: Neo4JStorage
-   Redis: redis://redis:6379/0
-   PostgreSQL: postgres:5432/lightrag
-   Neo4j: bolt://neo4j:7687 (user: neo4j)
+# 查看日志
+docker compose -f docker-compose.dev.yml logs -f rag-api
 ```
 
-**不应该再看到**：
+---
 
-```
-TypeError: LightRAG.__init__() got an unexpected keyword argument 'kv_storage_cls_kwargs'
-```
+## ✅ 验证部署
 
-**测试 API**：
+### 1. 检查服务状态
 
 ```bash
 # 健康检查
-curl http://45.78.223.205:8000/
+curl http://localhost:8000/
 
-# 测试查询（应该正常工作）
-curl -s -X POST "http://45.78.223.205:8000/query" \
+# 预期响应：
+{
+  "status": "running",
+  "service": "RAG API",
+  "version": "1.0.0",
+  "architecture": "multi-tenant"
+}
+```
+
+### 2. 检查存储连接
+
+```bash
+# 查看启动日志，应看到：
+docker compose logs rag-api | grep "外部存储"
+
+# 预期输出：
+# 🔌 Using external storage backends:
+#    - KV Storage: RedisKVStorage
+#    - Vector Storage: QdrantVectorDBStorage
+#    - Graph Storage: MemgraphStorage
+#    DragonflyDB: redis://dragonflydb:6379/0
+#    Qdrant: http://qdrant:6333
+#    Memgraph: bolt://memgraph:7687
+```
+
+### 3. 测试存储连接
+
+```bash
+# 测试 DragonflyDB
+docker compose exec dragonflydb redis-cli ping
+# 预期输出：PONG
+
+# 测试 Qdrant
+curl http://localhost:6333/healthz
+# 预期输出：{"status":"ok"}
+
+# 测试 Memgraph
+docker compose exec memgraph mgconsole --host 127.0.0.1 --port 7687 -c "RETURN 1;"
+# 预期输出：1
+```
+
+### 4. 功能测试
+
+```bash
+# 上传测试文档
+curl -X POST "http://localhost:8000/insert?tenant_id=test" \
+  -F "file=@test.pdf"
+
+# 查询测试
+curl -X POST "http://localhost:8000/query?tenant_id=test" \
   -H "Content-Type: application/json" \
-  -d '{"query": "test query", "mode": "naive"}'
+  -d '{"query": "测试查询", "mode": "naive"}'
 ```
 
 ---
 
-## 📊 预期结果
+## 🔧 性能优化
 
-### ✅ 成功指标
+### DragonflyDB 优化
 
-1. **服务启动无错误**：
-   - 日志中不再出现 `kv_storage_cls_kwargs` 错误
-   - 所有容器状态为 `healthy`
+```yaml
+# docker-compose.yml
+dragonflydb:
+  command: >
+    dragonfly
+    --dir=/data
+    --snapshot_cron="0 */6 * * *"  # 每 6 小时快照
+    --maxmemory=2048mb              # 最大内存 2GB
+    --keys_output_limit=1024
+```
 
-2. **外部存储连接成功**（如果启用）：
-   - 日志显示 "🔌 Using external storage backends"
-   - Redis、PostgreSQL、Neo4j 连接成功
+### Qdrant 优化
 
-3. **API 功能正常**：
-   - 文档上传成功
-   - 查询返回结果
-   - 性能符合预期（15-20s 首次查询，6-11s 后续查询）
+```yaml
+# docker-compose.yml
+qdrant:
+  environment:
+    # 性能优化配置
+    - QDRANT__SERVICE__GRPC_PORT=6334
+    - QDRANT__SERVICE__HTTP_PORT=6333
+    - QDRANT__LOG_LEVEL=INFO
+```
 
-### 📈 性能提升（启用外部存储后）
+### Memgraph 优化
 
-根据之前的测试：
-- 查询速度提升约 **25%**
-- 支持水平扩展和高可用
-- 数据持久化更可靠（ACID 事务）
+```yaml
+# docker-compose.yml
+memgraph:
+  environment:
+    - MEMGRAPH_LOG_LEVEL=INFO
+  deploy:
+    resources:
+      limits:
+        memory: 4G  # 生产环境可增加内存限制
+```
 
 ---
 
-## 🔧 故障排查
+## 📊 监控和维护
+
+### 查看存储使用情况
+
+```bash
+# DragonflyDB 内存使用
+docker compose exec dragonflydb redis-cli INFO memory
+
+# Qdrant 集合信息
+curl http://localhost:6333/collections
+
+# Memgraph 图统计
+docker compose exec memgraph mgconsole -c "SHOW STORAGE INFO;"
+```
+
+### 数据备份
+
+```bash
+# DragonflyDB 快照备份（自动每 6 小时）
+docker compose exec dragonflydb redis-cli BGSAVE
+
+# Qdrant 备份
+docker run --rm -v rag-api_qdrant_data:/data -v $(pwd)/backups:/backup \
+  alpine tar czf /backup/qdrant_$(date +%Y%m%d_%H%M%S).tar.gz /data
+
+# Memgraph 备份
+docker compose exec memgraph mgconsole -c "CREATE SNAPSHOT;"
+```
+
+### 日志查看
+
+```bash
+# 查看所有服务日志
+docker compose logs -f
+
+# 查看特定服务日志
+docker compose logs -f dragonflydb
+docker compose logs -f qdrant
+docker compose logs -f memgraph
+```
+
+---
+
+## 🐛 故障排查
 
 ### 问题 1：服务启动失败
 
 ```bash
 # 查看详细错误日志
-docker compose logs rag-api | tail -100
+docker compose logs rag-api
 
-# 检查配置文件语法
-cat .env | grep -E "(REDIS_URI|POSTGRES_DATABASE|NEO4J_URI)"
+# 检查容器状态
+docker compose ps
+
+# 检查端口占用
+netstat -tulpn | grep -E "6379|6333|7687"
 ```
 
-### 问题 2：外部存储连接失败
+### 问题 2：存储连接失败
 
 ```bash
-# 检查数据库服务状态
-docker compose ps redis postgres neo4j
+# 检查存储服务状态
+docker compose ps dragonflydb qdrant memgraph
 
-# 测试 Redis 连接
-docker compose exec redis redis-cli ping
+# 测试网络连接
+docker compose exec rag-api ping dragonflydb
+docker compose exec rag-api ping qdrant
+docker compose exec rag-api ping memgraph
 
-# 测试 PostgreSQL 连接
-docker compose exec postgres psql -U lightrag -d lightrag -c "SELECT 1;"
-
-# 测试 Neo4j 连接
-docker compose exec neo4j cypher-shell -u neo4j -p <password> "RETURN 1;"
+# 检查配置是否正确
+docker compose exec rag-api env | grep -E "REDIS_URI|QDRANT_URL|MEMGRAPH_URI"
 ```
 
-### 问题 3：仍然看到 kv_storage_cls_kwargs 错误
-
-确认代码已更新：
+### 问题 3：Embedding 维度错误
 
 ```bash
-# 检查 src/rag.py 是否包含修复
-grep "kv_storage_cls_kwargs" src/rag.py
-# 应该没有输出（该参数已删除）
+# 如果遇到维度不匹配错误，需要清理数据重建：
 
-# 重新构建镜像
-docker compose up -d --build --force-recreate
+# 停止服务
+docker compose down
+
+# 删除所有 volume（清空数据库）
+docker volume rm rag-api_dragonflydb_data rag-api_qdrant_data rag-api_memgraph_data
+
+# 修改 .env 中的 EMBEDDING_DIM
+# EMBEDDING_DIM=1024  # 或 4096
+
+# 重新启动
+docker compose up -d
+```
+
+### 问题 4：Qdrant 启动慢
+
+```bash
+# Qdrant 首次启动可能需要 30-60 秒初始化存储
+
+# 查看启动日志
+docker compose logs -f qdrant
+
+# 等待 healthcheck 通过
+docker compose ps qdrant
+# 应显示 "healthy" 状态
 ```
 
 ---
 
-## 📝 回滚方案
+## 🔒 生产环境安全
 
-如果部署出现问题，快速回滚到文件存储：
+### 1. 启用认证
 
 ```bash
-# 1. 修改 .env
-sed -i 's/USE_EXTERNAL_STORAGE=true/USE_EXTERNAL_STORAGE=false/' .env
+# Qdrant API Key（生产环境推荐）
+# .env
+QDRANT_API_KEY=your_secure_api_key_here
 
-# 2. 重启服务
-docker compose restart rag-api
+# Memgraph 认证（可选）
+MEMGRAPH_USERNAME=admin
+MEMGRAPH_PASSWORD=secure_password_here
+```
 
-# 3. 验证
-docker compose logs -f rag-api
-# 应看到："📁 Using local file storage (default)"
+### 2. 网络隔离
+
+```yaml
+# docker-compose.yml
+# 确保存储服务只在内网可见
+dragonflydb:
+  ports:
+    - "127.0.0.1:6379:6379"  # 只绑定本地
+
+qdrant:
+  ports:
+    - "127.0.0.1:6333:6333"
+
+memgraph:
+  ports:
+    - "127.0.0.1:7687:7687"
+```
+
+### 3. 数据持久化
+
+```yaml
+# docker-compose.yml
+volumes:
+  dragonflydb_data:
+    driver: local
+  qdrant_data:
+    driver: local
+  memgraph_data:
+    driver: local
 ```
 
 ---
 
-## 🎯 下一步
+## 📖 参考资料
 
-1. ✅ **验证功能**：上传测试文档并查询
-2. ✅ **监控性能**：使用 `/monitor` 端点查看系统指标
-3. ✅ **数据迁移**（可选）：如果需要从之前的备份恢复数据，使用 `scripts/migrate_to_external_storage.py`
+- **DragonflyDB 文档**: https://www.dragonflydb.io/docs
+- **Qdrant 文档**: https://qdrant.tech/documentation/
+- **Memgraph 文档**: https://memgraph.com/docs
+- **架构设计文档**: [ARCHITECTURE.md](./ARCHITECTURE.md)
+- **使用指南**: [USAGE.md](./USAGE.md)
 
 ---
 
-## 📞 需要帮助？
+## 🆘 需要帮助？
 
 如果遇到问题：
-1. 查看详细日志：`docker compose logs rag-api | tail -200`
-2. 检查数据库状态：`docker compose ps`
-3. 查阅文档：`CLAUDE.md` - External Storage Configuration 章节
+1. 查看详细日志：`docker compose logs -f`
+2. 检查服务状态：`docker compose ps`
+3. 查阅文档：`docs/ARCHITECTURE.md`
+4. 提交 Issue：https://github.com/BukeLy/rag-api/issues
+
+---
+
+**最后更新**：2025-11-01
+**架构版本**：DragonflyDB + Qdrant + Memgraph

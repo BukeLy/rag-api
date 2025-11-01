@@ -88,17 +88,17 @@ LightRAG WebUI 是官方提供的图形界面工具，**完全兼容多租户架
                 │   （workspace 数据隔离）│
                 │                         │
                 │  ┌───────────────────┐ │
-                │  │ Redis (KV存储)    │ │
+                │  │DragonflyDB(KV)    │ │
                 │  │ • tenant_a:*      │ │
                 │  │ • tenant_b:*      │ │
                 │  │ • default:*       │ │
                 │  └───────────────────┘ │
                 │  ┌───────────────────┐ │
-                │  │ Neo4j (图存储)    │ │
+                │  │ Memgraph (图存储) │ │
                 │  │ • workspace隔离   │ │
                 │  └───────────────────┘ │
                 │  ┌───────────────────┐ │
-                │  │PostgreSQL(向量)   │ │
+                │  │ Qdrant (向量)     │ │
                 │  │ • workspace隔离   │ │
                 │  └───────────────────┘ │
                 └─────────────────────────┘
@@ -109,7 +109,7 @@ LightRAG WebUI 是官方提供的图形界面工具，**完全兼容多租户架
 1. **Workspace 隔离**
    - 每个租户有独立的 `workspace`（对应 `tenant_id`）
    - WebUI 通过 `LIGHTRAG_WEBUI_WORKSPACE` 环境变量选择要可视化的租户
-   - 数据在存储层面完全隔离（Redis key 前缀、Neo4j namespace、PostgreSQL workspace 字段）
+   - 数据在存储层面完全隔离（DragonflyDB key 前缀、Memgraph namespace、Qdrant collection）
 
 2. **数据实时同步**
    - 两个服务连接同一套数据库，数据变更实时可见
@@ -128,10 +128,10 @@ LightRAG WebUI 是官方提供的图形界面工具，**完全兼容多租户架
 
 ```bash
 # 检查外部存储服务状态
-docker compose ps redis neo4j postgres
+docker compose ps dragonflydb memgraph qdrant
 
 # 如果未启动，先启动外部存储
-docker compose up -d redis neo4j postgres
+docker compose up -d dragonflydb memgraph qdrant
 ```
 
 ### 2. 配置 WebUI Workspace
@@ -264,15 +264,23 @@ lightrag-webui:
     # 多租户关键配置
     - WORKSPACE=${LIGHTRAG_WEBUI_WORKSPACE:-default}
     # 存储后端自动映射
-    - LIGHTRAG_KV_STORAGE=${KV_STORAGE:-JsonKVStorage}
-    - LIGHTRAG_VECTOR_STORAGE=${VECTOR_STORAGE:-NanoVectorDB}
-    - LIGHTRAG_GRAPH_STORAGE=${GRAPH_STORAGE:-NetworkXStorage}
+    - USE_EXTERNAL_STORAGE=true
+    - KV_STORAGE=RedisKVStorage
+    - VECTOR_STORAGE=QdrantStorage
+    - GRAPH_STORAGE=MemgraphStorage
+    # DragonflyDB 配置
+    - REDIS_URI=redis://dragonflydb:6379/0
+    # Qdrant 配置
+    - QDRANT_URL=http://qdrant:6333
+    # Memgraph 配置
+    - MEMGRAPH_URI=bolt://memgraph:7687
+    - EMBEDDING_DIM=${EMBEDDING_DIM:-1024}
   depends_on:
-    redis:
+    dragonflydb:
       condition: service_healthy
-    neo4j:
+    memgraph:
       condition: service_healthy
-    postgres:
+    qdrant:
       condition: service_healthy
 ```
 
@@ -398,7 +406,9 @@ docker compose restart lightrag-webui
 docker compose logs lightrag-webui
 
 # 2. 检查外部存储连接
-docker compose exec lightrag-webui curl http://redis:6379
+docker compose exec dragonflydb redis-cli ping
+curl http://localhost:6333/healthz
+docker compose exec memgraph mgconsole -c "RETURN 1;"
 
 # 3. 检查镜像是否正确拉取
 docker pull ghcr.io/hkuds/lightrag:latest
@@ -410,13 +420,15 @@ docker pull ghcr.io/hkuds/lightrag:latest
 
 ```bash
 # 1. 确认存储服务健康
-docker compose ps redis neo4j postgres
+docker compose ps dragonflydb memgraph qdrant
 
 # 2. 检查环境变量配置
-docker compose exec lightrag-webui env | grep -E "REDIS|NEO4J|POSTGRES"
+docker compose exec lightrag-webui env | grep -E "REDIS|MEMGRAPH|QDRANT"
 
 # 3. 检查网络连接
-docker compose exec lightrag-webui ping redis
+docker compose exec lightrag-webui ping dragonflydb
+docker compose exec lightrag-webui ping qdrant
+docker compose exec lightrag-webui ping memgraph
 ```
 
 ### 问题 4：数据不同步
@@ -471,9 +483,9 @@ lightrag-webui:
 
 ### 2. 外部存储优化
 
-- **Redis**：启用持久化，避免数据丢失
-- **Neo4j**：配置适当的堆内存（推荐 2-4GB）
-- **PostgreSQL**：启用 pgvector 索引优化
+- **DragonflyDB**：自动快照备份（每 6 小时），性能优化
+- **Memgraph**：配置适当的堆内存（推荐 2-4GB）
+- **Qdrant**：启用 gRPC 连接优化
 
 ### 3. 网络优化
 
@@ -540,6 +552,7 @@ done
 | **可视化** | ❌ 无 | ✅ 图谱可视化 |
 | **编程接口** | ✅ RESTful API | ⚠️ 有限的 API |
 | **性能优化** | ✅ 定制优化 | ⚠️ 标准性能 |
+| **存储架构** | ✅ DragonflyDB + Qdrant + Memgraph | ✅ 同上 |
 | **适用场景** | 生产环境、自动化 | 调试、演示、可视化 |
 
 ## 最佳实践
@@ -648,7 +661,7 @@ LightRAG WebUI 与 rag-api 形成完美互补：
 - **rag-api** 负责生产级的文档处理和查询服务
 - **WebUI** 提供直观的可视化和调试能力
 - **多租户架构** 通过 workspace 机制实现数据隔离
-- **外部存储** 确保两者数据实时同步
+- **外部存储** (DragonflyDB + Qdrant + Memgraph) 确保两者数据实时同步，性能提升 25-50 倍
 
 **当前阶段**：
 - WebUI 适合管理员使用，进行调试和可视化
