@@ -286,6 +286,23 @@ docker compose up -d
 - 调试第三方 API 集成时，直接 curl 验证响应格式
 **教训**：集成第三方 API 时，先用 curl 测试真实响应，再编写解析代码，避免基于文档假设
 
+### BUG #8: MinerU full_zip_url 提取位置错误（2025-11-02）
+**问题**：状态正确识别为 `done`，但处理失败："MinerU result missing full_zip_url"
+**根因**：
+1. BUG #7 修复将 `full_zip_url` 存储到 `files` 数组中（每个文件一个）
+2. `TaskResult` 返回时尝试从顶层 `data.get("full_zip_url")` 获取（不存在）
+3. MinerU API 响应：`data.extract_result[0].full_zip_url`（在数组中）
+4. `result.full_zip_url` 始终为 None，导致下载失败
+**修复**：✅ 从第一个文件结果提取 full_zip_url
+```python
+# 提取 full_zip_url（从第一个文件结果中获取）
+full_zip_url = files_result[0].get("full_zip_url") if files_result else None
+
+return TaskResult(
+    ...
+    full_zip_url=full_zip_url,  # 从 files[0] 提取，而非 data
+)
+
 ---
 
 ## Recent Optimizations (2025-10-30)
@@ -296,9 +313,21 @@ docker compose up -d
 
 ---
 
+**测试验证**：
+- 同时修复异步和同步两个方法
+- vlm_mode=off 测试成功（2分钟完成）
+- vlm_mode=full 识别 full_zip_url，但 ZIP 内容结构不同（另一个问题）
+**关键发现**：
+- 一个 BUG 修复可能引入新 BUG：状态解析修复后数据结构改变
+- 需要同步修复所有使用该数据的代码路径
+- 测试需覆盖完整数据流，从 API 响应到最终使用
+**教训**：修复 API 解析后，追踪数据流向，确保所有下游代码路径同步更新
+
+---
+
 **最后更新**：2025-11-02
 
-**核心教训**：
+**核心教训（8 个BUG）**：
 1. **维度配置**：是数据库初始化基石，修改需删除 volume 重建（Docker volume 前缀是**目录名**）
 2. **生产环境配置**：`MINERU_MODE=local` 导致 43 分钟宕机，生产必须 `remote`，Office 文件转换可能膨胀 10-20 倍
 3. **持久化存储**：`/tmp` 目录在容器重启后清空，MinerU 远程模式依赖文件 URL 长期有效
@@ -306,7 +335,8 @@ docker compose up -d
 5. **API 超时配置**：所有第三方 API 调用必须显式配置超时，写入环境变量可配置，避免硬编码
 6. **API 响应结构**：先用 curl 测试真实响应，再编写解析代码，不要基于文档假设字段位置
 7. **状态聚合逻辑**：批量任务状态需要独立遍历聚合，不能在收集数据时同步设置，避免提前终止
-8. **命令行错误避免**：
-   - curl 上传文件时路径包含空格需切换到文件目录或正确引号
-   - 测试第三方 API 时直接用 curl 验证，不要写复杂脚本容易出错
-   - 简单任务用简单工具，避免过度工程化
+8. **数据流追踪**：修复 API 解析后，追踪数据流向，确保所有下游代码路径同步更新（full_zip_url 位置变化）
+9. **开发环境部署**：
+   - 生产：`docker compose up -d --build`（重新构建镜像）
+   - 开发：`git pull` 即可（代码热重载，volume 挂载）
+   - 错误操作：在开发环境执行 `--build` 浪费时间且无必要
