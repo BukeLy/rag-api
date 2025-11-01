@@ -409,12 +409,15 @@ class MinerUClient:
                                     elif file_state in ["waiting-file", "pending", "running", "converting"]:
                                         batch_status = file_state  # 有任何处理中则整体处理中
 
+                            # 提取 full_zip_url（从第一个文件结果中获取）
+                            full_zip_url = files_result[0].get("full_zip_url") if files_result else None
+
                             return TaskResult(
                                 task_id=batch_id,
                                 status=state_map.get(batch_status, TaskStatus.PENDING),
                                 files=files_result,
                                 error_message=data.get("err_msg"),
-                                full_zip_url=data.get("full_zip_url"),
+                                full_zip_url=full_zip_url,
                                 extract_progress=data.get("extract_progress"),
                             )
                         else:
@@ -485,12 +488,15 @@ class MinerUClient:
                         elif file_state in ["waiting-file", "pending", "running", "converting"]:
                             batch_status = file_state  # 有任何处理中则整体处理中
 
+                # 提取 full_zip_url（从第一个文件结果中获取）
+                full_zip_url = files_result[0].get("full_zip_url") if files_result else None
+
                 return TaskResult(
                     task_id=batch_id,
                     status=state_map.get(batch_status, TaskStatus.PENDING),
                     files=files_result,
                     error_message=data.get("err_msg"),
-                    full_zip_url=data.get("full_zip_url"),
+                    full_zip_url=full_zip_url,
                     extract_progress=data.get("extract_progress"),
                 )
             else:
