@@ -59,7 +59,12 @@ class MinerUConfig:
     poll_timeout: float = field(
         default_factory=lambda: float(os.getenv("MINERU_POLL_TIMEOUT", "600.0"))
     )
-    
+
+    # HTTP 请求超时配置（从环境变量读取）
+    http_timeout: float = field(
+        default_factory=lambda: float(os.getenv("MINERU_HTTP_TIMEOUT", "60.0"))
+    )
+
     def __post_init__(self):
         """验证配置"""
         if not self.api_token:
@@ -256,7 +261,9 @@ class MinerUClient:
             try:
                 async with self.semaphore:
                     async with aiohttp.ClientSession() as session:
-                        async with session.post(url, headers=headers, json=data) as response:
+                        # 使用配置的 HTTP 超时
+                        timeout = aiohttp.ClientTimeout(total=self.config.http_timeout)
+                        async with session.post(url, headers=headers, json=data, timeout=timeout) as response:
                             result = await response.json()
                             
                             if response.status == 200 and result.get("code") == 0:
@@ -357,7 +364,9 @@ class MinerUClient:
         try:
             async with self.semaphore:
                 async with aiohttp.ClientSession() as session:
-                    async with session.get(url, headers=headers) as response:
+                    # 使用配置的 HTTP 超时，避免长时间等待
+                    timeout = aiohttp.ClientTimeout(total=self.config.http_timeout)
+                    async with session.get(url, headers=headers, timeout=timeout) as response:
                         result = await response.json()
                         
                         if response.status == 200 and result.get("code") == 0:

@@ -249,6 +249,22 @@ docker compose up -d
 - 生产和开发环境需同步配置，保持一致性
 **未来优化**：使用 Redis 持久化 `file_mapping`，支持水平扩展
 
+### BUG #6: MinerU 客户端 HTTP 请求超时（2025-11-02）
+**问题**：MinerU remote 模式任务失败，错误 "Connection timeout to host https://mineru.net/api/v4/extract-results/batch/..."
+**根因**：
+1. `src/mineru_client.py` 中 aiohttp GET/POST 请求未设置 timeout 参数
+2. 默认超时（300秒）导致长时间等待后连接中断
+3. MinerU API 实际已完成处理，但客户端无法获取结果
+**修复**：✅ 添加 `MINERU_HTTP_TIMEOUT` 环境变量配置（默认 60 秒）
+- 在 `MinerUConfig` 中添加 `http_timeout` 配置字段
+- `create_batch_task()` 和 `get_batch_result()` 使用 `aiohttp.ClientTimeout(total=self.config.http_timeout)`
+- 更新 `.env` 和 `env.example` 添加配置项
+**关键发现**：
+- MinerU vlm 模式工作正常，成功处理 PDF 文件并生成结果
+- 问题仅在客户端 HTTP 层面，不是 MinerU API 服务问题
+- HTTP 超时需要可配置，不同网络环境需要不同超时值
+**教训**：所有第三方 API 调用必须显式设置超时，避免使用默认值导致不可预测的行为
+
 ---
 
 ## Recent Optimizations (2025-10-30)
@@ -259,9 +275,10 @@ docker compose up -d
 
 ---
 
-**最后更新**：2025-11-01
+**最后更新**：2025-11-02
 **核心教训**：
 1. 维度配置是数据库初始化基石，修改需删除 volume 重建（Docker volume 前缀是**目录名**）
 2. `MINERU_MODE=local` 导致 43 分钟宕机，生产必须 `remote`，Office 文件转换可能膨胀 10-20 倍
 3. 临时文件存储需持久化：`/tmp` 目录在容器重启后清空，MinerU 远程模式依赖文件 URL 长期有效
 4. 第三方工具调用方式需查源码：Docling 是 CLI 工具（subprocess），不是 Python API，需单独安装
+5. 第三方 API 调用必须显式配置超时：避免使用默认值，所有超时参数写入环境变量可配置
