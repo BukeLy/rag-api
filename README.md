@@ -30,6 +30,7 @@ RAG API 是一个企业级的检索增强生成（RAG）服务，结合了 **RAG
 - 🔄 **灵活部署** - 支持生产模式和开发模式，一键切换
 - 📦 **开箱即用** - Docker 一键部署，3 分钟启动服务
 - 🎛️ **双解析引擎** - MinerU（强大）+ Docling（快速），智能自动选择
+- 🎨 **VLM 图表增强** - 三种模式（off/selective/full），深度理解图表内容
 
 ---
 
@@ -52,6 +53,12 @@ RAG API 是一个企业级的检索增强生成（RAG）服务，结合了 **RAG
   - 表格结构化提取
   - 数学公式识别
   - 版面分析
+
+- ✅ **VLM 图表增强** 🆕
+  - `off` - 仅 Markdown（最快）
+  - `selective` - 选择性处理重要图表
+  - `full` - 完整上下文增强处理
+  - 智能过滤：有标题、大尺寸、首页内容
 
 - ✅ **批量处理**
   - 单次最多 100 个文件
@@ -334,6 +341,13 @@ EMBEDDING_DIM=1024
 MINERU_MODE=remote
 MINERU_API_TOKEN=your_token
 FILE_SERVICE_BASE_URL=http://your-ip:8000
+
+# VLM 图表增强配置 🆕
+RAG_VLM_MODE=off                    # off / selective / full
+RAG_IMPORTANCE_THRESHOLD=0.5        # 重要性阈值（selective 模式）
+RAG_CONTEXT_WINDOW=2                # 上下文窗口（full 模式）
+RAG_CONTEXT_MODE=page               # page / chunk
+RAG_MAX_CONTEXT_TOKENS=3000         # 最大上下文 tokens
 ```
 
 完整配置参考 `env.example`。
@@ -347,16 +361,30 @@ FILE_SERVICE_BASE_URL=http://your-ip:8000
 #### 1️⃣ 上传文档
 
 ```bash
-# 单文件上传
+# 单文件上传（默认模式）
 curl -X POST "http://localhost:8000/insert?tenant_id=your_tenant&doc_id=doc1" \
   -F "file=@document.pdf" \
   -F "parser=auto"
+
+# VLM 图表增强模式 🆕
+# off: 仅 Markdown（最快，默认）
+curl -X POST "http://localhost:8000/insert?tenant_id=your_tenant&doc_id=doc2&vlm_mode=off" \
+  -F "file=@document.pdf"
+
+# selective: 选择性处理重要图表（平衡性能和质量）
+curl -X POST "http://localhost:8000/insert?tenant_id=your_tenant&doc_id=doc3&vlm_mode=selective" \
+  -F "file=@document.pdf"
+
+# full: 完整 RAG-Anything 处理（最高质量，启用上下文增强）
+curl -X POST "http://localhost:8000/insert?tenant_id=your_tenant&doc_id=doc4&vlm_mode=full" \
+  -F "file=@document.pdf"
 
 # 返回
 {
   "task_id": "task-xxx-xxx",
   "doc_id": "doc1",
   "filename": "document.pdf",
+  "vlm_mode": "off",
   "status": "pending"
 }
 ```
@@ -450,6 +478,19 @@ curl -X DELETE "http://localhost:8000/tenants/cache?tenant_id=your_tenant"
 # 查看实例池状态（管理员）
 curl "http://localhost:8000/tenants/pool/stats"
 ```
+
+### VLM 模式对比 🆕
+
+| 模式 | 速度 | 质量 | 资源消耗 | 适用场景 |
+|------|------|------|----------|---------|
+| `off` | ⚡⚡⚡⚡⚡ | ⭐⭐⭐ | 极低 | 纯文本文档、快速批量处理 |
+| `selective` | ⚡⚡⚡⚡ | ⭐⭐⭐⭐ | 低 | 包含关键图表的文档（推荐） |
+| `full` | ⚡⚡ | ⭐⭐⭐⭐⭐ | 高 | 图表密集的研究报告、论文 |
+
+**处理时间估算**（以 20 页 PDF 为例）：
+- `off`: ~10 秒（仅 Markdown）
+- `selective`: ~30 秒（5-10 个重要图表）
+- `full`: ~120 秒（完整上下文处理）
 
 ### 查询模式对比
 
@@ -890,6 +931,39 @@ MINERU_API_TOKEN=your_token
 
 # 或限制并发
 DOCUMENT_PROCESSING_CONCURRENCY=1
+```
+</details>
+
+<details>
+<summary><b>Q6: VLM 模式处理失败？</b></summary>
+
+**检查项**：
+1. **vision_model_func 未配置**
+   - 检查日志：`vision_model_func not found, fallback to off mode`
+   - 确保 `.env` 中配置了 LLM API（豆包）
+
+2. **图片文件不存在**
+   - 检查日志：`Image file not found: xxx`
+   - 可能是 MinerU ZIP 损坏或解压失败
+
+3. **超时错误**
+   - `full` 模式处理大文件可能超时
+   - 建议：先用 `selective` 模式，或增加 `VLM_TIMEOUT`
+
+```bash
+# 修改 .env
+VLM_TIMEOUT=300  # 增加到 5 分钟
+RAG_VLM_MODE=selective  # 降级到 selective
+```
+
+**调试技巧**：
+```bash
+# 查看详细日志
+docker compose logs -f | grep VLM
+
+# 测试单个文件
+curl -X POST 'http://localhost:8000/insert?tenant_id=test&doc_id=test&vlm_mode=off' \
+  -F 'file=@test.pdf'
 ```
 </details>
 

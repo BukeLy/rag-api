@@ -30,9 +30,17 @@ from src.file_url_service import get_file_service
 router = APIRouter()
 
 
-async def process_document_task(task_id: str, tenant_id: str, doc_id: str, temp_file_path: str, original_filename: str, parser: Optional[str] = "auto"):
+async def process_document_task(
+    task_id: str,
+    tenant_id: str,
+    doc_id: str,
+    temp_file_path: str,
+    original_filename: str,
+    parser: Optional[str] = "auto",
+    vlm_mode: str = "off"
+):
     """
-    后台异步处理文档（支持多租户隔离）
+    后台异步处理文档（支持多租户隔离 + VLM 模式）
 
     Args:
         task_id: 任务ID
@@ -42,6 +50,7 @@ async def process_document_task(task_id: str, tenant_id: str, doc_id: str, temp_
         original_filename: 原始文件名
         parser: 解析器类型 ("mineru" / "docling" / "auto" / None)
                 None 表示纯文本文件，直接插入无需解析
+        vlm_mode: VLM 处理模式（"off" / "selective" / "full"）
     """
     try:
         # 更新任务状态为处理中
@@ -81,9 +90,15 @@ async def process_document_task(task_id: str, tenant_id: str, doc_id: str, temp_
             if mineru_mode == "remote" and parser == "mineru":
                 # 使用远程 MinerU 处理
                 try:
-                    await process_with_remote_mineru(task_id, tenant_id, temp_file_path,
-                                                   original_filename, doc_id)
-                    logger.info(f"[Task {task_id}] [Tenant {tenant_id}] Document processed using remote MinerU API")
+                    await process_with_remote_mineru(
+                        task_id=task_id,
+                        tenant_id=tenant_id,
+                        file_path=temp_file_path,
+                        filename=original_filename,
+                        doc_id=doc_id,
+                        vlm_mode=vlm_mode
+                    )
+                    logger.info(f"[Task {task_id}] [Tenant {tenant_id}] Document processed using remote MinerU API (vlm_mode={vlm_mode})")
                 except Exception as e:
                     logger.warning(f"[Task {task_id}] [Tenant {tenant_id}] Remote MinerU failed: {e}")
                     raise  # 不再回退到本地处理，直接抛出错误
@@ -196,6 +211,16 @@ async def insert_document(
 """,
         pattern="^(auto|mineru|docling)$"
     ),
+    vlm_mode: str = Query(
+        default=None,
+        description="""VLM 处理模式（可选）：
+- `off`: 仅 Markdown（最快，默认）
+- `selective`: 混合模式（选择性处理重要图表，平衡性能和质量）
+- `full`: 完整 RAG-Anything 处理（最高质量，启用上下文增强）
+- 如果不提供，将使用环境变量 RAG_VLM_MODE 的默认值
+""",
+        pattern="^(off|selective|full)?$"
+    ),
     tenant_id: str = Depends(get_tenant_id)
 ):
     """
@@ -288,13 +313,18 @@ async def insert_document(
     # 验证 parser 参数
     if parser not in ["mineru", "docling", "auto"]:
         raise HTTPException(status_code=400, detail=f"Invalid parser: {parser}. Must be 'mineru', 'docling', or 'auto'.")
-    
+
+    # 读取 VLM 模式（优先级：请求参数 > 环境变量）
+    effective_vlm_mode = vlm_mode if vlm_mode else os.getenv("RAG_VLM_MODE", "off")
+    if effective_vlm_mode not in ["off", "selective", "full"]:
+        raise HTTPException(status_code=400, detail=f"Invalid vlm_mode: {effective_vlm_mode}. Must be 'off', 'selective', or 'full'.")
+
     # 保留原始文件名（仅用于日志）
     original_filename = file.filename or "unnamed_file"
-    
+
     # 提取文件扩展名（仅用于日志和解析器选择）
     file_extension = Path(original_filename).suffix.lower() if original_filename else ""
-    
+
     # 使用 UUID 生成安全的临时文件名
     safe_filename = f"{uuid.uuid4()}{file_extension}"
     temp_file_path = f"/tmp/{safe_filename}"
@@ -342,19 +372,20 @@ async def insert_document(
         )
         create_task(task_info, tenant_id)
 
-        # 添加后台任务（传递租户ID和选择的解析器）
+        # 添加后台任务（传递租户ID、解析器、VLM模式）
         background_tasks.add_task(
             process_document_task,
             task_id=task_id,
-            tenant_id=tenant_id,  # 新增租户ID
+            tenant_id=tenant_id,
             doc_id=doc_id,
             temp_file_path=temp_file_path,
             original_filename=original_filename,
-            parser=selected_parser
+            parser=selected_parser,
+            vlm_mode=effective_vlm_mode
         )
 
         parser_display = selected_parser if selected_parser else "direct_insert"
-        logger.info(f"[Task {task_id}] [Tenant {tenant_id}] Created task for file: {original_filename} (size: {file_size} bytes, doc_id: {doc_id}, parser: {parser_display})")
+        logger.info(f"[Task {task_id}] [Tenant {tenant_id}] Created task for file: {original_filename} (size: {file_size} bytes, doc_id: {doc_id}, parser: {parser_display}, vlm_mode: {effective_vlm_mode})")
 
         # 立即返回 202 + task_id
         return {
@@ -365,6 +396,7 @@ async def insert_document(
             "doc_id": doc_id,
             "filename": original_filename,
             "parser": parser_display,
+            "vlm_mode": effective_vlm_mode,
             "file_size": file_size
         }
     
@@ -383,10 +415,16 @@ async def insert_document(
         raise HTTPException(status_code=500, detail=f"Failed to create task: {str(e)}")
 
 
-async def process_with_remote_mineru(task_id: str, tenant_id: str, file_path: str,
-                                   filename: str, doc_id: str):
+async def process_with_remote_mineru(
+    task_id: str,
+    tenant_id: str,
+    file_path: str,
+    filename: str,
+    doc_id: str,
+    vlm_mode: str = "off"
+):
     """
-    使用远程 MinerU 处理文档（支持多租户）
+    使用远程 MinerU 处理文档（支持多租户 + VLM 模式）
 
     Args:
         task_id: 任务 ID
@@ -394,9 +432,10 @@ async def process_with_remote_mineru(task_id: str, tenant_id: str, file_path: st
         file_path: 本地文件路径
         filename: 原始文件名
         doc_id: 文档 ID
+        vlm_mode: VLM 处理模式（"off" / "selective" / "full"）
     """
     try:
-        logger.info(f"[Task {task_id}] [Tenant {tenant_id}] Starting remote MinerU processing: {filename}")
+        logger.info(f"[Task {task_id}] [Tenant {tenant_id}] Starting remote MinerU processing: {filename} (vlm_mode={vlm_mode})")
 
         # 获取文件服务实例和租户的 LightRAG 实例
         file_service = get_file_service()
@@ -404,18 +443,24 @@ async def process_with_remote_mineru(task_id: str, tenant_id: str, file_path: st
 
         if not lightrag_instance:
             raise Exception(f"LightRAG instance not available for tenant: {tenant_id}")
-        
+
+        # 获取 VLM 函数（用于 selective/full 模式）
+        vision_func = getattr(lightrag_instance, 'vision_model_func', None)
+        if vlm_mode in ["selective", "full"] and not vision_func:
+            logger.warning(f"[Task {task_id}] vision_model_func not found, falling back to off mode")
+            vlm_mode = "off"
+
         # 注册文件获取 URL（8000 端口）
         file_url = await file_service.register_file(file_path, filename)
         logger.info(f"[Task {task_id}] [Tenant {tenant_id}] File registered: {file_url}")
-        
+
         # 调用 MinerU 客户端
         from src.mineru_client import create_client, FileTask, ParseOptions
         client = create_client()
-        
+
         # 创建文件任务
         file_task = FileTask(url=file_url, data_id=doc_id)
-        
+
         # 配置解析选项
         options = ParseOptions(
             enable_formula=True,
@@ -423,7 +468,7 @@ async def process_with_remote_mineru(task_id: str, tenant_id: str, file_path: st
             language="ch",
             model_version=os.getenv("MINERU_MODEL_VERSION", "vlm")
         )
-        
+
         # 调用远程 MinerU API
         logger.info(f"[Task {task_id}] [Tenant {tenant_id}] Calling remote MinerU API...")
         result = await client.parse_documents([file_task], options, wait_for_completion=True)
@@ -431,13 +476,29 @@ async def process_with_remote_mineru(task_id: str, tenant_id: str, file_path: st
         if result.is_completed:
             logger.info(f"[Task {task_id}] [Tenant {tenant_id}] Remote MinerU parsing completed")
 
-            # 优化：使用结果处理器直接处理 MinerU 的 Markdown 结果
+            # 读取 VLM 配置参数
+            importance_threshold = float(os.getenv("RAG_IMPORTANCE_THRESHOLD", "0.5"))
+            rag_config = {
+                "context_window": int(os.getenv("RAG_CONTEXT_WINDOW", "2")),
+                "context_mode": os.getenv("RAG_CONTEXT_MODE", "page"),
+                "max_context_tokens": int(os.getenv("RAG_MAX_CONTEXT_TOKENS", "3000")),
+            }
+
+            # 使用结果处理器处理 MinerU 结果
             from src.mineru_result_processor import get_result_processor
             processor = get_result_processor()
 
-            # 处理结果并直接插入 LightRAG
-            logger.info(f"[Task {task_id}] [Tenant {tenant_id}] Processing MinerU result and inserting to LightRAG...")
-            process_result = await processor.process_mineru_result(result, lightrag_instance)
+            # 处理结果并直接插入 LightRAG（支持三种模式）
+            logger.info(f"[Task {task_id}] [Tenant {tenant_id}] Processing MinerU result (mode={vlm_mode})...")
+            process_result = await processor.process_mineru_result(
+                result=result,
+                lightrag_instance=lightrag_instance,
+                mode=vlm_mode,
+                vision_func=vision_func,
+                original_filename=filename,
+                importance_threshold=importance_threshold,
+                rag_config=rag_config
+            )
 
             logger.info(f"[Task {task_id}] [Tenant {tenant_id}] MinerU result processed: {process_result}")
 
@@ -463,6 +524,7 @@ async def insert_batch(
     files: List[UploadFile] = File(...),
     doc_ids: Optional[str] = Query(None),
     parser: str = Query("auto"),
+    vlm_mode: str = Query(default=None, pattern="^(off|selective|full)?$"),
     background_tasks: BackgroundTasks = None,
     tenant_id: str = Depends(get_tenant_id)
 ):
@@ -499,7 +561,12 @@ async def insert_batch(
     # 验证 parser 参数
     if parser not in ["mineru", "docling", "auto"]:
         raise HTTPException(status_code=400, detail=f"Invalid parser: {parser}")
-    
+
+    # 读取 VLM 模式
+    effective_vlm_mode = vlm_mode if vlm_mode else os.getenv("RAG_VLM_MODE", "off")
+    if effective_vlm_mode not in ["off", "selective", "full"]:
+        raise HTTPException(status_code=400, detail=f"Invalid vlm_mode: {effective_vlm_mode}")
+
     # 限制文件数量
     if not files or len(files) > 100:
         raise HTTPException(status_code=400, detail="File count must be between 1 and 100")
@@ -578,11 +645,12 @@ async def insert_batch(
                 background_tasks.add_task(
                     process_document_task,
                     task_id=task_id,
-                    tenant_id=tenant_id,  # 新增租户ID
+                    tenant_id=tenant_id,
                     doc_id=doc_id,
                     temp_file_path=temp_file_path,
                     original_filename=original_filename,
-                    parser=selected_parser
+                    parser=selected_parser,
+                    vlm_mode=effective_vlm_mode
                 )
 
                 logger.info(f"[Batch {batch_id}] [Tenant {tenant_id}] Created task {task_id} for file: {original_filename} (parser: {parser_display})")
