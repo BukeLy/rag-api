@@ -384,8 +384,6 @@ class MinerUClient:
                             
                             # 处理批量结果
                             files_result = []
-                            batch_status = "pending"  # 默认状态
-
                             if "extract_result" in data:
                                 for item in data["extract_result"]:
                                     file_state = item.get("state", "pending")
@@ -397,14 +395,16 @@ class MinerUClient:
                                         "err_msg": item.get("err_msg"),
                                         "extract_progress": item.get("extract_progress"),
                                     })
-                                    # 批量任务的状态：如果有任何文件失败则失败，所有完成则完成，否则处理中
-                                    if file_state == "failed":
-                                        batch_status = "failed"
-                                    elif batch_status != "failed" and file_state == "done":
-                                        batch_status = "done"
-                                    elif file_state in ["waiting-file", "pending", "running", "converting"]:
-                                        if batch_status not in ["failed", "done"]:
-                                            batch_status = file_state
+
+                            # 聚合批量任务状态：优先级 failed > processing > done
+                            batch_status = "done"  # 默认所有完成
+                            for item in files_result:
+                                file_state = item.get("state", "pending")
+                                if file_state == "failed":
+                                    batch_status = "failed"
+                                    break  # 任何失败则整体失败
+                                elif file_state in ["waiting-file", "pending", "running", "converting"]:
+                                    batch_status = file_state  # 有任何处理中则整体处理中
 
                             return TaskResult(
                                 task_id=batch_id,
@@ -457,8 +457,6 @@ class MinerUClient:
                 
                 # 处理批量结果
                 files_result = []
-                batch_status = "pending"  # 默认状态
-
                 if "extract_result" in data:
                     for item in data["extract_result"]:
                         file_state = item.get("state", "pending")
@@ -470,14 +468,16 @@ class MinerUClient:
                             "err_msg": item.get("err_msg"),
                             "extract_progress": item.get("extract_progress"),
                         })
-                        # 批量任务的状态：如果有任何文件失败则失败，所有完成则完成，否则处理中
-                        if file_state == "failed":
-                            batch_status = "failed"
-                        elif batch_status != "failed" and file_state == "done":
-                            batch_status = "done"
-                        elif file_state in ["waiting-file", "pending", "running", "converting"]:
-                            if batch_status not in ["failed", "done"]:
-                                batch_status = file_state
+
+                # 聚合批量任务状态：优先级 failed > processing > done
+                batch_status = "done"  # 默认所有完成
+                for item in files_result:
+                    file_state = item.get("state", "pending")
+                    if file_state == "failed":
+                        batch_status = "failed"
+                        break  # 任何失败则整体失败
+                    elif file_state in ["waiting-file", "pending", "running", "converting"]:
+                        batch_status = file_state  # 有任何处理中则整体处理中
 
                 return TaskResult(
                     task_id=batch_id,
