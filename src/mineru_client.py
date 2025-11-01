@@ -397,14 +397,17 @@ class MinerUClient:
                                     })
 
                             # 聚合批量任务状态：优先级 failed > processing > done
-                            batch_status = "done"  # 默认所有完成
-                            for item in files_result:
-                                file_state = item.get("state", "pending")
-                                if file_state == "failed":
-                                    batch_status = "failed"
-                                    break  # 任何失败则整体失败
-                                elif file_state in ["waiting-file", "pending", "running", "converting"]:
-                                    batch_status = file_state  # 有任何处理中则整体处理中
+                            if not files_result:
+                                batch_status = "pending"  # 空批次默认 pending
+                            else:
+                                batch_status = "done"  # 默认所有完成
+                                for item in files_result:
+                                    file_state = item.get("state", "pending")
+                                    if file_state == "failed":
+                                        batch_status = "failed"
+                                        break  # 任何失败则整体失败
+                                    elif file_state in ["waiting-file", "pending", "running", "converting"]:
+                                        batch_status = file_state  # 有任何处理中则整体处理中
 
                             return TaskResult(
                                 task_id=batch_id,
@@ -470,14 +473,17 @@ class MinerUClient:
                         })
 
                 # 聚合批量任务状态：优先级 failed > processing > done
-                batch_status = "done"  # 默认所有完成
-                for item in files_result:
-                    file_state = item.get("state", "pending")
-                    if file_state == "failed":
-                        batch_status = "failed"
-                        break  # 任何失败则整体失败
-                    elif file_state in ["waiting-file", "pending", "running", "converting"]:
-                        batch_status = file_state  # 有任何处理中则整体处理中
+                if not files_result:
+                    batch_status = "pending"  # 空批次默认 pending
+                else:
+                    batch_status = "done"  # 默认所有完成
+                    for item in files_result:
+                        file_state = item.get("state", "pending")
+                        if file_state == "failed":
+                            batch_status = "failed"
+                            break  # 任何失败则整体失败
+                        elif file_state in ["waiting-file", "pending", "running", "converting"]:
+                            batch_status = file_state  # 有任何处理中则整体处理中
 
                 return TaskResult(
                     task_id=batch_id,
