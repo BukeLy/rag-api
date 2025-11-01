@@ -78,6 +78,49 @@ mcp__memory__search_nodes(query="FastAPI")
 
 **目标**：一次做对，减少调试时间
 
+## 🔄 Git Commit 前置检查清单（必须执行）
+
+**在执行 `git commit` 之前，必须完成以下检查**：
+
+### 1. ✅ 生产/开发环境同步检查
+```bash
+# 检查 docker-compose.yml 和 docker-compose.dev.yml 差异
+diff <(grep -A 50 'environment:' docker-compose.yml | head -60) \
+     <(grep -A 50 'environment:' docker-compose.dev.yml | head -60)
+```
+
+**必须同步的配置**：
+- 环境变量列表（除了 volume 挂载）
+- 依赖服务配置（DragonflyDB/Qdrant/Memgraph）
+- 健康检查配置
+- 网络配置
+
+**允许差异的部分**：
+- `build` vs `volumes`（生产构建镜像，开发挂载代码）
+- `restart` 策略（生产 unless-stopped，开发可选）
+
+### 2. ✅ .env 示例文件同步
+确保 `.env` 中的新增变量同步到注释/文档
+
+### 3. ✅ 文档更新检查
+- README.md 功能说明
+- 环境变量配置文档
+- 已知限制说明
+
+### 4. ✅ 本地测试通过
+- 单元测试（如果有）
+- 功能验证测试
+- API 端点测试
+
+**违反检查清单的后果**：
+- 生产环境缺少环境变量 → 功能失效
+- 配置不一致 → 调试困难，行为不可预测
+- 文档过时 → 用户困惑，支持成本增加
+
+**记录到记忆**：
+- 每次发现配置不同步问题，记录到 Known Bugs
+- 作为经验教训，避免重复犯错
+
 ## Project Overview
 **多租户 RAG API 服务**：FastAPI + LightRAG，支持 MinerU/Docling 多模态解析
 - 租户隔离：独立 workspace + LRU 实例池（最多50个）

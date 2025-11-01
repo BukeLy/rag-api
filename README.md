@@ -59,6 +59,7 @@ RAG API 是一个企业级的检索增强生成（RAG）服务，结合了 **RAG
   - `selective` - 选择性处理重要图表
   - `full` - 完整上下文增强处理
   - 智能过滤：有标题、大尺寸、首页内容
+  - ⚠️ **仅支持 remote MinerU 模式**
 
 - ✅ **批量处理**
   - 单次最多 100 个文件
@@ -343,6 +344,7 @@ MINERU_API_TOKEN=your_token
 FILE_SERVICE_BASE_URL=http://your-ip:8000
 
 # VLM 图表增强配置 🆕
+# ⚠️ 注意：仅在 MINERU_MODE=remote 时生效
 RAG_VLM_MODE=off                    # off / selective / full
 RAG_IMPORTANCE_THRESHOLD=0.5        # 重要性阈值（selective 模式）
 RAG_CONTEXT_WINDOW=2                # 上下文窗口（full 模式）
