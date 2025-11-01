@@ -51,6 +51,7 @@ class MultiTenantRAGManager:
         self.top_k = int(os.getenv("TOP_K", "20"))
         self.chunk_top_k = int(os.getenv("CHUNK_TOP_K", "10"))
         self.max_async = int(os.getenv("MAX_ASYNC", "8"))
+        self.vlm_timeout = float(os.getenv("VLM_TIMEOUT", "120"))
 
         # 存储配置
         self.use_external_storage = os.getenv("USE_EXTERNAL_STORAGE", "false").lower() == "true"
@@ -154,7 +155,7 @@ class MultiTenantRAGManager:
                         f"{self.ark_base_url}/chat/completions",
                         json=payload,
                         headers=headers,
-                        timeout=aiohttp.ClientTimeout(total=30)
+                        timeout=aiohttp.ClientTimeout(total=self.vlm_timeout)
                     ) as response:
                         if response.status != 200:
                             error_text = await response.text()
