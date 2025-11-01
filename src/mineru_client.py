@@ -321,7 +321,7 @@ class MinerUClient:
         # 发送请求（带重试）
         for attempt in range(self.config.retry_max_attempts):
             try:
-                response = requests.post(url, headers=headers, json=data, timeout=30)
+                response = requests.post(url, headers=headers, json=data, timeout=self.config.http_timeout)
                 result = response.json()
                 
                 if response.status_code == 200 and result.get("code") == 0:
@@ -428,7 +428,7 @@ class MinerUClient:
         self.rate_limiter.acquire_sync()
         
         try:
-            response = requests.get(url, headers=headers, timeout=30)
+            response = requests.get(url, headers=headers, timeout=self.config.http_timeout)
             result = response.json()
             
             if response.status_code == 200 and result.get("code") == 0:
