@@ -384,20 +384,31 @@ class MinerUClient:
                             
                             # 处理批量结果
                             files_result = []
+                            batch_status = "pending"  # 默认状态
+
                             if "extract_result" in data:
                                 for item in data["extract_result"]:
+                                    file_state = item.get("state", "pending")
                                     files_result.append({
                                         "file_name": item.get("file_name"),
                                         "data_id": item.get("data_id"),
-                                        "state": item.get("state"),
+                                        "state": file_state,
                                         "full_zip_url": item.get("full_zip_url"),
                                         "err_msg": item.get("err_msg"),
                                         "extract_progress": item.get("extract_progress"),
                                     })
-                            
+                                    # 批量任务的状态：如果有任何文件失败则失败，所有完成则完成，否则处理中
+                                    if file_state == "failed":
+                                        batch_status = "failed"
+                                    elif batch_status != "failed" and file_state == "done":
+                                        batch_status = "done"
+                                    elif file_state in ["waiting-file", "pending", "running", "converting"]:
+                                        if batch_status not in ["failed", "done"]:
+                                            batch_status = file_state
+
                             return TaskResult(
                                 task_id=batch_id,
-                                status=state_map.get(data.get("state", "pending"), TaskStatus.PENDING),
+                                status=state_map.get(batch_status, TaskStatus.PENDING),
                                 files=files_result,
                                 error_message=data.get("err_msg"),
                                 full_zip_url=data.get("full_zip_url"),
@@ -446,20 +457,31 @@ class MinerUClient:
                 
                 # 处理批量结果
                 files_result = []
+                batch_status = "pending"  # 默认状态
+
                 if "extract_result" in data:
                     for item in data["extract_result"]:
+                        file_state = item.get("state", "pending")
                         files_result.append({
                             "file_name": item.get("file_name"),
                             "data_id": item.get("data_id"),
-                            "state": item.get("state"),
+                            "state": file_state,
                             "full_zip_url": item.get("full_zip_url"),
                             "err_msg": item.get("err_msg"),
                             "extract_progress": item.get("extract_progress"),
                         })
-                
+                        # 批量任务的状态：如果有任何文件失败则失败，所有完成则完成，否则处理中
+                        if file_state == "failed":
+                            batch_status = "failed"
+                        elif batch_status != "failed" and file_state == "done":
+                            batch_status = "done"
+                        elif file_state in ["waiting-file", "pending", "running", "converting"]:
+                            if batch_status not in ["failed", "done"]:
+                                batch_status = file_state
+
                 return TaskResult(
                     task_id=batch_id,
-                    status=state_map.get(data.get("state", "pending"), TaskStatus.PENDING),
+                    status=state_map.get(batch_status, TaskStatus.PENDING),
                     files=files_result,
                     error_message=data.get("err_msg"),
                     full_zip_url=data.get("full_zip_url"),
