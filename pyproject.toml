@@ -5,7 +5,7 @@ description = "RAG API with multimodal document processing"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
-    "lightrag-hku==1.4.9.4",
+    "lightrag-hku==1.4.9.7",
     "raganything>=1.2.8",  # 只安装核心依赖，避免 [all] 导致的依赖解析超时
     "docling>=1.0.0",      # for Docling parser CLI
     "aiohttp>=3.9.0",

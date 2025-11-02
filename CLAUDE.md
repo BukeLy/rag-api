@@ -43,7 +43,298 @@ mcp__memory__open_nodes(names=["RAG-Anything", "LightRAG"])
 
 ---
 
+## 🧠 Memory MCP 强制使用规则（MUST FOLLOW）
+
+### 📖 查询规则（何时必须查询）
+
+#### 规则 1：集成/调试第三方服务前（MANDATORY）
+**在以下场景必须先查询 Memory MCP**：
+- ✅ 修改环境变量配置
+- ✅ 调试服务连接/超时问题
+- ✅ 集成新的第三方库
+- ✅ 修改 API 调用方式
+- ✅ 处理解析错误
+
+**执行步骤**：
+```bash
+# 1. 查询相关 BUG
+mcp__memory__search_nodes(query="{服务名} bug")
+
+# 2. 查询核心 API（如果存在实体）
+mcp__memory__open_nodes(names=["{服务名}"])
+
+# 3. 使用 Context7 查询最新文档
+mcp__context7__resolve-library-id(libraryName="{服务名}")
+```
+
+**例子**：
+- 调试 MinerU 超时 → 查询 "MinerU timeout bug"
+- 配置 LightRAG → 查询 "LightRAG environment bug"
+- 修改 embedding 模型 → 查询 "embedding dimension bug"
+
+#### 规则 2：遇到特定错误模式时（MANDATORY）
+**错误关键词映射表**：
+
+| 错误特征 | 查询命令 | 相关 BUG |
+|---------|---------|---------|
+| 超时（timeout, connection） | `search_nodes(query="timeout HTTP")` | BUG-6 |
+| 文件未找到（not found, missing） | `search_nodes(query="file volume")` | BUG-5, BUG-9 |
+| 认证失败（401, unauthorized） | `search_nodes(query="environment variable")` | BUG-2 |
+| 状态卡住（pending, processing） | `search_nodes(query="batch status")` | BUG-7 |
+| 维度错误（dimension, vector） | `search_nodes(query="embedding dimension")` | BUG-1 |
+| 模式问题（local, remote） | `search_nodes(query="MINERU_MODE")` | BUG-3 |
+| 命令失败（command not found） | `search_nodes(query="subprocess CLI")` | BUG-4 |
+| 数据缺失（missing field） | `search_nodes(query="API response")` | BUG-8 |
+| ZIP 解析失败（content_list） | `search_nodes(query="content_list filename")` | BUG-9 |
+
+**流程**：
+1. 遇到错误 → 提取关键词 → 查询 Memory
+2. 如果找到相关 BUG → 应用历史修复方案
+3. 如果未找到 → 调试完成后记录新 BUG
+
+#### 规则 3：Git Commit 前（MANDATORY）
+**在执行 `git commit` 前，必须查询**：
+```bash
+# 查询与本次修改相关的 BUG
+mcp__memory__search_nodes(query="{修改涉及的关键词}")
+```
+
+**验证点**：
+- [ ] 是否遵循了已知的修复模式
+- [ ] 是否需要同步更新其他配置
+- [ ] 是否有需要更新的记忆（见下文"更新规则"）
+
+#### 规则 4：Docker/环境配置修改前（MANDATORY）
+**修改以下文件前必须查询**：
+- `docker-compose.yml` / `docker-compose.dev.yml`
+- `.env` / `env.example`
+- `Dockerfile` / `pyproject.toml`
+
+**查询命令**：
+```bash
+mcp__memory__search_nodes(query="Docker volume environment")
+mcp__memory__search_nodes(query="embedding dimension")
+```
+
+**验证点**：
+- [ ] volume 挂载是否持久化（BUG-5）
+- [ ] 环境变量命名是否正确（BUG-2）
+- [ ] 是否需要删除 volume 重建（BUG-1）
+- [ ] 生产/开发配置是否同步
+
+---
+
+### ✍️ 记录规则（何时必须记录）
+
+#### 规则 1：解决新 BUG 后（MANDATORY）
+**必须记录的条件（满足任一）**：
+- ✅ 调试时间超过 30 分钟
+- ✅ 根因不明显（需查源码/测试 API/查文档）
+- ✅ 可能重复发生（配置错误、API 理解偏差）
+- ✅ 影响生产环境（性能问题、服务中断）
+
+**记录模板**：
+```python
+mcp__memory__create_entities(entities=[{
+  "name": "BUG-{N}-{简短描述}",
+  "entityType": "Bug",
+  "observations": [
+    "日期: YYYY-MM-DD",
+    "问题: {现象描述}",
+    "根因 1: {第一个根因}",
+    "根因 2: {第二个根因}",
+    "修复: {修复步骤}",
+    "教训 1: {核心教训}",
+    "教训 2: {次要教训}"
+  ]
+}])
+
+mcp__memory__create_relations(relations=[{
+  "from": "BUG-{N}-{简短描述}",
+  "to": "{相关库/项目}",
+  "relationType": "related_to"
+}])
+```
+
+**记录要求**：
+- ❌ 禁止冗长反思（超过 8 条 observations）
+- ✅ 精简到核心（问题+根因+修复+教训）
+- ✅ 使用关键词（方便未来查询）
+
+#### 规则 2：发现第三方库的重要能力时（OPTIONAL）
+**可选记录的场景**：
+- 发现库的非显而易见能力（如 `MineruParser._read_output_files()`）
+- 文档中难以找到的用法
+- 可以避免重复造轮子的方法
+
+**记录方式**：
+```python
+mcp__memory__add_observations(observations=[{
+  "entityName": "{库名}",
+  "contents": [
+    "发现原生方法 {方法名}：{功能描述}",
+    "签名: {方法签名}",
+    "优势: {为什么应该用它}",
+    "示例: {代码示例}"
+  ]
+}])
+```
+
+#### 规则 3：做出架构决策时（OPTIONAL）
+**记录重大技术决策**：
+```python
+mcp__memory__create_entities(entities=[{
+  "name": "{决策名称}",
+  "entityType": "Architecture Decision",
+  "observations": [
+    "决策背景: {为什么需要决策}",
+    "可选方案: {方案 A vs 方案 B}",
+    "最终选择: {选了什么}",
+    "理由: {为什么选这个}",
+    "影响: {预期效果}"
+  ]
+}])
+```
+
+---
+
+### 🔄 更新规则（何时必须更新）
+
+#### 规则 1：每次 Git Commit 前必须检视记忆（MANDATORY）
+
+**执行步骤**：
+1. **查询相关记忆**：
+   ```bash
+   # 查询本次修改涉及的模块/服务
+   mcp__memory__search_nodes(query="{修改关键词}")
+   mcp__memory__open_nodes(names=["{相关实体}"])
+   ```
+
+2. **检视是否需要更新**：
+   - ✅ 发现已有实体的新信息（如库的新方法、新配置参数）
+   - ✅ 已有 BUG 的补充教训（如修复后发现新陷阱）
+   - ✅ 架构决策的后续影响（如性能数据、生产验证结果）
+
+3. **执行更新**：
+   ```python
+   # 方式 1：追加观察（observations）
+   mcp__memory__add_observations(observations=[{
+     "entityName": "{实体名}",
+     "contents": [
+       "新发现: {描述}",
+       "补充: {内容}",
+       "验证: {测试结果}"
+     ]
+   }])
+
+   # 方式 2：更新关系
+   mcp__memory__create_relations(relations=[{
+     "from": "{实体A}",
+     "to": "{实体B}",
+     "relationType": "{关系类型}"
+   }])
+   ```
+
+**更新示例**：
+
+**场景 1：发现库的新方法**
+```python
+# 本次 commit 使用了 MineruParser._read_output_files()
+# 检视：Memory 中 RAG-Anything 实体是否已记录此方法？
+mcp__memory__open_nodes(names=["RAG-Anything"])
+
+# 如果需要补充新发现
+mcp__memory__add_observations(observations=[{
+  "entityName": "RAG-Anything",
+  "contents": [
+    "实战验证: _read_output_files() 在生产环境成功处理 remote API ZIP（56 items，50秒）",
+    "性能: vlm_mode=full 完整流程耗时 50 秒"
+  ]
+}])
+```
+
+**场景 2：BUG 修复后补充教训**
+```python
+# 本次 commit 修复了 BUG #9
+# 检视：是否有新的教训需要补充？
+mcp__memory__open_nodes(names=["BUG-9-MinerU-ContentList-Filename-Mismatch"])
+
+# 补充新发现
+mcp__memory__add_observations(observations=[{
+  "entityName": "BUG-9-MinerU-ContentList-Filename-Mismatch",
+  "contents": [
+    "测试验证: 生产环境处理 56 items 成功，图片路径自动转换",
+    "性能数据: vlm_mode=full 50秒 vs vlm_mode=off 2分钟"
+  ]
+}])
+```
+
+**场景 3：环境配置变更**
+```python
+# 本次 commit 修改了 .env 环境变量
+# 检视：是否需要更新 BUG-2 的记忆？
+mcp__memory__add_observations(observations=[{
+  "entityName": "BUG-2-LightRAG-WebUI-ENV-Naming",
+  "contents": [
+    "生产验证: LLM_BINDING_* 环境变量配置正确，LightRAG WebUI 工作正常"
+  ]
+}])
+```
+
+#### 规则 2：发现已有记忆过时时（MANDATORY）
+
+**触发条件**：
+- ❌ 发现 Memory 中的信息已过时（如库升级后 API 变化）
+- ❌ 发现记忆与实际不符（如配置说明错误）
+- ❌ 发现更好的解决方案（如更高效的实现方式）
+
+**处理方式**：
+```python
+# 方式 1：删除过时观察
+mcp__memory__delete_observations(deletions=[{
+  "entityName": "{实体名}",
+  "observations": ["{过时的观察}"]
+}])
+
+# 方式 2：添加更正信息
+mcp__memory__add_observations(observations=[{
+  "entityName": "{实体名}",
+  "contents": [
+    "更正: {正确信息}",
+    "原因: {为什么之前的信息不准确}"
+  ]
+}])
+```
+
+---
+
+### ⚠️ 违反规则的后果
+
+**不查询的后果**：
+- 🔴 重复犯错（43 分钟宕机、文件丢失、超时）
+- 🔴 浪费时间（30-60 分钟调试）
+- 🔴 重复造轮子（不使用原生方法）
+
+**不记录的后果**：
+- 🔴 知识流失（团队/未来的自己重复遇到）
+- 🔴 调试时间累积
+
+**不更新的后果**：
+- 🔴 记忆过时（库升级后信息不准确）
+- 🔴 错过最佳实践（修复后的新发现未沉淀）
+- 🔴 性能数据缺失（无法优化决策）
+
+---
+
 ## 🚨 核心规则（严格执行）
+
+### 0. 开始任何操作前（NEW）
+- ✅ **必须先查询 Memory MCP**：`mcp__memory__search_nodes(query="{任务关键词}")`
+- ✅ **验证是否有相关 BUG**：如果找到，应用历史修复方案
+- ✅ **查看相关库 API**：`mcp__memory__open_nodes(names=["{库名}"])`
+- ✅ **查询最新文档**（如需要）：使用 Context7 MCP
+
+**查询规则详见**：[Memory MCP 强制使用规则](#-memory-mcp-强制使用规则must-follow)
 
 ### 1. 第三方库集成
 - ✅ **必须查源码**：确认 API 签名、环境变量命名
@@ -53,6 +344,15 @@ mcp__memory__open_nodes(names=["RAG-Anything", "LightRAG"])
 
 ### 2. Git Commit 前置检查
 **必须完成以下检查**：
+0. ✅ **Memory MCP 检视与更新（NEW）**：
+   - 查询相关记忆：`mcp__memory__search_nodes(query="{本次改动关键词}")`
+   - 检查是否需要更新：
+     - 修复了已记录的 BUG → 补充验证结果和性能数据
+     - 发现库新特性 → 添加到库实体的 observations
+     - 优化了已有方案 → 更新原有记录
+     - 解决新 BUG（调试 >30 分钟）→ 创建新 BUG 实体并记录
+     - 修改了架构 → 添加到项目实体或更新关系
+   - 执行更新命令：`mcp__memory__add_observations()` 或 `mcp__memory__create_entities()`
 1. ✅ 生产/开发环境配置同步（`diff` 两个 docker-compose 文件）
 2. ✅ `.env` 示例文件同步
 3. ✅ 本地测试通过
