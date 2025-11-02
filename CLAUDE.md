@@ -303,6 +303,45 @@ return TaskResult(
     full_zip_url=full_zip_url,  # 从 files[0] 提取，而非 data
 )
 
+**测试验证**：
+- 同时修复异步和同步两个方法
+- vlm_mode=off 测试成功（2分钟完成）
+- vlm_mode=full 识别 full_zip_url，但 ZIP 内容结构不同（BUG #9）
+**关键发现**：
+- 一个 BUG 修复可能引入新 BUG：状态解析修复后数据结构改变
+- 需要同步修复所有使用该数据的代码路径
+- 测试需覆盖完整数据流，从 API 响应到最终使用
+**教训**：修复 API 解析后，追踪数据流向，确保所有下游代码路径同步更新
+
+### BUG #9: MinerU remote API content_list.json 文件名不匹配（2025-11-02）
+**问题**：vlm_mode=full 失败，错误 "content_list.json not found in ZIP"
+**根因**：
+1. MinerU remote API 生成的 ZIP 中，`content_list.json` 文件带有 UUID 前缀（如 `578e9f54-bc86-464e-b6ce-b89e44ccac6a_content_list.json`）
+2. 原代码手动查找精确文件名 `content_list.json`，不支持带前缀格式
+3. 手动实现路径转换逻辑，与 RAG-Anything 不一致，增加维护成本
+**修复**：✅ 使用 RAG-Anything 原生的 `MineruParser._read_output_files()` 方法
+- 自动支持两种文件名格式：`content_list.json`（local）和 `{uuid}_content_list.json`（remote）
+- 自动处理图片路径转换为绝对路径
+- 减少代码重复，提升维护性和兼容性
+```python
+# 使用 RAG-Anything 原生方法
+from raganything.parser import MineruParser
+content_list, _ = MineruParser._read_output_files(
+    output_dir=Path(extract_dir),
+    file_stem=file_stem,
+    method="auto"
+)
+```
+**测试验证**：
+- 本地验证 RAG-Anything 方法正确加载 remote API ZIP（56 items）
+- 生产测试：vlm_mode=full 完整流程成功（50秒，处理 56 items）
+- 日志确认：图片路径自动转换为绝对路径
+**关键发现**：
+- **优先使用第三方库的原生能力**，不要重新发明轮子
+- RAG-Anything 已经内置了对 MinerU 各种输出格式的支持
+- 代码复用减少维护成本，自动获得库的更新和兼容性改进
+**教训**：集成第三方库时，先查看库的原生方法是否已满足需求，避免手动实现导致兼容性问题
+
 ---
 
 ## Recent Optimizations (2025-10-30)
@@ -327,7 +366,7 @@ return TaskResult(
 
 **最后更新**：2025-11-02
 
-**核心教训（8 个BUG）**：
+**核心教训（9 个BUG）**：
 1. **维度配置**：是数据库初始化基石，修改需删除 volume 重建（Docker volume 前缀是**目录名**）
 2. **生产环境配置**：`MINERU_MODE=local` 导致 43 分钟宕机，生产必须 `remote`，Office 文件转换可能膨胀 10-20 倍
 3. **持久化存储**：`/tmp` 目录在容器重启后清空，MinerU 远程模式依赖文件 URL 长期有效
@@ -336,7 +375,8 @@ return TaskResult(
 6. **API 响应结构**：先用 curl 测试真实响应，再编写解析代码，不要基于文档假设字段位置
 7. **状态聚合逻辑**：批量任务状态需要独立遍历聚合，不能在收集数据时同步设置，避免提前终止
 8. **数据流追踪**：修复 API 解析后，追踪数据流向，确保所有下游代码路径同步更新（full_zip_url 位置变化）
-9. **开发环境部署**：
-   - 生产：`docker compose up -d --build`（重新构建镜像）
-   - 开发：`git pull` 即可（代码热重载，volume 挂载）
-   - 错误操作：在开发环境执行 `--build` 浪费时间且无必要
+9. **第三方库原生能力**：优先使用库的原生方法（RAG-Anything 的 `_read_output_files`），避免手动实现导致兼容性问题，减少维护成本
+10. **开发环境部署**：
+    - 生产：`docker compose up -d --build`（重新构建镜像）
+    - 开发：`git pull` 即可（代码热重载，volume 挂载）
+    - 错误操作：在开发环境执行 `--build` 浪费时间且无必要
