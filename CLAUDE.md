@@ -140,7 +140,7 @@ docker compose -f docker-compose.dev.yml up -d
 
 **LightRAG WebUI**：http://localhost:9621/webui/ (多租户切换需修改 `.env` 中 `LIGHTRAG_WEBUI_WORKSPACE`)
 
-**远程服务器**：45.78.223.205
+**DEV远程服务器**：45.78.223.205
 - SSH (Windows): `ssh -i "C:\Users\jay.huang\Desktop\Scripts\chengjie.pem" root@45.78.223.205`
 - SSH (macOS): `ssh -i /Users/chengjie/Downloads/chengjie.pem root@45.78.223.205`
 - 部署：PR 合并 → 服务器 `git pull` → 热重载生效
