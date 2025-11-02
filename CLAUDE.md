@@ -342,6 +342,64 @@ mcp__memory__add_observations(observations=[{
 - ✅ **用 curl 测试 API**：先验证响应结构，再写解析代码
 - ❌ **禁止猜测**：不猜测 API 参数、环境变量名、响应格式
 
+#### curl 调用 API 的正确姿势（MANDATORY）
+**❌ 错误做法**：在 `-d` 参数中直接使用多行 JSON + 命令替换
+```bash
+# ❌ 会报错: curl: option : blank argument where content is expected
+curl -X POST "https://api.example.com/v1/chat" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d "{
+    \"model\": \"xxx\",
+    \"messages\": [{
+      \"content\": [{\"image_url\": {\"url\": \"data:image/png;base64,$(cat file.txt)\"}}]
+    }]
+  }"
+```
+
+**✅ 正确做法 1**：使用 jq 构建 JSON + 文件传递
+```bash
+# 1. 读取 base64 内容
+base64_content=$(cat /tmp/image_base64.txt)
+
+# 2. 使用 jq 构建 JSON（自动处理转义和格式）
+jq -n \
+  --arg model "deepseek-ai/DeepSeek-OCR" \
+  --arg text "请转换表格" \
+  --arg base64 "$base64_content" \
+  '{
+    model: $model,
+    messages: [{
+      role: "user",
+      content: [
+        {type: "text", text: $text},
+        {type: "image_url", image_url: {url: ("data:image/png;base64," + $base64)}}
+      ]
+    }],
+    max_tokens: 1000
+  }' > /tmp/payload.json
+
+# 3. 使用 @filename 传递 JSON（避免命令行长度限制）
+curl -s -X POST "https://api.siliconflow.cn/v1/chat/completions" \
+  -H "Authorization: Bearer $SF_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d @/tmp/payload.json | python3 -m json.tool
+```
+
+**✅ 正确做法 2**：使用单行 JSON（仅适用于简单情况）
+```bash
+# 仅当 JSON 简单且无命令替换时使用
+curl -X POST "https://api.example.com" \
+  -H "Content-Type: application/json" \
+  -d '{"key":"value","foo":"bar"}'
+```
+
+**核心原则**：
+- ❌ **禁止在 `-d` 参数中直接使用多行 JSON**：shell 换行符处理会导致解析失败
+- ❌ **禁止在双引号内使用命令替换构建大型 JSON**：参数长度限制 + 转义复杂
+- ✅ **必须使用 jq 构建 JSON**：自动处理转义、格式化、变量替换
+- ✅ **必须使用 `@filename` 传递 JSON**：避免命令行长度限制
+- ✅ **先验证 JSON 格式**：`jq . /tmp/payload.json` 确保格式正确
+
 ### 2. Git Commit 前置检查
 **必须完成以下检查**：
 0. ✅ **Memory MCP 检视与更新（NEW）**：
