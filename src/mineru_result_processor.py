@@ -93,7 +93,12 @@ class MinerUResultProcessor:
 
     def extract_content_list(self, zip_path: str) -> tuple[List[Dict[str, Any]], str]:
         """
-        从压缩包中提取 content_list.json 和图片目录
+        从 MinerU ZIP 压缩包中提取 content_list.json
+        使用 RAG-Anything 原生的 _read_output_files 方法
+
+        支持两种 MinerU 输出格式：
+        - Local 模式：{file_stem}_content_list.json
+        - Remote API 模式：{uuid}_content_list.json
 
         Args:
             zip_path: ZIP 文件路径
@@ -113,34 +118,37 @@ class MinerUResultProcessor:
                 zip_ref.extractall(extract_dir)
                 logger.info(f"✓ Extracted all files to: {extract_dir}")
 
-            # 查找 content_list.json（可能在子目录中）
-            content_list_path = None
-            for root, _, files in os.walk(extract_dir):
-                if "content_list.json" in files:
-                    content_list_path = os.path.join(root, "content_list.json")
+            # 使用 RAG-Anything 原生方法读取 MinerU 输出
+            # 这会自动处理文件名匹配和路径转换
+            from pathlib import Path
+            from raganything.parser import MineruParser
+
+            # 1. 查找文件前缀（通过 _content_list.json 后缀）
+            file_stem = None
+            for _, _, files in os.walk(extract_dir):
+                for file in files:
+                    if file.endswith("_content_list.json"):
+                        file_stem = file.replace("_content_list.json", "")
+                        logger.info(f"✓ Detected file_stem from MinerU output: {file_stem}")
+                        break
+                if file_stem:
                     break
 
-            if not content_list_path:
-                raise Exception("content_list.json not found in ZIP")
+            if not file_stem:
+                raise Exception("No content_list.json file found in ZIP")
 
-            # 读取 content_list.json
-            with open(content_list_path, 'r', encoding='utf-8') as f:
-                content_list = json.load(f)
+            # 2. 使用 RAG-Anything 原生的 _read_output_files 方法
+            # 这会自动处理：
+            # - 文件名格式 ({file_stem}_content_list.json)
+            # - 图片路径转换为绝对路径
+            # - 支持子目录结构（local vs remote 模式）
+            content_list, _ = MineruParser._read_output_files(
+                output_dir=Path(extract_dir),
+                file_stem=file_stem,
+                method="auto"
+            )
 
-            logger.info(f"✓ Loaded content_list.json: {len(content_list)} items")
-
-            # 转换图片路径为绝对路径
-            base_dir = os.path.dirname(content_list_path)
-            for item in content_list:
-                if "img_path" in item and item["img_path"]:
-                    # 转换相对路径为绝对路径
-                    img_path = os.path.join(base_dir, item["img_path"])
-                    item["img_path"] = os.path.abspath(img_path)
-
-                    # 验证文件存在
-                    if not os.path.exists(item["img_path"]):
-                        logger.warning(f"Image file not found: {item['img_path']}")
-
+            logger.info(f"✓ Loaded content_list using RAG-Anything native method: {len(content_list)} items")
             return content_list, extract_dir
 
         except Exception as e:
