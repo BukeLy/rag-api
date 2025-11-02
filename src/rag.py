@@ -131,42 +131,101 @@ async def lifespan(app):
     logger.info("Shutting down Multi-Tenant RAG API...")
     # 清理多租户管理器（如需要）
 
-def select_parser_by_file(filename: str, file_size: int) -> str | None:
+def select_parser_by_file(filename: str, file_size: int, file_path: str = None) -> tuple[str | None, str | None]:
     """
-    根据文件特征智能选择解析器
+    智能选择解析器（v2.0 基于 DeepSeek-OCR 完整测试优化）
 
     策略：
-    - 纯文本 (.txt, .md) → 返回 None（直接插入 LightRAG，不需要解析器）
-    - 图片文件 (.jpg, .png) → MinerU（OCR能力强）
-    - PDF/Office 小文件 (< 500KB) → Docling（快速）
-    - PDF/Office 大文件 (> 500KB) → MinerU（更强大）
-    - 其他 → MinerU（默认）
-
-    注意：
-    - Docling 只支持 PDF 和 Office 格式（.pdf, .docx, .xlsx, .pptx, .html）
-    - 纯文本文件会被特殊处理：直接读取内容并插入 LightRAG，无需解析器
+    - 纯文本 (.txt, .md) → 返回 (None, None)（直接插入 LightRAG）
+    - 支持 Parser 的文件：
+      - 根据 PARSER_MODE 环境变量决定：
+        - "auto": 使用智能选择器（推荐）
+        - "deepseek-ocr": 强制使用 DeepSeek-OCR
+        - "mineru": 强制使用 MinerU
+        - "docling": 强制使用 Docling
+      - 智能选择器会根据复杂度评分选择最优 Parser 和模式
 
     Args:
         filename: 文件名
         file_size: 文件大小（字节）
+        file_path: 文件路径（用于复杂度分析，可选）
 
     Returns:
-        "mineru", "docling", 或 None（纯文本文件不需要解析器）
+        (parser_name, deepseek_mode)
+        - parser_name: "deepseek-ocr", "mineru", "docling", 或 None
+        - deepseek_mode: "free_ocr", "grounding", 或 None
     """
     import os
+    from pathlib import Path
+
     ext = os.path.splitext(filename)[1].lower()
 
     # 纯文本文件 → 不需要解析器（直接插入 LightRAG）
-    if ext in ['.txt', '.md', '.markdown']:
-        return None
+    if ext in ['.txt', '.md', '.markdown', '.json', '.csv']:
+        return (None, None)
 
-    # 图片文件 → MinerU（需要 OCR）
-    if ext in ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff']:
-        return "mineru"
+    # 读取 Parser 模式配置
+    parser_mode = os.getenv("PARSER_MODE", "auto").lower()
 
-    # PDF/Office 小文件 → Docling（快速）
-    if ext in ['.pdf', '.docx', '.xlsx', '.pptx', '.html', '.htm'] and file_size < 500 * 1024:  # < 500KB
-        return "docling"
+    # 如果不是 auto 模式，直接返回指定 Parser
+    if parser_mode != "auto":
+        if parser_mode == "deepseek-ocr":
+            # 使用默认模式（从环境变量读取）
+            default_mode = os.getenv("DEEPSEEK_OCR_DEFAULT_MODE", "free_ocr")
+            return ("deepseek-ocr", default_mode)
+        elif parser_mode == "mineru":
+            return ("mineru", None)
+        elif parser_mode == "docling":
+            return ("docling", None)
+        else:
+            logger.warning(f"Unknown PARSER_MODE: {parser_mode}, falling back to 'auto'")
 
-    # 大文件或其他 → MinerU
-    return "mineru"
+    # Auto 模式：使用智能选择器
+    # 如果没有提供 file_path，使用简单规则（兼容旧逻辑）
+    if not file_path or not Path(file_path).exists():
+        logger.warning(f"file_path not provided or invalid, using simple rules")
+
+        # 图片文件 → DeepSeek-OCR（OCR 能力强 + 速度快）
+        if ext in ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff']:
+            return ("deepseek-ocr", "free_ocr")
+
+        # PDF/Office 小文件 → DeepSeek-OCR（快速）
+        if ext in ['.pdf', '.docx', '.xlsx', '.pptx'] and file_size < 500 * 1024:  # < 500KB
+            return ("deepseek-ocr", "free_ocr")
+
+        # 大文件或其他 → MinerU（默认）
+        return ("mineru", None)
+
+    # 使用智能选择器（基于复杂度分析）
+    try:
+        from src.smart_parser_selector import create_selector, ParserType
+        from src.deepseek_ocr_client import DSSeekMode
+
+        selector = create_selector()
+        parser_type, ds_mode = selector.select_parser(
+            file_path=file_path,
+            vlm_mode=os.getenv("VLM_MODE", "off"),
+            prefer_speed=os.getenv("COMPLEXITY_PREFER_SPEED", "true").lower() == "true"
+        )
+
+        # 转换为字符串返回值
+        parser_name = parser_type.value
+        deepseek_mode = ds_mode.value if ds_mode else None
+
+        logger.info(
+            f"Smart selector: {filename} → parser={parser_name}, "
+            f"mode={deepseek_mode or 'N/A'}"
+        )
+
+        return (parser_name, deepseek_mode)
+
+    except Exception as e:
+        logger.error(f"Smart selector failed: {e}, falling back to simple rules")
+
+        # 降级：使用简单规则
+        if ext in ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff']:
+            return ("deepseek-ocr", "free_ocr")
+        elif file_size < 500 * 1024:
+            return ("deepseek-ocr", "free_ocr")
+        else:
+            return ("mineru", None)

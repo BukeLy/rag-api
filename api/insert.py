@@ -37,10 +37,11 @@ async def process_document_task(
     temp_file_path: str,
     original_filename: str,
     parser: Optional[str] = "auto",
-    vlm_mode: str = "off"
+    vlm_mode: str = "off",
+    deepseek_mode: Optional[str] = None
 ):
     """
-    后台异步处理文档（支持多租户隔离 + VLM 模式）
+    后台异步处理文档（支持多租户隔离 + VLM 模式 + DeepSeek-OCR）
 
     Args:
         task_id: 任务ID
@@ -48,9 +49,10 @@ async def process_document_task(
         doc_id: 文档ID
         temp_file_path: 临时文件路径
         original_filename: 原始文件名
-        parser: 解析器类型 ("mineru" / "docling" / "auto" / None)
+        parser: 解析器类型 ("deepseek-ocr" / "mineru" / "docling" / "auto" / None)
                 None 表示纯文本文件，直接插入无需解析
         vlm_mode: VLM 处理模式（"off" / "selective" / "full"）
+        deepseek_mode: DeepSeek-OCR 模式 ("free_ocr" / "grounding" / None)
     """
     try:
         # 更新任务状态为处理中
@@ -83,39 +85,111 @@ async def process_document_task(
             # 非文本文件，需要使用解析器
             if parser is None:
                 raise ValueError(f"Parser is None for non-text file: {original_filename}. This should not happen.")
-            
-            mineru_mode = os.getenv("MINERU_MODE", "local")
-            
-            # 根据 MinerU 模式选择处理策略
-            if mineru_mode == "remote" and parser == "mineru":
-                # 使用远程 MinerU 处理
+
+            # 处理 DeepSeek-OCR
+            if parser == "deepseek-ocr":
                 try:
-                    await process_with_remote_mineru(
-                        task_id=task_id,
-                        tenant_id=tenant_id,
+                    from src.deepseek_ocr_client import create_client, DSSeekMode
+                    from src.document_complexity import DocumentComplexityAnalyzer
+
+                    # 创建 DeepSeek-OCR 客户端
+                    ds_client = create_client()
+
+                    # 确定使用的模式
+                    if deepseek_mode:
+                        mode = DSSeekMode(deepseek_mode)
+                    else:
+                        mode = DSSeekMode.FREE_OCR  # 默认模式
+
+                    # 检查是否需要中文语言提示（简单表格 <10 字场景）
+                    chinese_hint = False
+                    try:
+                        analyzer = DocumentComplexityAnalyzer()
+                        features = analyzer.get_document_features(temp_file_path)
+                        if (features.chinese_char_count > 0 and
+                            features.chinese_char_count < 10):
+                            chinese_hint = True
+                            logger.info(f"[Task {task_id}] Chinese hint enabled (chars={features.chinese_char_count})")
+                    except Exception as e:
+                        logger.warning(f"[Task {task_id}] Failed to analyze Chinese chars: {e}")
+
+                    # 调用 DeepSeek-OCR（异步）
+                    markdown_text = await ds_client.parse_document(
                         file_path=temp_file_path,
-                        filename=original_filename,
-                        doc_id=doc_id,
-                        vlm_mode=vlm_mode
+                        mode=mode,
+                        chinese_hint=chinese_hint
                     )
-                    logger.info(f"[Task {task_id}] [Tenant {tenant_id}] Document processed using remote MinerU API (vlm_mode={vlm_mode})")
+
+                    # 直接插入到租户的 LightRAG 实例
+                    await lightrag_instance.ainsert(markdown_text)
+                    logger.info(
+                        f"[Task {task_id}] [Tenant {tenant_id}] Document parsed using DeepSeek-OCR "
+                        f"(mode={mode.value}, {len(markdown_text)} chars)"
+                    )
                 except Exception as e:
-                    logger.warning(f"[Task {task_id}] [Tenant {tenant_id}] Remote MinerU failed: {e}")
-                    raise  # 不再回退到本地处理，直接抛出错误
+                    logger.error(f"[Task {task_id}] DeepSeek-OCR failed: {e}", exc_info=True)
+                    raise
+
+            # 处理 MinerU
+            elif parser == "mineru":
+                mineru_mode = os.getenv("MINERU_MODE", "local")
+
+                # 根据 MinerU 模式选择处理策略
+                if mineru_mode == "remote":
+                    # 使用远程 MinerU 处理
+                    try:
+                        await process_with_remote_mineru(
+                            task_id=task_id,
+                            tenant_id=tenant_id,
+                            file_path=temp_file_path,
+                            filename=original_filename,
+                            doc_id=doc_id,
+                            vlm_mode=vlm_mode
+                        )
+                        logger.info(f"[Task {task_id}] [Tenant {tenant_id}] Document processed using remote MinerU API (vlm_mode={vlm_mode})")
+                    except Exception as e:
+                        logger.warning(f"[Task {task_id}] [Tenant {tenant_id}] Remote MinerU failed: {e}")
+                        raise  # 不再回退到本地处理，直接抛出错误
+                else:
+                    # 本地处理：需要使用 RAGAnything 解析器
+                    # 注意：这里需要创建临时的 RAGAnything 实例（使用租户的 LightRAG）
+                    from raganything import RAGAnything, RAGAnythingConfig
+
+                    config = RAGAnythingConfig(
+                        working_dir="./rag_local_storage",
+                        parser="mineru",
+                        enable_image_processing=True,  # 🔥 启用图片处理（所有 parser 都支持）
+                        enable_table_processing=True,
+                        enable_equation_processing=True,
+                    )
+
+                    # 🆕 从 LightRAG 实例获取 vision_model_func
+                    vision_func = getattr(lightrag_instance, 'vision_model_func', None)
+
+                    if vision_func is None:
+                        logger.warning(f"[Task {task_id}] [Tenant {tenant_id}] vision_model_func not found, image understanding disabled")
+
+                    rag_anything = RAGAnything(
+                        config=config,
+                        lightrag=lightrag_instance,
+                        vision_model_func=vision_func  # 🆕 传递 VLM 函数
+                    )
+                    await rag_anything.process_document_complete(file_path=temp_file_path, output_dir="./output")
+                    logger.info(f"[Task {task_id}] [Tenant {tenant_id}] Document parsed using MinerU parser with VLM (mode: {mineru_mode})")
+
+            # 处理 Docling
             else:
-                # 本地处理：需要使用 RAGAnything 解析器
-                # 注意：这里需要创建临时的 RAGAnything 实例（使用租户的 LightRAG）
+                # Docling 或其他 parser：使用 RAGAnything
                 from raganything import RAGAnything, RAGAnythingConfig
 
                 config = RAGAnythingConfig(
                     working_dir="./rag_local_storage",
                     parser=parser,
-                    enable_image_processing=True,  # 🔥 启用图片处理（所有 parser 都支持）
-                    enable_table_processing=(parser == "mineru"),
-                    enable_equation_processing=(parser == "mineru"),
+                    enable_image_processing=True,
+                    enable_table_processing=(parser == "docling"),
+                    enable_equation_processing=False,
                 )
 
-                # 🆕 从 LightRAG 实例获取 vision_model_func
                 vision_func = getattr(lightrag_instance, 'vision_model_func', None)
 
                 if vision_func is None:
@@ -124,10 +198,10 @@ async def process_document_task(
                 rag_anything = RAGAnything(
                     config=config,
                     lightrag=lightrag_instance,
-                    vision_model_func=vision_func  # 🆕 传递 VLM 函数
+                    vision_model_func=vision_func
                 )
                 await rag_anything.process_document_complete(file_path=temp_file_path, output_dir="./output")
-                logger.info(f"[Task {task_id}] [Tenant {tenant_id}] Document parsed using {parser} parser with VLM (mode: {mineru_mode})")
+                logger.info(f"[Task {task_id}] [Tenant {tenant_id}] Document parsed using {parser} parser")
         
         # 处理成功
         if tenant_id in TASK_STORE and task_id in TASK_STORE[tenant_id]:
@@ -352,15 +426,21 @@ async def insert_document(
         
         # 智能选择解析器
         selected_parser = parser
+        deepseek_mode = None  # 默认值
         if parser == "auto":
-            selected_parser = select_parser_by_file(original_filename, file_size)
+            selected_parser, deepseek_mode = select_parser_by_file(
+                original_filename,
+                file_size,
+                file_path=temp_file_path
+            )
             parser_desc = selected_parser if selected_parser else "direct_insert (text file)"
-            logger.info(f"Auto-selected parser for {original_filename} ({file_size} bytes): {parser_desc}")
-        
+            mode_desc = f", mode={deepseek_mode}" if deepseek_mode else ""
+            logger.info(f"Auto-selected parser for {original_filename} ({file_size} bytes): {parser_desc}{mode_desc}")
+
         # 生成任务 ID
         task_id = str(uuid.uuid4())
         current_time = datetime.now().isoformat()
-        
+
         # 创建任务记录（按租户隔离）
         task_info = TaskInfo(
             task_id=task_id,
@@ -372,7 +452,7 @@ async def insert_document(
         )
         create_task(task_info, tenant_id)
 
-        # 添加后台任务（传递租户ID、解析器、VLM模式）
+        # 添加后台任务（传递租户ID、解析器、VLM模式、DS-OCR模式）
         background_tasks.add_task(
             process_document_task,
             task_id=task_id,
@@ -381,7 +461,8 @@ async def insert_document(
             temp_file_path=temp_file_path,
             original_filename=original_filename,
             parser=selected_parser,
-            vlm_mode=effective_vlm_mode
+            vlm_mode=effective_vlm_mode,
+            deepseek_mode=deepseek_mode
         )
 
         parser_display = selected_parser if selected_parser else "direct_insert"
@@ -621,15 +702,20 @@ async def insert_batch(
                 
                 # 智能选择解析器
                 selected_parser = parser
+                deepseek_mode = None  # 默认值
                 if parser == "auto":
-                    selected_parser = select_parser_by_file(original_filename, file_size)
+                    selected_parser, deepseek_mode = select_parser_by_file(
+                        original_filename,
+                        file_size,
+                        file_path=temp_file_path
+                    )
 
                 parser_display = selected_parser if selected_parser else "direct_insert"
-                
+
                 # 生成任务 ID
                 task_id = str(uuid.uuid4())
                 current_time = datetime.now().isoformat()
-                
+
                 # 创建任务记录（按租户隔离）
                 task_info = TaskInfo(
                     task_id=task_id,
@@ -650,7 +736,8 @@ async def insert_batch(
                     temp_file_path=temp_file_path,
                     original_filename=original_filename,
                     parser=selected_parser,
-                    vlm_mode=effective_vlm_mode
+                    vlm_mode=effective_vlm_mode,
+                    deepseek_mode=deepseek_mode
                 )
 
                 logger.info(f"[Batch {batch_id}] [Tenant {tenant_id}] Created task {task_id} for file: {original_filename} (parser: {parser_display})")
