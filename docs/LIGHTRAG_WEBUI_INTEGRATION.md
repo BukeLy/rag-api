@@ -24,7 +24,7 @@ LightRAG WebUI 是官方提供的图形界面工具，**完全兼容多租户架
 
 2. **文档上传功能限制**：
    - ⚠️ **不推荐使用 WebUI 的文档上传功能**
-   - WebUI 的上传功能无法利用 rag-api 的强大解析器（MinerU/Docling）
+   - WebUI 的上传功能无法利用 rag-api 的强大解析器（DeepSeek-OCR + MinerU + Docling）
    - 无 OCR 能力（无法处理扫描件和图片中的文字）
    - 无表格/公式提取能力
    - 无智能路由选择（无法根据文件类型自动选择最佳解析器）
@@ -53,7 +53,7 @@ LightRAG WebUI 是官方提供的图形界面工具，**完全兼容多租户架
 ```
 推荐工作流：
 1. 数据导入 → 使用 rag-api (/insert 或 /batch)
-   - 利用 MinerU/Docling 强大解析能力
+   - 利用 DeepSeek-OCR + MinerU + Docling 三引擎智能解析
    - 支持批量处理
    - 多租户隔离
 
@@ -305,8 +305,8 @@ curl -X POST "http://localhost:8000/batch?tenant_id=default" \
 ```
 
 **优势**：
-- 支持 MinerU（OCR/表格/公式）和 Docling（快速解析）
-- 智能选择解析器
+- 支持 DeepSeek-OCR（快速 OCR）、MinerU（多模态解析）和 Docling（轻量解析）
+- 智能选择解析器（基于文档复杂度评分）
 - 批量处理能力
 - 异步任务管理
 
@@ -546,7 +546,7 @@ done
 
 | 特性 | rag-api | LightRAG WebUI |
 |------|---------|----------------|
-| **文档解析** | ✅ MinerU + Docling | ⚠️ 基础解析 |
+| **文档解析** | ✅ DeepSeek-OCR + MinerU + Docling | ⚠️ 基础解析 |
 | **批量处理** | ✅ 支持（100 文件） | ❌ 不支持 |
 | **多租户** | ✅ 完整支持 | ⚠️ 单租户可视化 |
 | **可视化** | ❌ 无 | ✅ 图谱可视化 |
@@ -666,7 +666,7 @@ LightRAG WebUI 与 rag-api 形成完美互补：
 **当前阶段**：
 - WebUI 适合管理员使用，进行调试和可视化
 - 不推荐开放给最终用户（限于单租户模式）
-- 文档上传应使用 rag-api（利用 MinerU/Docling 强解析）
+- 文档上传应使用 rag-api（利用 DeepSeek-OCR + MinerU + Docling 智能解析）
 
 **未来展望**：
 - 通过反向代理和 Fork 项目，逐步实现原生多租户支持

@@ -77,7 +77,7 @@
 **❌ 不能替代 MinerU 的场景**:
 - ❌ 复杂多模态文档（多图、多表，需要图片提取和引用）
 - ❌ 需要结构化元数据（content_list.json、页码、层级）
-- ❌ 需要 VLM 图表理解增强（图表分析、公式识别）
+- ❌ 需要 RAG-Anything VLM 后处理增强（DS-OCR 不提取图片，无法进行 VLM 后处理）
 - ❌ 多页文档批量处理（需要逐页调用 API）
 - ⚠️ 简单中文表格（字符 <10，可能出现语言误判，需添加语言提示）
 
@@ -621,7 +621,7 @@ PARSER_MODE=auto  # auto|mineru|deepseek-ocr|docling
    - 需要"伪造" content_list，失去原有价值
 
 2. **违背设计理念**
-   - RAG-Anything 核心: **多模态增强**（VLM、图片处理）
+   - RAG-Anything 核心: **多模态增强**（VLM 后处理、图片处理）
    - DeepSeek-OCR: **纯文本输出**
    - 不符合项目定位
 
@@ -649,7 +649,7 @@ PARSER_MODE=auto  # auto|mineru|deepseek-ocr|docling
 3. **无图片提取**
    - 仅返回图片的文字描述
    - 无法提取原始图片文件
-   - **影响**: RAG-Anything 的 VLM 增强功能无法使用
+   - **影响**: RAG-Anything 的 VLM 后处理功能无法使用（无图片可供 Vision API 调用）
 
 4. **输出格式固定**
    - 无法自定义输出结构

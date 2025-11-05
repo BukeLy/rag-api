@@ -34,6 +34,9 @@
 | `LIGHTRAG_IMPLEMENTATION_GUIDE.md` | LightRAG 详细实现指南 | 内部开发参考 |
 | `MINERU_REMOTE_API.md` | MinerU 远程 API 文档 | 内部集成文档 |
 | `OPTIMIZATION_GUIDE.md` | 性能优化指南 | 内部优化参考 |
+| [deepseek-ocr-complete.md](deepseek-ocr-complete.md) | DeepSeek-OCR 完整研究报告 | DS-OCR 集成测试和评估 |
+| [smart-parser-selection-v2.md](smart-parser-selection-v2.md) | 智能 Parser 选择方案 v2.0 | DS-OCR + MinerU + Docling 智能选择 |
+| [parser-selection-upgrade-v1-to-v2.md](parser-selection-upgrade-v1-to-v2.md) | Parser 选择方案升级报告 | v1.0 → v2.0 升级详情 |
 
 ### 迁移文档
 

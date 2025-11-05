@@ -6,7 +6,7 @@
 
 ### 快速结论
 
-- **rag-api**：生产级多租户 API 服务，强文档解析能力（MinerU/Docling），适合企业 SaaS 场景
+- **rag-api**：生产级多租户 API 服务，强文档解析能力（DeepSeek-OCR + MinerU + Docling 三引擎），适合企业 SaaS 场景
 - **LightRAG 官方 API**：轻量级单租户 API，功能丰富，适合个人/小团队快速集成
 
 ---
@@ -17,7 +17,7 @@
 |------|---------|------------------|
 | **定位** | 生产级 API 服务 | 研究原型 / 快速集成 |
 | **多租户** | ✅ 原生支持（LRU 实例池） | ❌ 单 workspace |
-| **文档解析** | ✅ MinerU + Docling（OCR/表格/公式） | ❌ 基础解析（无 OCR） |
+| **文档解析** | ✅ DeepSeek-OCR + MinerU + Docling（三引擎智能选择） | ❌ 基础解析（无 OCR） |
 | **部署方式** | ✅ Docker 一键部署 | ⚠️ 需手动配置 |
 | **批量处理** | ✅ 单次 100 文件（`/batch`） | ❌ 无批量端点 |
 | **生产运维** | ✅ 监控/日志/健康检查 | ⚠️ 基础健康检查 |
@@ -32,13 +32,14 @@
 #### rag-api: `POST /insert`
 
 **独特优势**：
-- ✅ **MinerU 集成**：OCR、表格、公式提取（适合扫描件、复杂文档）
+- ✅ **DeepSeek-OCR 集成**：快速 OCR 解析（5-11s，80% 场景最优）
+- ✅ **MinerU 集成**：多模态解析（OCR、表格、公式提取，适合复杂文档）
 - ✅ **Docling 集成**：轻量级快速解析（适合简单文档）
-- ✅ **智能路由**：根据文件类型/大小自动选择解析器
-  - 图片（jpg/png）→ MinerU（OCR）
-  - 纯文本（txt/md）→ 直接插入（跳过解析）
-  - PDF/Office < 500KB → Docling（快速）
-  - PDF/Office > 500KB → MinerU（强大）
+- ✅ **智能路由**：根据文档复杂度评分自动选择解析器
+  - 简单文档（<20 分）→ DeepSeek-OCR Free OCR（最快）
+  - 复杂表格（20-40 分）→ DeepSeek-OCR Grounding（精确表格）
+  - 中文文档（40-60 分）→ DeepSeek-OCR Free OCR（100% 准确）
+  - 复杂多模态（>60 分）→ MinerU（图片提取 + VLM 后处理）
 - ✅ **Remote MinerU**：节省本地 GPU 资源，支持高并发（10+ 并发）
 - ✅ **多租户隔离**：每个租户独立 workspace
 
@@ -242,7 +243,7 @@
 
 | 端点 | rag-api | LightRAG 官方 | 可替代性 | 差异化价值 |
 |------|---------|--------------|---------|-----------|
-| **文档上传** | `POST /insert` | `/documents/upload` | ❌ 不可替代 | MinerU/Docling/多租户 |
+| **文档上传** | `POST /insert` | `/documents/upload` | ❌ 不可替代 | DeepSeek-OCR + MinerU + Docling 三引擎 + 多租户 |
 | **批量上传** | `POST /batch` | **无** | ❌ 不可替代 | rag-api 独有 |
 | **标准查询** | `POST /query` | `/query` | ❌ 不可替代 | 多租户 + 同等功能（v2.0 已完成） |
 | **流式查询** | `POST /query/stream` ✅ | `/query/stream` | ❌ 不可替代 | 多租户 + 生产级实现 |
@@ -255,7 +256,7 @@
 ### 关键结论
 
 1. **0 个端点可以删除**：所有 rag-api 端点都有差异化价值
-2. **核心优势**：多租户架构、强文档解析、批量处理、生产运维、完整查询功能
+2. **核心优势**：多租户架构、三引擎智能文档解析、批量处理、生产运维、完整查询功能
 3. **v2.0 已完成**：✅ 查询功能增强（9个高级参数），✅ 流式查询，✅ BATCH_STORE 修复
 
 ---

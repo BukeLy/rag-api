@@ -31,7 +31,7 @@
 | **官方文件（多语言）** | 30-50 | DeepSeek-OCR | Free OCR / Grounding | Visa: 5.56-8.31s, 3214 字符完整提取 ✅ |
 | **中文文档（复杂）** | 40-60 | DeepSeek-OCR | Free OCR | 毕业证: 10.95s, 102 字符 100% 准确 ✅ |
 | **简单中文表格（<10 字）** | 15-25 | DeepSeek-OCR + 后处理 | Free OCR + 语言提示 | IELTS 韩文问题：需添加中文提示 ⚠️ |
-| **复杂多模态（多图）** | > 60 | MinerU | - | 需要图片提取 + VLM 增强 ❌ |
+| **复杂多模态（多图）** | > 60 | MinerU | - | 需要图片提取 + RAG-Anything VLM 后处理增强 ❌ |
 | **需要结构化元数据** | > 50 | MinerU | - | 需要 content_list.json + 页码 + 层级 ❌ |
 
 ### 2. Parser 性能对比（实测数据）
@@ -40,8 +40,8 @@
 |--------|------|-------------|---------|--------------|
 | **DeepSeek-OCR (Free OCR)** | ⚡⚡⚡ 3.95-10.95s | 💰 118-225 tokens | 纯 Markdown | **80%** |
 | **DeepSeek-OCR (Grounding)** | ⚡⚡ 5.18-8.31s | 💰 2,421 tokens | HTML + bbox | **15%** |
-| **MinerU (vlm=off)** | 🐢 10-60s | 💰💰 高 | ZIP (Markdown + JSON + 图片) | **90%** |
-| **MinerU (vlm=full)** | 🐢🐢 50-120s | 💰💰💰 极高 | ZIP (+ VLM 增强) | **95%** |
+| **MinerU (RAG-Anything vlm_mode=off)** | 🐢 10-60s | 💰💰 高 | ZIP (Markdown + JSON + 图片) | **90%** |
+| **MinerU (RAG-Anything vlm_mode=full)** | 🐢🐢 50-120s | 💰💰💰 极高 | ZIP (+ RAG-Anything VLM 后处理) | **95%** |
 
 ---
 
@@ -59,7 +59,7 @@ graph TD
     E -->|< 20 简单| F[DeepSeek-OCR Free OCR]
     E -->|20-40 中等表格| G[DeepSeek-OCR Grounding]
     E -->|40-60 复杂单页| H{检查中文密度}
-    E -->|> 60 多模态| I[MinerU vlm=off/full]
+    E -->|> 60 多模态| I[MinerU + RAG-Anything 后处理]
 
     H -->|中文 >30%| J[DeepSeek-OCR Free OCR]
     H -->|中文 <10 字| K[DeepSeek-OCR + 语言提示]
@@ -336,7 +336,8 @@ class SmartParserSelector:
 
         Args:
             file_path: 文件路径
-            vlm_mode: VLM 模式 (off/selective/full)
+            vlm_mode: RAG-Anything VLM 后处理模式 (off/selective/full)
+                     注意：这是后处理阶段参数，与 MinerU 的 VLM 解析无关
             prefer_speed: 是否优先速度
 
         Returns:
@@ -376,7 +377,7 @@ class SmartParserSelector:
                     'chinese_char_count': int,
                     'has_complex_layout': bool
                 }
-            vlm_mode: VLM 模式
+            vlm_mode: RAG-Anything VLM 后处理模式（与 MinerU 的 VLM 解析无关）
             prefer_speed: 是否优先速度
 
         Returns:
@@ -696,8 +697,8 @@ class RAGLocal:
 | 步骤 | 耗时 | 累计 |
 |------|------|------|
 | 复杂度分析（20 页采样） | 1s | 1s |
-| MinerU vlm=full | 3600s | 3601s |
-| RAG-Anything 处理 | 120s | 3721s |
+| MinerU 解析（remote API，默认 VLM） | 3600s | 3601s |
+| RAG-Anything 后处理（vlm_mode=full） | 120s | 3721s |
 | **总计** | | **~3721s (1h 2min)** |
 
 **对比 DeepSeek-OCR**：不适用（需要图片提取）
@@ -896,11 +897,12 @@ if avg_table_row_count >= 20:
 
 **根因**：DS-OCR 仅返回文本，不提取图片文件
 
-**影响范围**：需要 VLM 增强、图片引用的场景
+**影响范围**：需要 RAG-Anything VLM 后处理增强、图片引用的场景
 
 **解决方案**：
 ```python
 # 复杂多模态文档（>3 图片/页）自动回退 MinerU
+# MinerU 提供图片文件 → RAG-Anything 可进行 VLM 后处理
 if avg_image_count >= 3:
     return ParserType.MINERU
 ```
