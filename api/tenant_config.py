@@ -10,8 +10,7 @@ from typing import Optional, Dict, Any
 from datetime import datetime
 from src.tenant_config import (
     get_tenant_config_manager,
-    TenantConfigModel,
-    QuotaConfig
+    TenantConfigModel
 )
 from src.logger import logger
 
@@ -26,8 +25,6 @@ class ConfigUpdateRequest(BaseModel):
     rerank_config: Optional[Dict[str, Any]] = None
     ds_ocr_config: Optional[Dict[str, Any]] = None  # 🆕 DeepSeek-OCR 配置
     mineru_config: Optional[Dict[str, Any]] = None  # 🆕 MinerU 配置
-    quota: Optional[Dict[str, Any]] = None
-    status: Optional[str] = None
 
 
 class ConfigResponse(BaseModel):
@@ -38,8 +35,6 @@ class ConfigResponse(BaseModel):
     rerank_config: Optional[Dict[str, Any]]
     ds_ocr_config: Optional[Dict[str, Any]]  # 🆕 DeepSeek-OCR 配置
     mineru_config: Optional[Dict[str, Any]]  # 🆕 MinerU 配置
-    quota: Dict[str, Any]
-    status: str
     created_at: Optional[datetime]
     updated_at: Optional[datetime]
     merged_config: Optional[Dict[str, Any]] = None
@@ -137,7 +132,6 @@ async def get_tenant_config(tenant_id: str):
         "rerank": mask_config(merged_config["rerank"]),
         "ds_ocr": mask_config(merged_config["ds_ocr"]),  # 🆕 DeepSeek-OCR
         "mineru": mask_config(merged_config["mineru"]),  # 🆕 MinerU
-        "quota": merged_config["quota"],
     }
 
     return ConfigResponse(
@@ -147,8 +141,6 @@ async def get_tenant_config(tenant_id: str):
         rerank_config=mask_config(tenant_config.rerank_config),
         ds_ocr_config=mask_config(tenant_config.ds_ocr_config),  # 🆕 DeepSeek-OCR
         mineru_config=mask_config(tenant_config.mineru_config),  # 🆕 MinerU
-        quota=tenant_config.quota.model_dump(),
-        status=tenant_config.status,
         created_at=tenant_config.created_at,
         updated_at=tenant_config.updated_at,
         merged_config=masked_merged
@@ -192,10 +184,6 @@ async def update_tenant_config(
             config_data["ds_ocr_config"] = request.ds_ocr_config
         if request.mineru_config is not None:  # 🆕 MinerU
             config_data["mineru_config"] = request.mineru_config
-        if request.quota is not None:
-            config_data["quota"] = QuotaConfig(**request.quota)
-        if request.status is not None:
-            config_data["status"] = request.status
     else:
         # 创建新配置
         config_data = {
@@ -205,8 +193,6 @@ async def update_tenant_config(
             "rerank_config": request.rerank_config,
             "ds_ocr_config": request.ds_ocr_config,  # 🆕 DeepSeek-OCR
             "mineru_config": request.mineru_config,  # 🆕 MinerU
-            "quota": QuotaConfig(**request.quota) if request.quota else QuotaConfig(),
-            "status": request.status or "active",
         }
 
     try:
@@ -227,8 +213,6 @@ async def update_tenant_config(
             rerank_config=mask_config(new_config.rerank_config),
             ds_ocr_config=mask_config(new_config.ds_ocr_config),  # 🆕 DeepSeek-OCR
             mineru_config=mask_config(new_config.mineru_config),  # 🆕 MinerU
-            quota=new_config.quota.model_dump(),
-            status=new_config.status,
             created_at=new_config.created_at,
             updated_at=new_config.updated_at,
             merged_config=None
@@ -319,7 +303,6 @@ async def refresh_tenant_config(tenant_id: str):
         "rerank": mask_config(merged_config["rerank"]),
         "ds_ocr": mask_config(merged_config["ds_ocr"]),  # 🆕 DeepSeek-OCR
         "mineru": mask_config(merged_config["mineru"]),  # 🆕 MinerU
-        "quota": merged_config["quota"],
     }
 
     logger.info(f"[{tenant_id}] Config refreshed via API")
@@ -331,8 +314,6 @@ async def refresh_tenant_config(tenant_id: str):
         rerank_config=mask_config(tenant_config.rerank_config),
         ds_ocr_config=mask_config(tenant_config.ds_ocr_config),  # 🆕 DeepSeek-OCR
         mineru_config=mask_config(tenant_config.mineru_config),  # 🆕 MinerU
-        quota=tenant_config.quota.model_dump(),
-        status=tenant_config.status,
         created_at=tenant_config.created_at,
         updated_at=tenant_config.updated_at,
         merged_config=masked_merged

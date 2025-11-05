@@ -14,13 +14,6 @@ from src.logger import logger
 from src.config import config
 
 
-class QuotaConfig(BaseModel):
-    """配额配置"""
-    daily_queries: int = Field(default=1000, description="每日查询配额")
-    storage_mb: int = Field(default=1000, description="存储配额（MB）")
-    max_file_size_mb: int = Field(default=100, description="单文件最大大小（MB）")
-
-
 class TenantConfigModel(BaseModel):
     """租户配置模型"""
 
@@ -78,18 +71,6 @@ class TenantConfigModel(BaseModel):
             "model_version": "vlm",
             "timeout": 60
         }
-    )
-
-    # 配额配置
-    quota: QuotaConfig = Field(
-        default_factory=QuotaConfig,
-        description="租户配额"
-    )
-
-    # 状态
-    status: str = Field(
-        default="active",
-        description="租户状态"
     )
 
     # 元数据
@@ -294,7 +275,6 @@ class TenantConfigManager:
             "rerank": self._merge_rerank_config(tenant_config),
             "ds_ocr": self._merge_ds_ocr_config(tenant_config),
             "mineru": self._merge_mineru_config(tenant_config),
-            "quota": self._merge_quota_config(tenant_config),
         }
         return merged
 
@@ -343,13 +323,6 @@ class TenantConfigManager:
             base.update(tenant_config.rerank_config)
 
         return base
-
-    def _merge_quota_config(self, tenant_config: Optional[TenantConfigModel]) -> Dict[str, Any]:
-        """合并配额配置"""
-        if tenant_config and tenant_config.quota:
-            return tenant_config.quota.model_dump()
-        else:
-            return QuotaConfig().model_dump()
 
     def _merge_ds_ocr_config(self, tenant_config: Optional[TenantConfigModel]) -> Dict[str, Any]:
         """合并 DeepSeek-OCR 配置"""

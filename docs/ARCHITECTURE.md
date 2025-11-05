@@ -259,12 +259,13 @@ class MultiTenantRAGManager:
 **职责**:
 - 管理租户实例生命周期
 - LRU 缓存策略(最多 50 个实例)
-- 共享 LLM/Embedding/Rerank 函数
+- 支持租户配置隔离(LLM/Embedding/Rerank/DeepSeek-OCR/MinerU) 🆕
 - 懒加载:按需创建实例
 
-**共享方式**:
+**配置方式**:
 - 所有 API 端点通过 `get_tenant_lightrag(tenant_id)` 获取实例
 - 自动处理实例创建、缓存和清理
+- 支持租户级配置覆盖(API key、模型、超时等) 🆕
 
 ### 2. 租户依赖注入(NEW)
 
@@ -323,7 +324,139 @@ async def validate_tenant_access(tenant_id: str) -> bool:
 - 格式验证和鉴权(预留扩展点)
 - 为未来 JWT 认证提供升级路径
 
-### 3. MinerU 解析器
+### 3. 租户配置管理 (NEW) 🆕
+
+**定义位置**: `src/tenant_config.py`, `api/tenant_config.py`
+
+#### 3.1 配置模型
+
+```python
+class TenantConfigModel(BaseModel):
+    """租户配置模型"""
+    tenant_id: str
+
+    # 5 个服务配置（可选，支持部分覆盖）
+    llm_config: Optional[Dict[str, Any]] = None
+    embedding_config: Optional[Dict[str, Any]] = None
+    rerank_config: Optional[Dict[str, Any]] = None
+    ds_ocr_config: Optional[Dict[str, Any]] = None  # 🆕 DeepSeek-OCR
+    mineru_config: Optional[Dict[str, Any]] = None  # 🆕 MinerU
+
+    # 元数据
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+```
+
+#### 3.2 配置隔离架构
+
+```mermaid
+flowchart TD
+    A[租户 A 请求] --> B[多租户管理器]
+    B --> C{配置加载}
+
+    C --> D1[租户 A 配置]
+    C --> D2[全局配置]
+
+    D1 --> E[配置合并<br/>租户配置 > 全局配置]
+    D2 --> E
+
+    E --> F1[LLM<br/>租户 A 的 API key]
+    E --> F2[Embedding<br/>租户 A 的 model]
+    E --> F3[Rerank<br/>全局配置]
+    E --> F4[DeepSeek-OCR<br/>租户 A 的 API key]
+    E --> F5[MinerU<br/>租户 A 的 token]
+
+    F1 & F2 & F3 & F4 & F5 --> G[创建租户专属<br/>LightRAG 实例]
+
+    G --> H[tenant_a 知识图谱]
+
+    style E fill:#fff4e1
+    style G fill:#d4edda
+```
+
+#### 3.3 配置管理器
+
+```python
+class TenantConfigManager:
+    """
+    租户配置管理器
+
+    特性:
+    - 支持本地文件存储 / Redis 存储
+    - 配置热重载（无需重启服务）
+    - 自动合并租户配置与全局配置
+    - API Key 自动脱敏
+    """
+
+    def merge_with_global(self, tenant_config: Optional[TenantConfigModel]) -> Dict:
+        """
+        将租户配置与全局配置合并
+
+        配置优先级：租户配置 > 全局配置
+
+        Returns:
+            {
+                "llm": {...},        # 合并后的 LLM 配置
+                "embedding": {...},  # 合并后的 Embedding 配置
+                "rerank": {...},     # 合并后的 Rerank 配置
+                "ds_ocr": {...},     # 合并后的 DeepSeek-OCR 配置
+                "mineru": {...}      # 合并后的 MinerU 配置
+            }
+        """
+        merged = {
+            "llm": self._merge_llm_config(tenant_config),
+            "embedding": self._merge_embedding_config(tenant_config),
+            "rerank": self._merge_rerank_config(tenant_config),
+            "ds_ocr": self._merge_ds_ocr_config(tenant_config),
+            "mineru": self._merge_mineru_config(tenant_config),
+        }
+        return merged
+```
+
+#### 3.4 配置 API
+
+```bash
+# 创建/更新租户配置
+PUT /tenants/{tenant_id}/config
+
+# 查询租户配置（API key 自动脱敏）
+GET /tenants/{tenant_id}/config
+
+# 刷新配置缓存（配置热重载）
+POST /tenants/{tenant_id}/config/refresh
+
+# 删除租户配置（恢复全局配置）
+DELETE /tenants/{tenant_id}/config
+```
+
+#### 3.5 配置使用示例
+
+```bash
+# 为租户 A 配置独立的 DeepSeek-OCR API key
+curl -X PUT "http://localhost:8000/tenants/tenant_a/config" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "ds_ocr_config": {
+      "api_key": "sk-tenant-a-ds-ocr-key",
+      "timeout": 90
+    }
+  }'
+
+# 租户 A 上传文档时，自动使用租户 A 的配置
+curl -X POST "http://localhost:8000/insert?tenant_id=tenant_a&doc_id=doc1" \
+  -F "file=@document.pdf"
+```
+
+#### 3.6 应用场景
+
+| 场景 | 说明 |
+|------|------|
+| **多租户 SaaS** | 每个租户使用自己的 API key，独立计费 |
+| **差异化服务** | 不同租户使用不同的模型（GPT-4 vs GPT-3.5） |
+| **A/B 测试** | 对比不同模型/参数的效果 |
+| **成本控制** | 按租户跟踪 API 使用量 |
+
+### 4. MinerU 解析器
 
 **配置**: `src/rag.py`
 

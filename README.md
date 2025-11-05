@@ -137,9 +137,9 @@ graph TB
     end
     
     subgraph "外部服务"
-        LLM[豆包 LLM<br/>实体提取/生成]
-        Embedding[硅基流动<br/>向量化]
-        Rerank[Reranker<br/>重排序]
+        LLM[LLM<br/>实体提取/生成]
+        Embedding[Embedding<br/>向量化]
+        Rerank[Rerank<br/>重排序]
     end
     
     Client --> FastAPI
@@ -180,40 +180,45 @@ graph TB
 ### 多租户架构
 
 ```mermaid
-graph LR
+graph TB
     subgraph "租户 A"
-        A_Instance[LightRAG 实例 A]
-        A_Data[(租户 A 数据)]
+        A_Config[租户 A 配置<br/>独立 API Key]
+        A_Instance[LightRAG 实例 A<br/>专属 LLM/Embedding]
+        A_Data[(租户 A 数据<br/>完全隔离)]
+        A_Config --> A_Instance
+        A_Instance --> A_Data
     end
-    
+
     subgraph "租户 B"
-        B_Instance[LightRAG 实例 B]
-        B_Data[(租户 B 数据)]
+        B_Config[租户 B 配置<br/>独立 API Key]
+        B_Instance[LightRAG 实例 B<br/>专属 LLM/Embedding]
+        B_Data[(租户 B 数据<br/>完全隔离)]
+        B_Config --> B_Instance
+        B_Instance --> B_Data
     end
-    
+
     subgraph "租户 C"
-        C_Instance[LightRAG 实例 C]
-        C_Data[(租户 C 数据)]
+        C_Config[使用全局配置]
+        C_Instance[LightRAG 实例 C<br/>共享 LLM/Embedding]
+        C_Data[(租户 C 数据<br/>完全隔离)]
+        C_Config --> C_Instance
+        C_Instance --> C_Data
     end
-    
-    Pool[实例池管理器<br/>LRU Cache]
-    
-    Shared[共享资源<br/>LLM/Embedding]
-    
+
+    Pool[实例池管理器<br/>LRU Cache + 配置隔离]
+    Global[全局配置<br/>默认 API Key]
+
     Pool --> A_Instance
     Pool --> B_Instance
     Pool --> C_Instance
-    
-    A_Instance --> A_Data
-    B_Instance --> B_Data
-    C_Instance --> C_Data
-    
-    A_Instance -.-> Shared
-    B_Instance -.-> Shared
-    C_Instance -.-> Shared
-    
+
+    C_Config -.降级.-> Global
+
     style Pool fill:#F38181
-    style Shared fill:#95E1D3
+    style Global fill:#95E1D3
+    style A_Config fill:#FFD93D
+    style B_Config fill:#FFD93D
+    style C_Config fill:#E8E8E8
 ```
 
 ### 核心技术栈
@@ -708,6 +713,97 @@ DOCUMENT_PROCESSING_CONCURRENCY=10  # 远程模式可设高，本地模式设为
 - ✅ 隔离的数据存储空间
 - ✅ 独立的向量索引
 - ✅ 专属的知识图谱
+- ✅ **独立的服务配置**（LLM、Embedding、Rerank、DeepSeek-OCR、MinerU）🆕
+
+### 租户配置管理 🆕
+
+每个租户可以独立配置 5 个服务，支持配置热重载：
+
+```bash
+# 1️⃣ 为租户 A 配置独立的 DeepSeek-OCR API key
+curl -X PUT "http://localhost:8000/tenants/tenant_a/config" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "ds_ocr_config": {
+      "api_key": "sk-tenant-a-ds-ocr-key",
+      "base_url": "https://api.siliconflow.cn/v1",
+      "model": "deepseek-ai/DeepSeek-OCR",
+      "timeout": 90
+    }
+  }'
+
+# 2️⃣ 为租户 B 配置独立的 MinerU API token
+curl -X PUT "http://localhost:8000/tenants/tenant_b/config" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "mineru_config": {
+      "api_token": "tenant-b-mineru-token",
+      "base_url": "https://mineru.net",
+      "model_version": "vlm"
+    }
+  }'
+
+# 3️⃣ 同时配置多个服务（LLM + Embedding + DeepSeek-OCR）
+curl -X PUT "http://localhost:8000/tenants/tenant_c/config" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "llm_config": {
+      "api_key": "sk-tenant-c-llm-key",
+      "model": "gpt-4"
+    },
+    "embedding_config": {
+      "api_key": "sk-tenant-c-embedding-key",
+      "model": "Qwen/Qwen3-Embedding-0.6B",
+      "dim": 1024
+    },
+    "ds_ocr_config": {
+      "api_key": "sk-tenant-c-ds-ocr-key"
+    }
+  }'
+
+# 4️⃣ 查询租户配置（API key 自动脱敏）
+curl "http://localhost:8000/tenants/tenant_a/config"
+
+# 返回示例
+{
+  "tenant_id": "tenant_a",
+  "ds_ocr_config": {
+    "api_key": "sk-***-key",  // 自动脱敏
+    "timeout": 90
+  },
+  "merged_config": {
+    "llm": {...},        // 使用全局配置
+    "embedding": {...},  // 使用全局配置
+    "rerank": {...},     // 使用全局配置
+    "ds_ocr": {...},     // 使用租户配置
+    "mineru": {...}      // 使用全局配置
+  }
+}
+
+# 5️⃣ 刷新配置缓存（配置热重载）
+curl -X POST "http://localhost:8000/tenants/tenant_a/config/refresh"
+
+# 6️⃣ 删除租户配置（恢复使用全局配置）
+curl -X DELETE "http://localhost:8000/tenants/tenant_a/config"
+```
+
+**支持的配置项**：
+
+| 服务 | 配置字段 | 说明 |
+|------|---------|------|
+| **LLM** | `llm_config` | 模型、API key、base_url 等 |
+| **Embedding** | `embedding_config` | 模型、API key、维度等 |
+| **Rerank** | `rerank_config` | 模型、API key等 |
+| **DeepSeek-OCR** | `ds_ocr_config` | API key、超时、模式等 |
+| **MinerU** | `mineru_config` | API token、版本、超时等 |
+
+**配置优先级**：租户配置 > 全局配置
+
+**使用场景**：
+- 🔐 **多租户 SaaS**：每个租户使用自己的 API key
+- 💰 **按量计费**：通过独立 API key 跟踪租户使用量
+- 🎯 **差异化服务**：不同租户使用不同的模型（GPT-4 vs GPT-3.5）
+- 🧪 **A/B 测试**：对比不同模型/参数的效果
 
 ### 使用方式
 
@@ -732,7 +828,7 @@ curl -X POST "http://localhost:8000/query?tenant_id=tenant_a" \
 
 - **容量**：最多缓存 50 个租户实例
 - **策略**：LRU（最近最少使用）自动清理
-- **共享**：LLM 和 Embedding 服务在所有租户间共享
+- **配置隔离**：每个租户可使用独立的 LLM、Embedding、解析器配置
 
 ---
 
