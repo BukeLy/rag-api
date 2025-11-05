@@ -61,3 +61,4 @@ docs/PRODUCTION_MIGRATION_GUIDE.md
 docs/PRODUCTION_MIGRATION_QUICKSTART.md
 docs/MINERU_REMOTE_API.md
 .claude/tmp/*
+docs/config_refactor/*

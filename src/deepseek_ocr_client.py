@@ -23,6 +23,7 @@ import aiohttp
 import requests
 
 from src.logger import logger
+from src.config import config  # 使用集中配置管理
 
 
 class DSSeekMode(Enum):
@@ -34,34 +35,28 @@ class DSSeekMode(Enum):
 
 @dataclass
 class DSSeekConfig:
-    """DeepSeek-OCR 配置"""
-    api_key: str = field(default_factory=lambda: os.getenv("SF_API_KEY", ""))
-    base_url: str = field(default_factory=lambda: os.getenv("SF_BASE_URL", "https://api.siliconflow.cn/v1"))
-    model_name: str = "deepseek-ai/DeepSeek-OCR"
+    """DeepSeek-OCR 配置（已弃用，建议使用 config.ds_ocr）"""
+    api_key: str = field(default_factory=lambda: config.ds_ocr.api_key)
+    base_url: str = field(default_factory=lambda: config.ds_ocr.base_url)
+    model_name: str = field(default_factory=lambda: config.ds_ocr.model)
 
     # 请求配置
-    timeout: int = field(default_factory=lambda: int(os.getenv("DEEPSEEK_OCR_TIMEOUT", "60")))
-    max_tokens: int = field(default_factory=lambda: int(os.getenv("DEEPSEEK_OCR_MAX_TOKENS", "4000")))
+    timeout: int = field(default_factory=lambda: config.ds_ocr.timeout)
+    max_tokens: int = field(default_factory=lambda: config.ds_ocr.max_tokens)
     temperature: float = 0.0  # 确定性输出
 
     # DPI 配置（200 DPI 是最佳平衡点）
-    dpi: int = field(default_factory=lambda: int(os.getenv("DEEPSEEK_OCR_DPI", "200")))
+    dpi: int = field(default_factory=lambda: config.ds_ocr.dpi)
 
     # 智能降级配置
-    fallback_enabled: bool = field(
-        default_factory=lambda: os.getenv("DEEPSEEK_OCR_FALLBACK_ENABLED", "true").lower() == "true"
-    )
-    fallback_mode: str = field(
-        default_factory=lambda: os.getenv("DEEPSEEK_OCR_FALLBACK_MODE", "grounding")
-    )
-    min_output_threshold: int = field(
-        default_factory=lambda: int(os.getenv("DEEPSEEK_OCR_MIN_OUTPUT_THRESHOLD", "500"))
-    )
+    fallback_enabled: bool = field(default_factory=lambda: config.ds_ocr.fallback_enabled)
+    fallback_mode: str = field(default_factory=lambda: config.ds_ocr.fallback_mode)
+    min_output_threshold: int = field(default_factory=lambda: config.ds_ocr.min_output_threshold)
 
     def __post_init__(self):
         """验证配置"""
         if not self.api_key:
-            raise ValueError("SF_API_KEY is required. Please set it in environment variables.")
+            raise ValueError("DS_OCR_API_KEY is required. Please set it in environment variables.")
 
 
 class DeepSeekOCRClient:
@@ -390,24 +385,24 @@ def create_client(
     创建 DeepSeek-OCR 客户端（便捷函数）
 
     Args:
-        api_key: API Key（可选，优先使用环境变量 SF_API_KEY）
+        api_key: API Key（可选，优先使用配置管理类 config.ds_ocr）
         **kwargs: 其他配置参数
 
     Returns:
         DeepSeekOCRClient: 客户端实例
 
     Example:
-        # 使用环境变量
+        # 使用集中配置（推荐）
         client = create_client()
 
-        # 手动指定 API key
+        # 手动指定 API key（测试用）
         client = create_client(api_key="your_api_key_here")
     """
-    config = DSSeekConfig(
-        api_key=api_key or os.getenv("SF_API_KEY", ""),
+    ds_config = DSSeekConfig(
+        api_key=api_key or config.ds_ocr.api_key,
         **kwargs
     )
-    return DeepSeekOCRClient(config)
+    return DeepSeekOCRClient(ds_config)
 
 
 # ============== 示例代码 ==============

@@ -81,6 +81,69 @@ class RerankConfig(BaseSettings):
         extra = "ignore"
 
 
+# ==================== DeepSeek-OCR Configuration ====================
+
+class DeepSeekOCRConfig(BaseSettings):
+    """DeepSeek-OCR Configuration"""
+
+    api_key: str = Field(..., description="DeepSeek-OCR API Key")
+    base_url: str = Field(
+        default="https://api.siliconflow.cn/v1",
+        description="DeepSeek-OCR API Base URL"
+    )
+    model: str = Field(
+        default="deepseek-ai/DeepSeek-OCR",
+        description="DeepSeek-OCR Model Name"
+    )
+
+    # OCR 模式配置
+    default_mode: str = Field(
+        default="free_ocr",
+        description="Default OCR Mode (free_ocr/grounding/ocr_image)",
+        alias="DEEPSEEK_OCR_DEFAULT_MODE"
+    )
+
+    # 请求配置
+    timeout: int = Field(
+        default=60,
+        description="API Request Timeout (seconds)",
+        alias="DEEPSEEK_OCR_TIMEOUT"
+    )
+    max_tokens: int = Field(
+        default=4000,
+        description="Maximum Output Tokens",
+        alias="DEEPSEEK_OCR_MAX_TOKENS"
+    )
+    dpi: int = Field(
+        default=200,
+        description="PDF to Image DPI (150=fast, 200=balanced, 300=high-quality)",
+        alias="DEEPSEEK_OCR_DPI"
+    )
+
+    # 智能降级配置
+    fallback_enabled: bool = Field(
+        default=True,
+        description="Enable Smart Fallback (Free OCR → Grounding)",
+        alias="DEEPSEEK_OCR_FALLBACK_ENABLED"
+    )
+    fallback_mode: str = Field(
+        default="grounding",
+        description="Fallback Mode",
+        alias="DEEPSEEK_OCR_FALLBACK_MODE"
+    )
+    min_output_threshold: int = Field(
+        default=500,
+        description="Minimum Output Length for Fallback",
+        alias="DEEPSEEK_OCR_MIN_OUTPUT_THRESHOLD"
+    )
+
+    class Config:
+        env_prefix = "DS_OCR_"
+        env_file = ".env"
+        extra = "ignore"
+        populate_by_name = True
+
+
 # ==================== Storage Configuration ====================
 
 class StorageConfig(BaseSettings):
@@ -210,6 +273,7 @@ class AppConfig:
         self.llm = LLMConfig()
         self.embedding = EmbeddingConfig()
         self.rerank = RerankConfig()
+        self.ds_ocr = DeepSeekOCRConfig()
         self.storage = StorageConfig()
         self.lightrag_query = LightRAGQueryConfig()
         self.multi_tenant = MultiTenantConfig()
@@ -223,6 +287,8 @@ class AppConfig:
             raise ValueError("EMBEDDING_API_KEY is required")
         if not self.rerank.api_key:
             raise ValueError("RERANK_API_KEY is required")
+        if not self.ds_ocr.api_key:
+            raise ValueError("DS_OCR_API_KEY is required")
 
         # Check embedding dimension
         valid_dims = [512, 1024, 1536, 2048, 4096]
@@ -257,6 +323,8 @@ class AppConfig:
         print(f"Embedding Dimension: {self.embedding.dim}")
         print(f"Rerank Provider: {self.rerank.provider}")
         print(f"Rerank Model: {self.rerank.model}")
+        print(f"DeepSeek-OCR Model: {self.ds_ocr.model}")
+        print(f"DeepSeek-OCR Mode: {self.ds_ocr.default_mode}")
         print(f"Storage - KV: {self.storage.kv_storage}")
         print(f"Storage - Vector: {self.storage.vector_storage}")
         print(f"Storage - Graph: {self.storage.graph_storage}")

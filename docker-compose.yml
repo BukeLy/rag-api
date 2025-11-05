@@ -180,16 +180,16 @@ services:
       - MEMGRAPH_URI=bolt://memgraph:7687
       - MEMGRAPH_USERNAME=
       - MEMGRAPH_PASSWORD=
-      # LLM 绑定配置（使用 ARK，正确的环境变量命名）
+      # LLM 绑定配置（使用新的功能导向命名）
       - LLM_BINDING=openai
-      - LLM_BINDING_API_KEY=${ARK_API_KEY}
-      - LLM_BINDING_HOST=${ARK_BASE_URL}
-      - LLM_MODEL=${ARK_MODEL:-seed-1-6-250615}
-      # Embedding 绑定配置（使用硅基流动，正确的环境变量命名）
+      - LLM_BINDING_API_KEY=${LLM_API_KEY}
+      - LLM_BINDING_HOST=${LLM_BASE_URL}
+      - LLM_MODEL=${LLM_MODEL:-seed-1-6-250615}
+      # Embedding 绑定配置（使用新的功能导向命名）
       - EMBEDDING_BINDING=openai
-      - EMBEDDING_BINDING_API_KEY=${SF_API_KEY}
-      - EMBEDDING_BINDING_HOST=${SF_BASE_URL}
-      - EMBEDDING_MODEL=${SF_EMBEDDING_MODEL:-Qwen/Qwen3-Embedding-0.6B}
+      - EMBEDDING_BINDING_API_KEY=${EMBEDDING_API_KEY}
+      - EMBEDDING_BINDING_HOST=${EMBEDDING_BASE_URL}
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-Qwen/Qwen3-Embedding-0.6B}
       - EMBEDDING_DIM=${EMBEDDING_DIM:-1024}
       # Workspace 配置
       - LIGHTRAG_WEBUI_WORKSPACE=${LIGHTRAG_WEBUI_WORKSPACE:-default}

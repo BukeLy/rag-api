@@ -10,6 +10,7 @@ from fastapi.responses import StreamingResponse
 from typing import Optional
 
 from src.logger import logger
+from src.config import config  # 使用集中配置管理
 from src.tenant_deps import get_tenant_id
 from src.multi_tenant import get_tenant_lightrag
 from .models import QueryRequest, QueryResponse
@@ -26,9 +27,9 @@ except ImportError:
 
 router = APIRouter()
 
-# 从环境变量读取查询优化参数
-DEFAULT_TOP_K = int(os.getenv("TOP_K", "20"))
-DEFAULT_CHUNK_TOP_K = int(os.getenv("CHUNK_TOP_K", "10"))
+# 从配置管理类读取查询优化参数
+DEFAULT_TOP_K = config.lightrag_query.top_k
+DEFAULT_CHUNK_TOP_K = config.lightrag_query.chunk_top_k
 
 
 def strip_think_tags(text: str) -> str:
