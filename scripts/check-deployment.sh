@@ -8,7 +8,7 @@ required_vars=("MINERU_API_TOKEN" "FILE_SERVICE_BASE_URL" "MINERU_MODE")
 
 for var in "${required_vars[@]}"; do
     value=$(grep "^$var=" .env 2>/dev/null | cut -d '=' -f2)
-    if [ -z "$value" ] || [ "$value" = "your_"* ]; then
+    if [ -z "$value" ] || [[ "$value" = "your_"* ]]; then
         echo "❌ $var 未正确配置"
         exit 1
     else

@@ -37,7 +37,6 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 RED='\033[0;31m'
-CYAN='\033[0;36m'
 NC='\033[0m'
 
 # BuildKit 支持函数
@@ -153,8 +152,6 @@ echo -e "${YELLOW}[4/7] 清理旧镜像...${NC}"
 docker image prune -f > /dev/null 2>&1 || true
 docker container prune -f > /dev/null 2>&1 || true
 
-# 统计可释放空间
-PRUNE_OUTPUT=$(docker system df 2>/dev/null || echo "")
 echo -e "${GREEN}✓ 旧镜像已清理${NC}"
 echo ""
 

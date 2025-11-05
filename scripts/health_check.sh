@@ -177,8 +177,9 @@ check_query_endpoint() {
     response=$(curl -sf -X POST "$API_URL/query" \
         -H "Content-Type: application/json" \
         -d '{"query": "health check test", "mode": "naive"}' 2>&1)
+    curl_exit=$?
 
-    if [ $? -eq 0 ] && [ -n "$response" ]; then
+    if [ "$curl_exit" -eq 0 ] && [ -n "$response" ]; then
         print_success "OK"
 
         if [ "$VERBOSE" = true ]; then

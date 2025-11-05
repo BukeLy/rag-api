@@ -137,7 +137,7 @@ install_docker() {
     
     # 将当前用户添加到 docker 组
     if [ "$EUID" -ne 0 ]; then
-        sudo usermod -aG docker $USER
+        sudo usermod -aG docker "$USER"
         log_warning "已将用户 $USER 添加到 docker 组，请重新登录后生效"
     fi
     
@@ -255,8 +255,8 @@ start_services() {
 # 等待服务就绪
 wait_for_service() {
     log_info "等待服务启动（最多等待 120 秒）..."
-    
-    for i in {1..40}; do
+
+    for _ in {1..40}; do
         if curl -f http://localhost:8000/ &> /dev/null; then
             log_success "服务已就绪！"
             return 0

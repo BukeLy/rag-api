@@ -181,9 +181,8 @@ jobs:
           done
 
           if [ $failed -eq 1 ]; then
-            echo "⚠️  Some shell scripts have style issues (not blocking CI)"
-          else
-            echo "✅ All shell scripts passed shellcheck"
+            echo "❌ Some shell scripts have issues"
+            exit 1
           fi
 
-          echo "✅ Shellcheck completed (informational only)"
+          echo "✅ All shell scripts passed shellcheck"
