@@ -1,8 +1,8 @@
 # RAG API 架构设计文档
 
-**版本**: 3.0
-**更新日期**: 2025-10-24
-**架构**: 多租户 LightRAG + 多解析器
+**版本**: 3.1
+**更新日期**: 2025-11-05
+**架构**: 多租户 LightRAG + 多解析器 + 任务持久化
 
 ---
 
@@ -878,6 +878,22 @@ LightRAG(
 | Rerank | Qwen/Qwen2-7B-Instruct | 火山引擎 | 重排序 |
 | Vision | seed-1-6-250615 | 豆包/火山引擎 | 图片描述 |
 
+### 存储层
+
+| 类型 | 技术 | 用途 | 租户隔离 |
+|------|------|------|---------|
+| **KV 存储** | DragonflyDB (Redis 协议) | LightRAG 缓存 | ✅ 键前缀：`tenant_id:*` |
+| **任务存储** | DragonflyDB / 内存 | 任务状态管理 | ✅ 键前缀：`task:{tenant_id}:*` |
+| **向量存储** | Qdrant | 文档向量检索 | ✅ Collection：`tenant_id:vectors` |
+| **图存储** | Memgraph | 知识图谱 | ✅ 图命名空间：`tenant_id:GraphDB` |
+| **文件存储** | 本地文件系统 | 临时文件、workspace | ✅ 目录：`./rag_local_storage/tenant_id/` |
+
+**任务存储特性（v3.1 新增）**：
+- **两种模式**：`memory`（默认）或 `redis`（生产推荐）
+- **TTL 自动清理**：completed=24h, failed=24h, pending/processing=6h
+- **自动降级**：Redis 不可用时降级到内存模式
+- **解决问题**：容器重启、租户实例 LRU 驱逐时任务丢失
+
 ---
 
 ## 部署架构
@@ -1187,6 +1203,27 @@ QDRANT_URL=http://qdrant:6333
 MEMGRAPH_URI=bolt://memgraph:7687
 MEMGRAPH_USERNAME=
 MEMGRAPH_PASSWORD=
+```
+
+#### 任务存储配置（v3.1 新增）
+
+```bash
+# 任务存储模式（支持内存和 Redis 两种）
+TASK_STORE_STORAGE=redis  # memory（默认）或 redis（生产推荐）
+
+# 说明：
+# - memory 模式：内存存储，重启后数据丢失，适合开发环境
+# - redis 模式：Redis 持久化存储，支持容器重启和租户实例重建后恢复
+#
+# Redis 模式特性：
+# - 自动 TTL 清理：completed=24h, failed=24h, pending/processing=6h
+# - 租户隔离：键前缀 task:{tenant_id}:{task_id}
+# - 自动降级：Redis 不可用时自动降级到内存模式
+#
+# 多租户场景：
+# - 实例池 LRU=50，超过会驱逐实例
+# - memory 模式下实例驱逐会导致任务丢失
+# - 生产环境强烈建议使用 redis 模式
 ```
 
 ---

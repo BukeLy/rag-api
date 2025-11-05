@@ -21,9 +21,14 @@ api/
 - `QueryRequest`: 查询请求模型
 
 ### `task_store.py`
-- 管理任务存储（内存字典）
+- 管理任务存储（支持内存和 Redis 两种模式）
 - 提供并发控制（Semaphore）
 - 提供任务 CRUD 操作
+- **存储模式**：
+  - `memory`: 内存存储（默认，重启后数据丢失）
+  - `redis`: Redis 持久化存储（生产推荐，支持容器重启和实例重建）
+- **TTL 策略**：自动清理过期任务（completed=24h, failed=24h, pending/processing=6h）
+- **降级机制**：Redis 不可用时自动降级到内存存储
 
 ### `insert.py`
 - 处理文档上传（`POST /insert`）
@@ -129,8 +134,12 @@ MinerU 处理文档
 
 ## 注意事项
 
-1. **任务存储**: 当前使用内存字典，重启后数据丢失。生产环境建议使用 Redis。
+1. **任务存储**:
+   - 支持两种模式：`memory`（默认）和 `redis`（生产推荐）
+   - 通过环境变量 `TASK_STORE_STORAGE` 配置
+   - Redis 模式自动设置 TTL 清理过期任务
+   - **多租户场景**：实例池 LRU=50，超过会驱逐，`memory` 模式任务会丢失，建议使用 `redis` 模式
 2. **文件大小限制**: 默认 100MB，可在 `insert.py` 中修改。
 3. **超时处理**: 客户端应实现超时和重试逻辑。
-4. **并发数**: 当前限制为 1，可根据服务器内存调整。
+4. **并发数**: 默认根据 MinerU 模式动态配置（local=1, remote=10），可通过 `DOCUMENT_PROCESSING_CONCURRENCY` 调整。
 

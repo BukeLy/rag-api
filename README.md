@@ -31,6 +31,7 @@ RAG API 是一个企业级的检索增强生成（RAG）服务，结合了 **RAG
 - 📦 **开箱即用** - Docker 一键部署，3 分钟启动服务
 - 🎛️ **多解析引擎** - DeepSeek-OCR(远程API) + MinerU（本地/远程API）+ Docling（快速）
 - 🎨 **RAG-Anything-VLM增强** - 三种模式（off/selective/full），深度理解图表内容
+- 💾 **任务持久化** - Redis 存储支持，容器重启/实例重建后任务可恢复
 
 ---
 
@@ -85,9 +86,10 @@ RAG API 是一个企业级的检索增强生成（RAG）服务，结合了 **RAG
   - 上下文增强
 
 - ✅ **外部存储**
-  - DragonflyDB（KV 存储）
+  - DragonflyDB（KV 存储 + 任务存储）
   - Qdrant（向量存储）
   - Memgraph（图数据库）
+  - 任务持久化（Redis 模式）
 
 </td>
 </tr>
@@ -359,6 +361,9 @@ RAG_IMPORTANCE_THRESHOLD=0.5        # 重要性阈值（selective 模式）
 RAG_CONTEXT_WINDOW=2                # 上下文窗口（full 模式）
 RAG_CONTEXT_MODE=page               # page / chunk
 RAG_MAX_CONTEXT_TOKENS=3000         # 最大上下文 tokens
+
+# 任务存储配置 🆕
+TASK_STORE_STORAGE=redis            # memory / redis（生产推荐 redis）
 ```
 
 完整配置参考 `env.example`。
@@ -1037,7 +1042,38 @@ DOCUMENT_PROCESSING_CONCURRENCY=1
 </details>
 
 <details>
-<summary><b>Q6: VLM 模式处理失败？</b></summary>
+<summary><b>Q6: 容器重启后任务丢失？</b></summary>
+
+**问题现象**：
+- 容器重启后无法查询之前的任务状态
+- 租户实例被 LRU 驱逐后任务消失
+
+**解决方案**：启用 Redis 任务存储
+
+```bash
+# 修改 .env
+TASK_STORE_STORAGE=redis
+
+# 重启服务
+docker compose restart
+
+# 验证
+docker compose logs api | grep TaskStore
+# 应该看到: ✅ TaskStore: Redis connection successful
+```
+
+**配置说明**：
+- `memory` 模式：内存存储，重启后数据丢失（默认，适合开发）
+- `redis` 模式：持久化存储，支持容器重启和实例重建（生产推荐）
+
+**TTL 策略**（Redis 模式自动清理）：
+- completed 任务：24 小时
+- failed 任务：24 小时
+- pending/processing 任务：6 小时
+</details>
+
+<details>
+<summary><b>Q7: VLM 模式处理失败？</b></summary>
 
 **检查项**：
 1. **vision_model_func 未配置**
