@@ -181,13 +181,13 @@ setup_env() {
     
     # 验证必需的环境变量
     source .env
-    if [ -z "$ARK_API_KEY" ] || [ "$ARK_API_KEY" = "your_ark_api_key_here" ]; then
-        log_error "ARK_API_KEY 未配置！请编辑 .env 文件"
+    if [ -z "$LLM_API_KEY" ] || [ "$LLM_API_KEY" = "your_llm_api_key_here" ]; then
+        log_error "LLM_API_KEY 未配置！请编辑 .env 文件"
         exit 1
     fi
-    
-    if [ -z "$SF_API_KEY" ] || [ "$SF_API_KEY" = "your_sf_api_key_here" ]; then
-        log_error "SF_API_KEY 未配置！请编辑 .env 文件"
+
+    if [ -z "$EMBEDDING_API_KEY" ] || [ "$EMBEDDING_API_KEY" = "your_embedding_api_key_here" ]; then
+        log_error "EMBEDDING_API_KEY 未配置！请编辑 .env 文件"
         exit 1
     fi
     
