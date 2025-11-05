@@ -966,11 +966,20 @@ docker ps -a
 <details>
 <summary><b>Q2: multimodal_processed 错误？</b></summary>
 
-```bash
-# 清理旧的存储数据
-rm -rf ./rag_local_storage
+**注意**：此问题已在 LightRAG 1.4.9.4+ 版本中修复。如果遇到此错误，说明版本过旧。
 
-# 重启服务
+**解决方案**：
+```bash
+# 方案 1：升级到最新版本（推荐）
+# 修改 pyproject.toml 中的 LightRAG 版本
+# lightrag = "^1.4.9.4"
+
+# 重新构建镜像
+docker compose down
+docker compose up -d --build
+
+# 方案 2：清理旧数据（临时方案）
+rm -rf ./rag_local_storage
 docker compose restart
 ```
 </details>
