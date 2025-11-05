@@ -88,8 +88,7 @@ class TenantConfigManager:
         self,
         storage_type: str = "local",
         local_storage_dir: str = "./tenant_configs",
-        redis_uri: str = None,
-        cache_ttl: int = 3600
+        redis_uri: str = None
     ):
         """
         初始化租户配置管理器
@@ -98,10 +97,8 @@ class TenantConfigManager:
             storage_type: 存储类型 ("local" 或 "redis")
             local_storage_dir: 本地存储目录（storage_type="local" 时使用）
             redis_uri: Redis 连接 URI（storage_type="redis" 时使用，默认从全局配置读取）
-            cache_ttl: Redis 缓存过期时间（秒）
         """
         self.storage_type = storage_type
-        self.cache_ttl = cache_ttl
 
         if storage_type == "local":
             # 本地文件存储
@@ -196,13 +193,12 @@ class TenantConfigManager:
                 return True
 
             elif self.storage_type == "redis":
-                # Redis 存储
-                self.redis_client.setex(
+                # Redis 存储（永久保存，无 TTL）
+                self.redis_client.set(
                     f"tenant:config:{tenant_id}",
-                    self.cache_ttl,
                     config_json
                 )
-                logger.info(f"[{tenant_id}] Config saved to Redis (TTL={self.cache_ttl}s)")
+                logger.info(f"[{tenant_id}] Config saved to Redis (persistent)")
                 return True
 
         except Exception as e:
