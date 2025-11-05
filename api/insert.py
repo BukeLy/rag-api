@@ -91,9 +91,27 @@ async def process_document_task(
                 try:
                     from src.deepseek_ocr_client import create_client, DSSeekMode
                     from src.document_complexity import DocumentComplexityAnalyzer
+                    from src.tenant_config import get_tenant_config_manager
 
-                    # 创建 DeepSeek-OCR 客户端
-                    ds_client = create_client()
+                    # 🆕 加载租户配置
+                    config_manager = get_tenant_config_manager()
+                    tenant_config = config_manager.get(tenant_id)
+                    merged_config = config_manager.merge_with_global(tenant_config)
+                    ds_ocr_config = merged_config["ds_ocr"]
+
+                    # 创建 DeepSeek-OCR 客户端（使用租户配置）
+                    ds_client = create_client(
+                        api_key=ds_ocr_config["api_key"],
+                        base_url=ds_ocr_config["base_url"],
+                        model_name=ds_ocr_config["model"],
+                        timeout=ds_ocr_config["timeout"],
+                        max_tokens=ds_ocr_config["max_tokens"],
+                        dpi=ds_ocr_config["dpi"],
+                        default_mode=ds_ocr_config["default_mode"],
+                        fallback_enabled=ds_ocr_config["fallback_enabled"],
+                        fallback_mode=ds_ocr_config["fallback_mode"],
+                        min_output_threshold=ds_ocr_config["min_output_threshold"]
+                    )
 
                     # 确定使用的模式
                     if deepseek_mode:
@@ -535,19 +553,34 @@ async def process_with_remote_mineru(
         file_url = await file_service.register_file(file_path, filename)
         logger.info(f"[Task {task_id}] [Tenant {tenant_id}] File registered: {file_url}")
 
-        # 调用 MinerU 客户端
+        # 🆕 加载租户配置
+        from src.tenant_config import get_tenant_config_manager
+        config_manager = get_tenant_config_manager()
+        tenant_config = config_manager.get(tenant_id)
+        merged_config = config_manager.merge_with_global(tenant_config)
+        mineru_config = merged_config["mineru"]
+
+        # 调用 MinerU 客户端（使用租户配置）
         from src.mineru_client import create_client, FileTask, ParseOptions
-        client = create_client()
+        client = create_client(
+            api_token=mineru_config["api_token"],
+            base_url=mineru_config["base_url"],
+            timeout=mineru_config["timeout"],
+            max_concurrent_requests=mineru_config["max_concurrent_requests"],
+            requests_per_minute=mineru_config["requests_per_minute"],
+            retry_max_attempts=mineru_config["retry_max_attempts"],
+            poll_timeout=mineru_config["poll_timeout"]
+        )
 
         # 创建文件任务
         file_task = FileTask(url=file_url, data_id=doc_id)
 
-        # 配置解析选项
+        # 配置解析选项（使用租户配置）
         options = ParseOptions(
             enable_formula=True,
             enable_table=True,
             language="ch",
-            model_version=os.getenv("MINERU_MODEL_VERSION", "vlm")
+            model_version=mineru_config["model_version"]
         )
 
         # 调用远程 MinerU API

@@ -11,6 +11,7 @@
 | 文档 | 描述 | 适用人群 |
 |------|------|---------|
 | [ARCHITECTURE.md](ARCHITECTURE.md) | 系统架构设计文档 | 开发者、架构师 |
+| [MULTI_TENANT_CONFIG_BEST_PRACTICES.md](MULTI_TENANT_CONFIG_BEST_PRACTICES.md) | 多租户配置管理最佳实践 | 开发者、架构师 |
 | [USAGE.md](USAGE.md) | 完整的 API 使用指南 | 所有用户 |
 | [DEPLOY_MODES.md](DEPLOY_MODES.md) | 部署模式说明（生产/开发） | 运维人员、开发者 |
 | [DEPLOYMENT_EXTERNAL_STORAGE.md](DEPLOYMENT_EXTERNAL_STORAGE.md) | 外部存储配置指南 | 运维人员 |
@@ -132,6 +133,9 @@ git push origin main
 **系统是如何设计的？**
 → 查看 [ARCHITECTURE.md](ARCHITECTURE.md)
 
+**多租户配置管理最佳实践？**
+→ 查看 [MULTI_TENANT_CONFIG_BEST_PRACTICES.md](MULTI_TENANT_CONFIG_BEST_PRACTICES.md)
+
 **如何部署服务？**
 → 查看 [DEPLOY_MODES.md](DEPLOY_MODES.md) 和 [DEPLOYMENT_EXTERNAL_STORAGE.md](DEPLOYMENT_EXTERNAL_STORAGE.md)
 
@@ -152,8 +156,8 @@ git push origin main
 ## 📊 文档统计
 
 ### 公开文档
-- 总计：**5 个文档**
-- 总字数：约 **18,000 字**
+- 总计：**6 个文档**
+- 总字数：约 **25,000 字**
 - 主要语言：中文
 
 ### 内部文档
@@ -197,5 +201,5 @@ git push origin main
 
 ---
 
-**最后更新**: 2025-10-30
+**最后更新**: 2025-11-05
 

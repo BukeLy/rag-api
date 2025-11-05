@@ -62,38 +62,51 @@ class MultiTenantRAGManager:
 
         logger.info(f"MultiTenantRAGManager initialized (max_instances={max_instances})")
 
-    def _create_llm_func(self):
-        """创建共享的 LLM 函数"""
+    def _create_llm_func(self, llm_config: Dict):
+        """创建 LLM 函数（支持租户配置覆盖）"""
+        # 从配置中提取参数（支持租户覆盖）
+        model = llm_config.get("model", self.ark_model)
+        api_key = llm_config.get("api_key", self.ark_api_key)
+        base_url = llm_config.get("base_url", self.ark_base_url)
+
         def llm_model_func(prompt, **kwargs):
             kwargs['enable_cot'] = False
             if 'system_prompt' not in kwargs:
                 kwargs['system_prompt'] = self.default_system_prompt
             return openai_complete_if_cache(
-                self.ark_model, prompt,
-                api_key=self.ark_api_key,
-                base_url=self.ark_base_url,
+                model, prompt,
+                api_key=api_key,
+                base_url=base_url,
                 **kwargs
             )
         return llm_model_func
 
-    def _create_embedding_func(self):
-        """创建共享的 Embedding 函数"""
-        # 从配置管理类读取维度
-        embedding_dim = config.embedding.dim
+    def _create_embedding_func(self, embedding_config: Dict):
+        """创建 Embedding 函数（支持租户配置覆盖）"""
+        # 从配置中提取参数（支持租户覆盖）
+        model = embedding_config.get("model", self.sf_embedding_model)
+        api_key = embedding_config.get("api_key", self.sf_api_key)
+        base_url = embedding_config.get("base_url", self.sf_base_url)
+        embedding_dim = embedding_config.get("dim", config.embedding.dim)
 
         return EmbeddingFunc(
             embedding_dim=embedding_dim,
             func=lambda texts: openai_embed(
                 texts,
-                model=self.sf_embedding_model,
-                api_key=self.sf_api_key,
-                base_url=self.sf_base_url
+                model=model,
+                api_key=api_key,
+                base_url=base_url
             ),
         )
 
-    def _create_rerank_func(self):
-        """创建共享的 Rerank 函数（如果配置）"""
-        if not self.rerank_model:
+    def _create_rerank_func(self, rerank_config: Dict):
+        """创建 Rerank 函数（支持租户配置覆盖）"""
+        # 从配置中提取参数（支持租户覆盖）
+        model = rerank_config.get("model", self.rerank_model)
+        api_key = rerank_config.get("api_key", self.sf_api_key)
+        base_url = rerank_config.get("base_url", self.sf_base_url)
+
+        if not model:
             return None
 
         try:
@@ -102,21 +115,27 @@ class MultiTenantRAGManager:
 
             return partial(
                 cohere_rerank,
-                model=self.rerank_model,
-                api_key=self.sf_api_key,
-                base_url=f"{self.sf_base_url}/rerank"
+                model=model,
+                api_key=api_key,
+                base_url=f"{base_url}/rerank"
             )
         except ImportError:
             logger.warning("lightrag.rerank not available")
             return None
 
-    def _create_vision_model_func(self):
-        """创建共享的 Vision Model 函数（用于图片理解）"""
+    def _create_vision_model_func(self, llm_config: Dict):
+        """创建 Vision Model 函数（支持租户配置覆盖）"""
         import aiohttp
+
+        # 从配置中提取参数（支持租户覆盖）
+        model = llm_config.get("model", self.ark_model)
+        api_key = llm_config.get("api_key", self.ark_api_key)
+        base_url = llm_config.get("base_url", self.ark_base_url)
+        vlm_timeout = llm_config.get("vlm_timeout", self.vlm_timeout)
 
         async def seed_vision_model_func(prompt: str, image_data: str, system_prompt: str) -> str:
             """
-            使用 Seed-1.6 VLM 理解图片内容
+            使用 VLM 理解图片内容
 
             Args:
                 prompt: 主要提示词（如"请描述这张图片"）
@@ -127,7 +146,7 @@ class MultiTenantRAGManager:
                 str: 图片描述文本
             """
             payload = {
-                "model": self.ark_model,  # seed-1-6-250615
+                "model": model,
                 "messages": [
                     {"role": "system", "content": system_prompt},
                     {
@@ -146,17 +165,17 @@ class MultiTenantRAGManager:
             }
 
             headers = {
-                "Authorization": f"Bearer {self.ark_api_key}",
+                "Authorization": f"Bearer {api_key}",
                 "Content-Type": "application/json"
             }
 
             try:
                 async with aiohttp.ClientSession() as session:
                     async with session.post(
-                        f"{self.ark_base_url}/chat/completions",
+                        f"{base_url}/chat/completions",
                         json=payload,
                         headers=headers,
-                        timeout=aiohttp.ClientTimeout(total=self.vlm_timeout)
+                        timeout=aiohttp.ClientTimeout(total=vlm_timeout)
                     ) as response:
                         if response.status != 200:
                             error_text = await response.text()
@@ -216,11 +235,23 @@ class MultiTenantRAGManager:
         Returns:
             LightRAG: 新创建的实例
         """
-        # 准备共享函数
-        llm_func = self._create_llm_func()
-        embedding_func = self._create_embedding_func()
-        rerank_func = self._create_rerank_func()
-        vision_func = self._create_vision_model_func()  # 🆕 创建 VLM 函数
+        # 🆕 加载租户配置并与全局配置合并
+        from src.tenant_config import get_tenant_config_manager
+        config_manager = get_tenant_config_manager()
+        tenant_config = config_manager.get(tenant_id)
+        merged_config = config_manager.merge_with_global(tenant_config)
+
+        # 记录配置来源
+        if tenant_config:
+            logger.info(f"[{tenant_id}] Using tenant-specific config")
+        else:
+            logger.debug(f"[{tenant_id}] Using global config (no tenant config found)")
+
+        # 准备租户专属函数（使用合并后的配置）
+        llm_func = self._create_llm_func(merged_config["llm"])
+        embedding_func = self._create_embedding_func(merged_config["embedding"])
+        rerank_func = self._create_rerank_func(merged_config["rerank"])
+        vision_func = self._create_vision_model_func(merged_config["llm"])  # 🆕 创建 VLM 函数
 
         # 准备存储配置
         storage_kwargs = {}

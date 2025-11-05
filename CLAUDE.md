@@ -5,6 +5,11 @@
 - 代码注释和变量名使用英文
 - Git commit 使用中文
 
+## 🖥️ 本地环境说明
+- **本地没有 Docker**：本地开发环境不使用 Docker，直接使用 Python 虚拟环境
+- **测试环境**：需要在远程服务器上运行测试（服务器信息见 [DEPLOYMENT_PRIVATE.md](./DEPLOYMENT_PRIVATE.md)）
+- **开发流程**：本地修改代码 → git push → 远程服务器 git pull → 自动热重载
+
 ## 🧰 MCP Servers 使用指南
 
 **已接入的 MCP Servers**：

@@ -24,6 +24,8 @@ class ConfigUpdateRequest(BaseModel):
     llm_config: Optional[Dict[str, Any]] = None
     embedding_config: Optional[Dict[str, Any]] = None
     rerank_config: Optional[Dict[str, Any]] = None
+    ds_ocr_config: Optional[Dict[str, Any]] = None  # 🆕 DeepSeek-OCR 配置
+    mineru_config: Optional[Dict[str, Any]] = None  # 🆕 MinerU 配置
     quota: Optional[Dict[str, Any]] = None
     status: Optional[str] = None
 
@@ -34,6 +36,8 @@ class ConfigResponse(BaseModel):
     llm_config: Optional[Dict[str, Any]]
     embedding_config: Optional[Dict[str, Any]]
     rerank_config: Optional[Dict[str, Any]]
+    ds_ocr_config: Optional[Dict[str, Any]]  # 🆕 DeepSeek-OCR 配置
+    mineru_config: Optional[Dict[str, Any]]  # 🆕 MinerU 配置
     quota: Dict[str, Any]
     status: str
     created_at: Optional[datetime]
@@ -60,7 +64,7 @@ def mask_api_key(key: Optional[str]) -> Optional[str]:
 
 def mask_config(config_dict: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
     """
-    脱敏配置中的 API Key
+    脱敏配置中的 API Key / API Token
 
     Args:
         config_dict: 配置字典
@@ -72,8 +76,12 @@ def mask_config(config_dict: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any
         return None
 
     masked = config_dict.copy()
+    # 脱敏 api_key（LLM, Embedding, Rerank, DeepSeek-OCR）
     if "api_key" in masked:
         masked["api_key"] = mask_api_key(masked["api_key"])
+    # 脱敏 api_token（MinerU）
+    if "api_token" in masked:
+        masked["api_token"] = mask_api_key(masked["api_token"])
     return masked
 
 
@@ -127,6 +135,8 @@ async def get_tenant_config(tenant_id: str):
         "llm": mask_config(merged_config["llm"]),
         "embedding": mask_config(merged_config["embedding"]),
         "rerank": mask_config(merged_config["rerank"]),
+        "ds_ocr": mask_config(merged_config["ds_ocr"]),  # 🆕 DeepSeek-OCR
+        "mineru": mask_config(merged_config["mineru"]),  # 🆕 MinerU
         "quota": merged_config["quota"],
     }
 
@@ -135,6 +145,8 @@ async def get_tenant_config(tenant_id: str):
         llm_config=mask_config(tenant_config.llm_config),
         embedding_config=mask_config(tenant_config.embedding_config),
         rerank_config=mask_config(tenant_config.rerank_config),
+        ds_ocr_config=mask_config(tenant_config.ds_ocr_config),  # 🆕 DeepSeek-OCR
+        mineru_config=mask_config(tenant_config.mineru_config),  # 🆕 MinerU
         quota=tenant_config.quota.model_dump(),
         status=tenant_config.status,
         created_at=tenant_config.created_at,
@@ -176,6 +188,10 @@ async def update_tenant_config(
             config_data["embedding_config"] = request.embedding_config
         if request.rerank_config is not None:
             config_data["rerank_config"] = request.rerank_config
+        if request.ds_ocr_config is not None:  # 🆕 DeepSeek-OCR
+            config_data["ds_ocr_config"] = request.ds_ocr_config
+        if request.mineru_config is not None:  # 🆕 MinerU
+            config_data["mineru_config"] = request.mineru_config
         if request.quota is not None:
             config_data["quota"] = QuotaConfig(**request.quota)
         if request.status is not None:
@@ -187,6 +203,8 @@ async def update_tenant_config(
             "llm_config": request.llm_config,
             "embedding_config": request.embedding_config,
             "rerank_config": request.rerank_config,
+            "ds_ocr_config": request.ds_ocr_config,  # 🆕 DeepSeek-OCR
+            "mineru_config": request.mineru_config,  # 🆕 MinerU
             "quota": QuotaConfig(**request.quota) if request.quota else QuotaConfig(),
             "status": request.status or "active",
         }
@@ -207,6 +225,8 @@ async def update_tenant_config(
             llm_config=mask_config(new_config.llm_config),
             embedding_config=mask_config(new_config.embedding_config),
             rerank_config=mask_config(new_config.rerank_config),
+            ds_ocr_config=mask_config(new_config.ds_ocr_config),  # 🆕 DeepSeek-OCR
+            mineru_config=mask_config(new_config.mineru_config),  # 🆕 MinerU
             quota=new_config.quota.model_dump(),
             status=new_config.status,
             created_at=new_config.created_at,
@@ -297,6 +317,8 @@ async def refresh_tenant_config(tenant_id: str):
         "llm": mask_config(merged_config["llm"]),
         "embedding": mask_config(merged_config["embedding"]),
         "rerank": mask_config(merged_config["rerank"]),
+        "ds_ocr": mask_config(merged_config["ds_ocr"]),  # 🆕 DeepSeek-OCR
+        "mineru": mask_config(merged_config["mineru"]),  # 🆕 MinerU
         "quota": merged_config["quota"],
     }
 
@@ -307,6 +329,8 @@ async def refresh_tenant_config(tenant_id: str):
         llm_config=mask_config(tenant_config.llm_config),
         embedding_config=mask_config(tenant_config.embedding_config),
         rerank_config=mask_config(tenant_config.rerank_config),
+        ds_ocr_config=mask_config(tenant_config.ds_ocr_config),  # 🆕 DeepSeek-OCR
+        mineru_config=mask_config(tenant_config.mineru_config),  # 🆕 MinerU
         quota=tenant_config.quota.model_dump(),
         status=tenant_config.status,
         created_at=tenant_config.created_at,

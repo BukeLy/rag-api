@@ -56,6 +56,30 @@ class TenantConfigModel(BaseModel):
         description="Rerank 配置覆盖"
     )
 
+    # DeepSeek-OCR 配置（可选）
+    ds_ocr_config: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="DeepSeek-OCR 配置覆盖",
+        example={
+            "api_key": "sk-xxx",
+            "base_url": "https://api.siliconflow.cn/v1",
+            "model": "deepseek-ai/DeepSeek-OCR",
+            "timeout": 60
+        }
+    )
+
+    # MinerU 配置（可选）
+    mineru_config: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="MinerU 配置覆盖",
+        example={
+            "api_token": "your_token",
+            "base_url": "https://mineru.net",
+            "model_version": "vlm",
+            "timeout": 60
+        }
+    )
+
     # 配额配置
     quota: QuotaConfig = Field(
         default_factory=QuotaConfig,
@@ -268,6 +292,8 @@ class TenantConfigManager:
             "llm": self._merge_llm_config(tenant_config),
             "embedding": self._merge_embedding_config(tenant_config),
             "rerank": self._merge_rerank_config(tenant_config),
+            "ds_ocr": self._merge_ds_ocr_config(tenant_config),
+            "mineru": self._merge_mineru_config(tenant_config),
             "quota": self._merge_quota_config(tenant_config),
         }
         return merged
@@ -324,6 +350,44 @@ class TenantConfigManager:
             return tenant_config.quota.model_dump()
         else:
             return QuotaConfig().model_dump()
+
+    def _merge_ds_ocr_config(self, tenant_config: Optional[TenantConfigModel]) -> Dict[str, Any]:
+        """合并 DeepSeek-OCR 配置"""
+        base = {
+            "api_key": config.ds_ocr.api_key,
+            "base_url": config.ds_ocr.base_url,
+            "model": config.ds_ocr.model,
+            "timeout": config.ds_ocr.timeout,
+            "max_tokens": config.ds_ocr.max_tokens,
+            "dpi": config.ds_ocr.dpi,
+            "default_mode": config.ds_ocr.default_mode,
+            "fallback_enabled": config.ds_ocr.fallback_enabled,
+            "fallback_mode": config.ds_ocr.fallback_mode,
+            "min_output_threshold": config.ds_ocr.min_output_threshold,
+        }
+
+        if tenant_config and tenant_config.ds_ocr_config:
+            base.update(tenant_config.ds_ocr_config)
+
+        return base
+
+    def _merge_mineru_config(self, tenant_config: Optional[TenantConfigModel]) -> Dict[str, Any]:
+        """合并 MinerU 配置"""
+        base = {
+            "api_token": os.getenv("MINERU_API_TOKEN", ""),
+            "base_url": os.getenv("MINERU_API_BASE_URL", "https://mineru.net"),
+            "model_version": os.getenv("MINERU_MODEL_VERSION", "vlm"),
+            "timeout": int(os.getenv("MINERU_HTTP_TIMEOUT", "60")),
+            "max_concurrent_requests": int(os.getenv("MINERU_MAX_CONCURRENT_REQUESTS", "5")),
+            "requests_per_minute": int(os.getenv("MINERU_REQUESTS_PER_MINUTE", "60")),
+            "retry_max_attempts": int(os.getenv("MINERU_RETRY_MAX_ATTEMPTS", "3")),
+            "poll_timeout": int(os.getenv("MINERU_POLL_TIMEOUT", "600")),
+        }
+
+        if tenant_config and tenant_config.mineru_config:
+            base.update(tenant_config.mineru_config)
+
+        return base
 
 
 # 全局单例管理器
