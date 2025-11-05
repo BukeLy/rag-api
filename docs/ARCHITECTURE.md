@@ -108,12 +108,18 @@ flowchart TD
     D --> E{文件类型判断}
 
     E -->|.txt, .md| F1[纯文本<br/>→ 直接读取<br/>→ LightRAG.ainsert<br/>→ tenant_a 知识图谱]
-    E -->|PDF/Office| F0{智能选择解析器<br/>复杂度评分}
+    E -->|PDF/Office| F0{文件大小判断}
 
-    F0 -->|< 20 分<br/>简单文档| F2[DeepSeek-OCR<br/>Free OCR 模式<br/>→ 转 Markdown<br/>→ LightRAG.ainsert<br/>→ tenant_a 知识图谱]
-    F0 -->|20-40 分<br/>复杂表格| F3[DeepSeek-OCR<br/>Grounding 模式<br/>→ 精确表格提取<br/>→ LightRAG.ainsert<br/>→ tenant_a 知识图谱]
-    F0 -->|> 60 分<br/>多模态| F4[MinerU 解析器<br/>→ 提取图片/表格/公式<br/>→ RAG-Anything 后处理<br/>→ LightRAG.ainsert<br/>→ tenant_a 知识图谱]
-    F0 -->|小文件<br/>轻量级| F5[Docling 解析器<br/>→ 快速解析<br/>→ LightRAG.ainsert<br/>→ tenant_a 知识图谱]
+    F0 -->|< 500KB<br/>简单文档| F5[Docling 解析器<br/>→ 快速轻量<br/>→ LightRAG.ainsert<br/>→ tenant_a 知识图谱]
+    F0 -->|≥ 500KB<br/>复杂文档| F0B{智能选择解析器<br/>复杂度评分}
+
+    F0B -->|< 20 分<br/>简单文档| F2[DeepSeek-OCR<br/>Free OCR 模式<br/>→ 转 Markdown<br/>→ LightRAG.ainsert<br/>→ tenant_a 知识图谱]
+    F0B -->|20-40 分<br/>复杂表格| F3[DeepSeek-OCR<br/>Grounding 模式<br/>→ 精确表格提取<br/>→ LightRAG.ainsert<br/>→ tenant_a 知识图谱]
+    F0B -->|40-60 分<br/>中等复杂| F6{检查图片数量}
+    F0B -->|> 60 分<br/>多模态| F4[MinerU 解析器<br/>→ 提取图片/表格/公式<br/>→ RAG-Anything 后处理<br/>→ LightRAG.ainsert<br/>→ tenant_a 知识图谱]
+
+    F6 -->|图片 < 3 个| F2
+    F6 -->|图片 ≥ 3 个| F4
 
     F1 --> G[知识图谱完成]
     F2 --> G
@@ -126,13 +132,16 @@ flowchart TD
     style F3 fill:#e7f3ff
     style F4 fill:#f8d7da
     style F5 fill:#fff3cd
+    style F6 fill:#ffeaa7
+    style F0 fill:#dfe6e9
+    style F0B fill:#dfe6e9
     style G fill:#d4edda
 
     note1[极快 ~1秒]
     note2[快速 ~5-11秒<br/>80% 场景]
     note3[精确 ~5-8秒<br/>复杂表格]
     note4[强大 ~10-60秒<br/>多模态增强]
-    note5[轻量 ~5-10秒]
+    note5[轻量 ~5-10秒<br/>小文件优先]
 
     F1 -.- note1
     F2 -.- note2
@@ -370,28 +379,94 @@ rag_anything = RAGAnything(
 - 纯文本 PDF
 - Office 文档(DOCX、XLSX)
 
-### 5. 智能路由
+### 5. 智能路由与降级策略
 
 **实现位置**: `src/rag.py` - `select_parser_by_file()`
+
+#### 正常选择流程
 
 ```python
 def select_parser_by_file(filename: str, file_size: int) -> str:
     ext = os.path.splitext(filename)[1].lower()
 
-    # 图片 → MinerU
-    if ext in ['.jpg', '.png', ...]:
-        return "mineru"
-
     # 纯文本 → 直接插入(不用解析器)
     if ext in ['.txt', '.md']:
-        return "mineru"  # 标记,实际会直接插入
+        return "direct"
 
-    # 小文件 → Docling
-    if ext in ['.pdf', ...] and file_size < 500KB:
+    # 小文件(< 500KB) → Docling 优先
+    if file_size < 500 * 1024:
         return "docling"
 
-    # 默认 → MinerU
-    return "mineru"
+    # 图片文件 → MinerU(需要多模态处理)
+    if ext in ['.jpg', '.png', '.jpeg', '.webp']:
+        return "mineru"
+
+    # 大文件 PDF/Office → 计算复杂度评分
+    complexity_score = calculate_complexity(filename)
+
+    if complexity_score < 20:
+        return "deepseek-ocr"  # Free OCR 模式
+    elif complexity_score < 40:
+        return "deepseek-ocr"  # Grounding 模式
+    elif complexity_score < 60:
+        # 检查图片数量
+        if image_count < 3:
+            return "deepseek-ocr"
+        else:
+            return "mineru"
+    else:
+        return "mineru"  # 复杂多模态
+```
+
+#### 降级策略（容错机制）
+
+**场景 1：未配置 DeepSeek-OCR**
+```python
+# 缺少 DS_OCR_API_KEY 环境变量时
+if not os.getenv("DS_OCR_API_KEY"):
+    # 降级选择
+    if complexity_score < 60:
+        return "docling"  # 简单/中等文档 → Docling
+    else:
+        return "mineru"   # 复杂文档 → MinerU
+```
+
+**场景 2：未配置 MinerU**
+```python
+# 缺少 MINERU_API_TOKEN 环境变量时
+if not os.getenv("MINERU_API_TOKEN"):
+    # 降级选择
+    if complexity_score < 40:
+        return "deepseek-ocr"  # 简单/中等 → DS-OCR
+    else:
+        return "docling"       # 复杂文档 → Docling(尽力而为)
+```
+
+**场景 3：最小化配置（仅 Docling）**
+```python
+# 既没有 DS-OCR 也没有 MinerU
+if not has_deepseek_ocr() and not has_mineru():
+    return "docling"  # 所有文档都用 Docling
+```
+
+#### 降级决策表
+
+| 可用解析器 | 简单文档<br/>(< 500KB) | 中等文档<br/>(500KB-5MB) | 复杂文档<br/>(> 5MB) | 多模态<br/>(多图多表) |
+|----------|---------------------|----------------------|------------------|------------------|
+| **全部可用** | Docling | DS-OCR | DS-OCR / MinerU | MinerU |
+| **仅 DS-OCR + Docling** | Docling | DS-OCR | DS-OCR | DS-OCR(尽力) |
+| **仅 MinerU + Docling** | Docling | Docling | MinerU | MinerU |
+| **仅 Docling** | Docling | Docling | Docling | Docling(有限能力) |
+
+#### 错误处理
+
+```python
+# 如果选择的解析器失败,自动降级
+try:
+    result = await parse_with_deepseek_ocr(file)
+except Exception as e:
+    logger.warning(f"DS-OCR failed: {e}, falling back to Docling")
+    result = await parse_with_docling(file)
 ```
 
 ---
