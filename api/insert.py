@@ -15,7 +15,7 @@ from src.rag import select_parser_by_file
 from src.tenant_deps import get_tenant_id
 from src.multi_tenant import get_tenant_lightrag
 from .models import TaskStatus, TaskInfo
-from .task_store import TASK_STORE, create_task, create_batch, get_batch, get_task
+from .task_store import create_task, create_batch, get_batch, get_task, update_task
 
 # 导入 RAG-Anything 异常类型
 try:
@@ -56,9 +56,7 @@ async def process_document_task(
     """
     try:
         # 更新任务状态为处理中
-        if tenant_id in TASK_STORE and task_id in TASK_STORE[tenant_id]:
-            TASK_STORE[tenant_id][task_id].status = TaskStatus.PROCESSING
-            TASK_STORE[tenant_id][task_id].updated_at = datetime.now().isoformat()
+        update_task(task_id, tenant_id, status=TaskStatus.PROCESSING, updated_at=datetime.now().isoformat())
         logger.info(f"[Task {task_id}] [Tenant {tenant_id}] Started processing: {original_filename} (parser: {parser})")
         
         # 获取租户专属的 LightRAG 实例
@@ -222,52 +220,62 @@ async def process_document_task(
                 logger.info(f"[Task {task_id}] [Tenant {tenant_id}] Document parsed using {parser} parser")
         
         # 处理成功
-        if tenant_id in TASK_STORE and task_id in TASK_STORE[tenant_id]:
-            TASK_STORE[tenant_id][task_id].status = TaskStatus.COMPLETED
-            TASK_STORE[tenant_id][task_id].updated_at = datetime.now().isoformat()
-            TASK_STORE[tenant_id][task_id].result = {
+        update_task(
+            task_id, tenant_id,
+            status=TaskStatus.COMPLETED,
+            updated_at=datetime.now().isoformat(),
+            result={
                 "message": "Document processed successfully",
                 "doc_id": doc_id,
                 "filename": original_filename
             }
+        )
         logger.info(f"[Task {task_id}] [Tenant {tenant_id}] Completed successfully: {original_filename}")
         
     except ValueError as e:
         # 验证错误（客户端错误）
-        if tenant_id in TASK_STORE and task_id in TASK_STORE[tenant_id]:
-            TASK_STORE[tenant_id][task_id].status = TaskStatus.FAILED
-            TASK_STORE[tenant_id][task_id].updated_at = datetime.now().isoformat()
-            TASK_STORE[tenant_id][task_id].error = f"Validation error: {str(e)}"
+        update_task(
+            task_id, tenant_id,
+            status=TaskStatus.FAILED,
+            updated_at=datetime.now().isoformat(),
+            error=f"Validation error: {str(e)}"
+        )
         logger.error(f"[Task {task_id}] [Tenant {tenant_id}] Validation error: {e}", exc_info=True)
 
     except MineruExecutionError as e:
         # MinerU 解析错误
         error_msg = str(e)
-        if tenant_id in TASK_STORE and task_id in TASK_STORE[tenant_id]:
-            TASK_STORE[tenant_id][task_id].status = TaskStatus.FAILED
-            TASK_STORE[tenant_id][task_id].updated_at = datetime.now().isoformat()
+        if "Unknown file suffix" in error_msg or "Unsupported" in error_msg:
+            error_text = f"Unsupported file format: {original_filename}"
+        else:
+            error_text = f"Document parsing failed: {original_filename}"
 
-            if "Unknown file suffix" in error_msg or "Unsupported" in error_msg:
-                TASK_STORE[tenant_id][task_id].error = f"Unsupported file format: {original_filename}"
-            else:
-                TASK_STORE[tenant_id][task_id].error = f"Document parsing failed: {original_filename}"
-
+        update_task(
+            task_id, tenant_id,
+            status=TaskStatus.FAILED,
+            updated_at=datetime.now().isoformat(),
+            error=error_text
+        )
         logger.error(f"[Task {task_id}] [Tenant {tenant_id}] MinerU error: {error_msg}", exc_info=True)
 
     except OSError as e:
         # 文件系统错误
-        if tenant_id in TASK_STORE and task_id in TASK_STORE[tenant_id]:
-            TASK_STORE[tenant_id][task_id].status = TaskStatus.FAILED
-            TASK_STORE[tenant_id][task_id].updated_at = datetime.now().isoformat()
-            TASK_STORE[tenant_id][task_id].error = "File system error occurred"
+        update_task(
+            task_id, tenant_id,
+            status=TaskStatus.FAILED,
+            updated_at=datetime.now().isoformat(),
+            error="File system error occurred"
+        )
         logger.error(f"[Task {task_id}] [Tenant {tenant_id}] File system error: {e}", exc_info=True)
 
     except Exception as e:
         # 其他未预期的错误
-        if tenant_id in TASK_STORE and task_id in TASK_STORE[tenant_id]:
-            TASK_STORE[tenant_id][task_id].status = TaskStatus.FAILED
-            TASK_STORE[tenant_id][task_id].updated_at = datetime.now().isoformat()
-            TASK_STORE[tenant_id][task_id].error = f"Internal server error: {str(e)}"
+        update_task(
+            task_id, tenant_id,
+            status=TaskStatus.FAILED,
+            updated_at=datetime.now().isoformat(),
+            error=f"Internal server error: {str(e)}"
+        )
         logger.error(f"[Task {task_id}] [Tenant {tenant_id}] Unexpected error: {e}", exc_info=True)
         
     finally:
@@ -886,7 +894,7 @@ async def get_batch_status(
             })
         else:
             # 任务可能已被清理，记录警告
-            logger.warning(f"[Batch {batch_id}] Task {task_id} not found in TASK_STORE")
+            logger.warning(f"[Batch {batch_id}] Task {task_id} not found in task store")
             related_tasks.append({
                 "task_id": task_id,
                 "doc_id": "unknown",
