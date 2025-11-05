@@ -21,3 +21,8 @@ dependencies = [
     "pillow>=11.3.0",
     "pymupdf>=1.26.5",
 ]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.14.0",
+]

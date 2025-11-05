@@ -1,0 +1,179 @@
+name: CI - Basic Checks
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  lint:
+    name: Code Quality
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          version: "latest"
+
+      - name: Set up Python
+        run: uv python install 3.10
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Check code formatting
+        run: |
+          uv run ruff format --check . || echo "⚠️  Code formatting issues found (not blocking CI)"
+
+      - name: Lint with ruff
+        run: |
+          echo "📊 Running ruff lint check..."
+          uv run ruff check . --statistics || echo "⚠️  Linting issues found (not blocking CI)"
+          echo "✅ Lint check completed (informational only)"
+
+  validate-config:
+    name: Validate Configuration
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check environment example completeness
+        run: |
+          echo "🔍 Validating env.example..."
+
+          # 必须存在的配置项
+          required_vars=(
+            "LLM_API_KEY"
+            "LLM_BASE_URL"
+            "LLM_MODEL"
+            "EMBEDDING_API_KEY"
+            "EMBEDDING_BASE_URL"
+            "EMBEDDING_MODEL"
+            "EMBEDDING_DIM"
+            "MINERU_MODE"
+            "MINERU_API_TOKEN"
+            "TASK_STORE_STORAGE"
+            "TENANT_CONFIG_STORAGE"
+          )
+
+          missing_vars=()
+          for var in "${required_vars[@]}"; do
+            if ! grep -q "^$var=" env.example; then
+              missing_vars+=("$var")
+            fi
+          done
+
+          if [ ${#missing_vars[@]} -gt 0 ]; then
+            echo "❌ Missing required variables in env.example:"
+            printf '%s\n' "${missing_vars[@]}"
+            exit 1
+          fi
+
+          echo "✅ env.example contains all required variables"
+
+      - name: Validate TASK_STORE_STORAGE documentation
+        run: |
+          echo "🔍 Checking TASK_STORE_STORAGE documentation..."
+
+          # 验证 env.example 中是否有正确的注释说明
+          if ! grep -A 3 "TASK_STORE_STORAGE" env.example | grep -q "memory\|redis"; then
+            echo "❌ TASK_STORE_STORAGE documentation incomplete"
+            exit 1
+          fi
+
+          echo "✅ TASK_STORE_STORAGE documented correctly"
+
+      - name: Check Docker Compose syntax
+        run: |
+          echo "🔍 Validating Docker Compose files..."
+
+          # 验证开发环境配置
+          docker compose -f docker-compose.dev.yml config > /dev/null
+          echo "✅ docker-compose.dev.yml is valid"
+
+          # 验证生产环境配置
+          docker compose -f docker-compose.yml config > /dev/null
+          echo "✅ docker-compose.yml is valid"
+
+      - name: Check TASK_STORE_STORAGE in docker-compose
+        run: |
+          echo "🔍 Checking TASK_STORE_STORAGE in Docker Compose..."
+
+          # 验证开发环境包含 TASK_STORE_STORAGE
+          if ! grep -q "TASK_STORE_STORAGE" docker-compose.dev.yml; then
+            echo "❌ TASK_STORE_STORAGE missing in docker-compose.dev.yml"
+            exit 1
+          fi
+
+          # 验证生产环境包含 TASK_STORE_STORAGE
+          if ! grep -q "TASK_STORE_STORAGE" docker-compose.yml; then
+            echo "❌ TASK_STORE_STORAGE missing in docker-compose.yml"
+            exit 1
+          fi
+
+          echo "✅ TASK_STORE_STORAGE configured in both docker-compose files"
+
+      - name: Deployment pre-check simulation
+        run: |
+          echo "🔍 Simulating deployment pre-check..."
+
+          # 创建模拟 .env 文件
+          cp env.example .env
+
+          # 填充必要的测试值
+          sed -i 's/your_mineru_api_token_here/test_token_12345/g' .env
+          sed -i 's/your_llm_api_key_here/test_key_12345/g' .env
+          sed -i 's/your_embedding_api_key_here/test_key_12345/g' .env
+          sed -i 's/your_rerank_api_key_here/test_key_12345/g' .env
+          sed -i 's/your_deepseek_ocr_api_key_here/test_key_12345/g' .env
+
+          # 确保 MINERU_MODE 为 remote
+          sed -i 's/^MINERU_MODE=.*/MINERU_MODE=remote/' .env
+
+          echo "✅ Environment simulation created"
+
+          # 运行部署检查脚本（跳过网络连通性测试）
+          echo "📋 Would run: bash scripts/check-deployment.sh"
+          echo "⚠️  Skipping network connectivity test in CI"
+
+  validate-scripts:
+    name: Validate Shell Scripts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install shellcheck
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y shellcheck
+
+      - name: Check shell scripts
+        run: |
+          echo "🔍 Running shellcheck on all .sh files..."
+
+          # 查找所有 .sh 文件
+          shfiles=$(find . -name "*.sh" -not -path "./.git/*" -not -path "./.venv/*")
+
+          if [ -z "$shfiles" ]; then
+            echo "⚠️  No shell scripts found"
+            exit 0
+          fi
+
+          failed=0
+          for file in $shfiles; do
+            echo "Checking $file..."
+            if ! shellcheck -x "$file"; then
+              failed=1
+            fi
+          done
+
+          if [ $failed -eq 1 ]; then
+            echo "❌ Some shell scripts have issues"
+            exit 1
+          fi
+
+          echo "✅ All shell scripts passed shellcheck"

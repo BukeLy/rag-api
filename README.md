@@ -6,6 +6,7 @@
 
 基于 RAG-Anything 和 LightRAG 构建的企业级 RAG 服务
 
+[![CI](https://github.com/YOUR_USERNAME/rag-api/actions/workflows/ci-basic.yml/badge.svg)](https://github.com/YOUR_USERNAME/rag-api/actions/workflows/ci-basic.yml)
 [![Python](https://img.shields.io/badge/Python-3.11+-blue.svg)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-00C7B7.svg)](https://fastapi.tiangolo.com/)
 [![LightRAG](https://img.shields.io/badge/LightRAG-1.4+-orange.svg)](https://github.com/HKUDS/LightRAG)
@@ -883,6 +884,10 @@ docker system prune -f
 ### 健康检查
 
 ```bash
+# 完整健康检查（推荐）
+./scripts/health_check.sh
+./scripts/health_check.sh --verbose  # 详细输出
+
 # API 健康检查
 curl http://localhost:8000/
 
