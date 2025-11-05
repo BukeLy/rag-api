@@ -461,18 +461,29 @@ docker compose -f docker-compose.yml up -d
 ## Configuration (.env)
 
 **核心配置**：
-- **LLM/Embedding**: `ARK_*` (LLM) + `SF_*` (Embedding) + `EMBEDDING_DIM` (必须匹配模型)
+- **LLM**: `LLM_API_KEY`, `LLM_BASE_URL`, `LLM_MODEL` (功能导向命名)
+- **Embedding**: `EMBEDDING_API_KEY`, `EMBEDDING_BASE_URL`, `EMBEDDING_MODEL`, `EMBEDDING_DIM` (必须匹配模型)
+- **Rerank**: `RERANK_API_KEY`, `RERANK_BASE_URL`, `RERANK_MODEL`
+- **DeepSeek-OCR**: `DS_OCR_API_KEY`, `DS_OCR_BASE_URL`, `DS_OCR_MODEL` (独立配置)
 - **MinerU**: `MINERU_MODE=remote`（推荐）+ `MINERU_API_TOKEN` + `MINERU_HTTP_TIMEOUT=60`
-- **存储**: Redis (KV) + PostgreSQL (Vector) + Neo4j (Graph)
-- **性能**: `TOP_K=20`, `CHUNK_TOP_K=10`, `MAX_ASYNC=8`
+- **存储**: DragonflyDB (KV) + Qdrant (Vector) + Memgraph (Graph)
+- **性能**: `TOP_K=20`, `CHUNK_TOP_K=10`, `MAX_ASYNC=16`, `LLM_TIMEOUT=60`
 
-**多租户 API**：所有端点需 `?tenant_id=xxx` 参数
+**多租户 API**：
+- 所有端点需 `?tenant_id=xxx` 参数
+- 支持租户级配置热重载（无需重启服务）
+- 租户配置 API: `/tenants/{id}/config` (GET/PUT/DELETE/refresh)
+- 存储方式可配置：
+  - `TENANT_CONFIG_STORAGE=local` - 本地文件存储（默认，适合开发/测试）
+  - `TENANT_CONFIG_STORAGE=redis` - Redis 存储（生产环境）
+- **注意**：租户配置不会降级到全局配置，避免 API key 混用
 
 ## File Structure
 - `main.py`: FastAPI 入口
-- `api/`: 路由模块 (insert, query, task, tenant, files, monitor)
-- `src/`: 核心逻辑 (rag, multi_tenant, mineru_client, logger, metrics)
+- `api/`: 路由模块 (insert, query, task, tenant, tenant_config, files, monitor)
+- `src/`: 核心逻辑 (rag, multi_tenant, tenant_config, config, mineru_client, logger, metrics)
 - `rag_local_storage/`: LightRAG 工作目录（git-ignored）
+- `test_tenant_config.sh`: 租户配置热重载测试脚本
 
 ## ⚠️ Critical Pitfalls
 

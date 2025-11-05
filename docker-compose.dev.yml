@@ -35,6 +35,8 @@ services:
       - KV_STORAGE=${KV_STORAGE:-RedisKVStorage}
       - VECTOR_STORAGE=${VECTOR_STORAGE:-QdrantStorage}
       - GRAPH_STORAGE=${GRAPH_STORAGE:-MemgraphStorage}
+      # 租户配置存储（开发环境也使用 Redis，方便测试）
+      - TENANT_CONFIG_STORAGE=redis
       # VLM 增强配置（✅ 从 .env 读取）
       - RAG_VLM_MODE=${RAG_VLM_MODE:-off}
       - RAG_IMPORTANCE_THRESHOLD=${RAG_IMPORTANCE_THRESHOLD:-0.5}
