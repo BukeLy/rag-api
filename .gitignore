@@ -61,3 +61,6 @@ docs/PRODUCTION_MIGRATION_GUIDE.md
 docs/PRODUCTION_MIGRATION_QUICKSTART.md
 .claude/tmp/*
 docs/config_refactor/*
+
+# Sensitive Deployment Information (敏感部署信息，仅限本地)
+DEPLOYMENT_PRIVATE.md

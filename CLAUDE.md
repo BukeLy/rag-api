@@ -64,10 +64,12 @@ mcp__memory__open_nodes(names=["RAG-Anything", "LightRAG"])
 ```python
 Task(
     description="执行远程部署测试",
-    prompt="在服务器 45.78.223.205 上执行以下操作：\n1. git pull\n2. 重启服务\n3. 测试 API 健康检查\n4. 返回测试结果摘要（不要返回完整日志）",
+    prompt="在服务器 $PRODUCTION_SERVER 上执行以下操作：\n1. git pull\n2. 重启服务\n3. 测试 API 健康检查\n4. 返回测试结果摘要（不要返回完整日志）",
     subagent_type="general-purpose"
 )
 ```
+
+> 💡 **注意**：`$PRODUCTION_SERVER` 等敏感信息请查看 [DEPLOYMENT_PRIVATE.md](./DEPLOYMENT_PRIVATE.md)（仅本地）
 
 **关键要求**：
 - ❌ **禁止**在 prompt 中要求返回完整日志
@@ -487,9 +489,9 @@ docker compose -f docker-compose.yml up -d
 
 **LightRAG WebUI**：http://localhost:9621/webui/
 
-**远程服务器**：45.78.223.205
-- SSH (macOS): `ssh -i /Users/chengjie/Downloads/chengjie.pem root@45.78.223.205`
-- 部署：PR 合并 → 服务器 `git pull` → 热重载生效（开发模式）
+**远程服务器部署**：
+- SSH 连接和服务器信息详见 [DEPLOYMENT_PRIVATE.md](./DEPLOYMENT_PRIVATE.md)（仅本地）
+- 部署流程：PR 合并 → 服务器 `git pull` → 热重载生效（开发模式）
 
 ## Configuration (.env)
 
