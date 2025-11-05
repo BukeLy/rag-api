@@ -20,23 +20,30 @@
 | 文档 | 描述 | 适用人群 |
 |------|------|---------|
 | [PR_WORKFLOW.md](PR_WORKFLOW.md) | Pull Request 工作流程 | 贡献者、开发者 |
+| [LIGHTRAG_IMPLEMENTATION_GUIDE.md](LIGHTRAG_IMPLEMENTATION_GUIDE.md) | LightRAG 深度解析：原理到实践 | 开发者、研究人员 |
+| [MINERU_REMOTE_API.md](MINERU_REMOTE_API.md) | MinerU 远程 API 配置指南 | 开发者、运维人员 |
+
+### 技术研究文档
+
+| 文档 | 描述 | 适用人群 |
+|------|------|---------|
+| [deepseek-ocr-complete.md](deepseek-ocr-complete.md) | DeepSeek-OCR 完整研究报告 | 开发者、研究人员 |
+| [smart-parser-selection-v2.md](smart-parser-selection-v2.md) | 智能 Parser 选择方案 v2.0 | 开发者、架构师 |
+| [parser-selection-upgrade-v1-to-v2.md](parser-selection-upgrade-v1-to-v2.md) | Parser 选择方案升级报告（v1→v2） | 开发者 |
 
 ---
 
 ## 🔒 内部文档（仅本地）
 
-以下文档包含内部实现细节、优化策略和测试数据，**不会**推送到 GitHub：
+以下文档包含内部优化策略和生产环境运维细节，**不会**推送到 GitHub：
 
-### 技术实现文档
+### 内部运维文档
 
 | 文档 | 描述 | 用途 |
 |------|------|------|
-| `LIGHTRAG_IMPLEMENTATION_GUIDE.md` | LightRAG 详细实现指南 | 内部开发参考 |
-| `MINERU_REMOTE_API.md` | MinerU 远程 API 文档 | 内部集成文档 |
-| `OPTIMIZATION_GUIDE.md` | 性能优化指南 | 内部优化参考 |
-| [deepseek-ocr-complete.md](deepseek-ocr-complete.md) | DeepSeek-OCR 完整研究报告 | DS-OCR 集成测试和评估 |
-| [smart-parser-selection-v2.md](smart-parser-selection-v2.md) | 智能 Parser 选择方案 v2.0 | DS-OCR + MinerU + Docling 智能选择 |
-| [parser-selection-upgrade-v1-to-v2.md](parser-selection-upgrade-v1-to-v2.md) | Parser 选择方案升级报告 | v1.0 → v2.0 升级详情 |
+| `OPTIMIZATION_GUIDE.md` | 性能优化指南 | 内部优化策略 |
+| `PRODUCTION_MIGRATION_GUIDE.md` | 生产环境迁移详细指南 | 内部运维文档 |
+| `PRODUCTION_MIGRATION_QUICKSTART.md` | 快速迁移指南 | 内部运维文档 |
 
 ### 迁移文档
 
