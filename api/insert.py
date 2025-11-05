@@ -77,8 +77,8 @@ async def process_document_task(
                 raise ValueError(f"Empty text file: {original_filename}")
             
             # 直接插入到租户的 LightRAG 实例（轻量级，无需解析）
-            await lightrag_instance.ainsert(text_content)
-            logger.info(f"[Task {task_id}] [Tenant {tenant_id}] Text content inserted directly to LightRAG ({len(text_content)} characters)")
+            await lightrag_instance.ainsert(text_content, file_paths=original_filename)
+            logger.info(f"[Task {task_id}] [Tenant {tenant_id}] Text content inserted directly to LightRAG ({len(text_content)} characters, file: {original_filename})")
         else:
             # 非文本文件，需要使用解析器
             if parser is None:
@@ -137,10 +137,10 @@ async def process_document_task(
                     )
 
                     # 直接插入到租户的 LightRAG 实例
-                    await lightrag_instance.ainsert(markdown_text)
+                    await lightrag_instance.ainsert(markdown_text, file_paths=original_filename)
                     logger.info(
                         f"[Task {task_id}] [Tenant {tenant_id}] Document parsed using DeepSeek-OCR "
-                        f"(mode={mode.value}, {len(markdown_text)} chars)"
+                        f"(mode={mode.value}, {len(markdown_text)} chars, file: {original_filename})"
                     )
                 except Exception as e:
                     logger.error(f"[Task {task_id}] DeepSeek-OCR failed: {e}", exc_info=True)
