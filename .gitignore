@@ -64,3 +64,4 @@ docs/config_refactor/*
 
 # Sensitive Deployment Information (敏感部署信息，仅限本地)
 DEPLOYMENT_PRIVATE.md
+tenant_configs/
