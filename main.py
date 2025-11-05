@@ -80,6 +80,10 @@ app = FastAPI(
             "description": "租户管理和统计信息"
         },
         {
+            "name": "tenant-config",
+            "description": "租户配置管理（支持热重载，无需重启服务）"
+        },
+        {
             "name": "File Service",
             "description": "临时文件下载服务（用于远程 MinerU）"
         },

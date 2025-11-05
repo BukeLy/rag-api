@@ -187,9 +187,9 @@ class MultiTenantRAGManager:
         self._instances: Dict[str, LightRAG] = {}  # 租户实例缓存
         self.max_instances = max_instances
 
-        # 共享配置(从环境变量读取)
-        self.ark_api_key = os.getenv("ARK_API_KEY")
-        self.sf_api_key = os.getenv("SF_API_KEY")
+        # 共享配置(从集中配置管理读取)
+        self.llm_api_key = config.llm.api_key
+        self.embedding_api_key = config.embedding.api_key
         # ...
 
     async def get_instance(self, tenant_id: str) -> LightRAG:
@@ -904,15 +904,15 @@ curl "http://localhost:8000/task/task_uuid?tenant_id=tenant_a"
 #### 核心配置
 
 ```bash
-# LLM 配置
-ARK_API_KEY=...
-ARK_BASE_URL=...
-ARK_MODEL=seed-1-6-250615
+# LLM 配置（功能导向命名）
+LLM_API_KEY=...
+LLM_BASE_URL=...
+LLM_MODEL=seed-1-6-250615
 
-# Embedding 配置
-SF_API_KEY=...
-SF_BASE_URL=...
-SF_EMBEDDING_MODEL=Qwen/Qwen3-Embedding-8B
+# Embedding 配置（功能导向命名）
+EMBEDDING_API_KEY=...
+EMBEDDING_BASE_URL=...
+EMBEDDING_MODEL=Qwen/Qwen3-Embedding-8B
 
 # Rerank 配置
 RERANK_MODEL=Qwen/Qwen3-Reranker-8B

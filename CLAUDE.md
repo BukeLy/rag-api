@@ -43,6 +43,39 @@ mcp__memory__open_nodes(names=["RAG-Anything", "LightRAG"])
 
 ---
 
+## 🤖 SubAgent (Task) 使用规则
+
+### 何时必须使用 SubAgent 执行任务
+
+**触发条件（满足任一）**：
+1. ✅ **执行测试/命令会输出大量日志**
+   - 示例：Docker 构建、测试脚本、性能测试、数据库迁移
+   - 原因：避免主 Agent 上下文被日志污染
+
+2. ✅ **需要多轮迭代的探索性任务**
+   - 示例：调试问题、搜索代码、理解复杂系统
+   - 原因：Sub Agent 可以自主探索，不占用主 Agent 对话轮次
+
+3. ✅ **并行执行多个独立任务**
+   - 示例：同时测试多个环境、批量数据处理
+   - 原因：提升效率，避免串行等待
+
+**使用方法**：
+```python
+Task(
+    description="执行远程部署测试",
+    prompt="在服务器 45.78.223.205 上执行以下操作：\n1. git pull\n2. 重启服务\n3. 测试 API 健康检查\n4. 返回测试结果摘要（不要返回完整日志）",
+    subagent_type="general-purpose"
+)
+```
+
+**关键要求**：
+- ❌ **禁止**在 prompt 中要求返回完整日志
+- ✅ **必须**要求 SubAgent 返回摘要/结果
+- ✅ **必须**明确告知 SubAgent 任务的最终目标
+
+---
+
 ## 🧠 Memory MCP 强制使用规则（MUST FOLLOW）
 
 ### 📖 查询规则（何时必须查询）
@@ -342,6 +375,64 @@ mcp__memory__add_observations(observations=[{
 - ✅ **用 curl 测试 API**：先验证响应结构，再写解析代码
 - ❌ **禁止猜测**：不猜测 API 参数、环境变量名、响应格式
 
+#### curl 调用 API 的正确姿势（MANDATORY）
+**❌ 错误做法**：在 `-d` 参数中直接使用多行 JSON + 命令替换
+```bash
+# ❌ 会报错: curl: option : blank argument where content is expected
+curl -X POST "https://api.example.com/v1/chat" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d "{
+    \"model\": \"xxx\",
+    \"messages\": [{
+      \"content\": [{\"image_url\": {\"url\": \"data:image/png;base64,$(cat file.txt)\"}}]
+    }]
+  }"
+```
+
+**✅ 正确做法 1**：使用 jq 构建 JSON + 文件传递
+```bash
+# 1. 读取 base64 内容
+base64_content=$(cat /tmp/image_base64.txt)
+
+# 2. 使用 jq 构建 JSON（自动处理转义和格式）
+jq -n \
+  --arg model "deepseek-ai/DeepSeek-OCR" \
+  --arg text "请转换表格" \
+  --arg base64 "$base64_content" \
+  '{
+    model: $model,
+    messages: [{
+      role: "user",
+      content: [
+        {type: "text", text: $text},
+        {type: "image_url", image_url: {url: ("data:image/png;base64," + $base64)}}
+      ]
+    }],
+    max_tokens: 1000
+  }' > /tmp/payload.json
+
+# 3. 使用 @filename 传递 JSON（避免命令行长度限制）
+curl -s -X POST "https://api.siliconflow.cn/v1/chat/completions" \
+  -H "Authorization: Bearer $SF_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d @/tmp/payload.json | python3 -m json.tool
+```
+
+**✅ 正确做法 2**：使用单行 JSON（仅适用于简单情况）
+```bash
+# 仅当 JSON 简单且无命令替换时使用
+curl -X POST "https://api.example.com" \
+  -H "Content-Type: application/json" \
+  -d '{"key":"value","foo":"bar"}'
+```
+
+**核心原则**：
+- ❌ **禁止在 `-d` 参数中直接使用多行 JSON**：shell 换行符处理会导致解析失败
+- ❌ **禁止在双引号内使用命令替换构建大型 JSON**：参数长度限制 + 转义复杂
+- ✅ **必须使用 jq 构建 JSON**：自动处理转义、格式化、变量替换
+- ✅ **必须使用 `@filename` 传递 JSON**：避免命令行长度限制
+- ✅ **先验证 JSON 格式**：`jq . /tmp/payload.json` 确保格式正确
+
 ### 2. Git Commit 前置检查
 **必须完成以下检查**：
 0. ✅ **Memory MCP 检视与更新（NEW）**：
@@ -403,18 +494,29 @@ docker compose -f docker-compose.yml up -d
 ## Configuration (.env)
 
 **核心配置**：
-- **LLM/Embedding**: `ARK_*` (LLM) + `SF_*` (Embedding) + `EMBEDDING_DIM` (必须匹配模型)
+- **LLM**: `LLM_API_KEY`, `LLM_BASE_URL`, `LLM_MODEL` (功能导向命名)
+- **Embedding**: `EMBEDDING_API_KEY`, `EMBEDDING_BASE_URL`, `EMBEDDING_MODEL`, `EMBEDDING_DIM` (必须匹配模型)
+- **Rerank**: `RERANK_API_KEY`, `RERANK_BASE_URL`, `RERANK_MODEL`
+- **DeepSeek-OCR**: `DS_OCR_API_KEY`, `DS_OCR_BASE_URL`, `DS_OCR_MODEL` (独立配置)
 - **MinerU**: `MINERU_MODE=remote`（推荐）+ `MINERU_API_TOKEN` + `MINERU_HTTP_TIMEOUT=60`
-- **存储**: Redis (KV) + PostgreSQL (Vector) + Neo4j (Graph)
-- **性能**: `TOP_K=20`, `CHUNK_TOP_K=10`, `MAX_ASYNC=8`
+- **存储**: DragonflyDB (KV) + Qdrant (Vector) + Memgraph (Graph)
+- **性能**: `TOP_K=20`, `CHUNK_TOP_K=10`, `MAX_ASYNC=16`, `LLM_TIMEOUT=60`
 
-**多租户 API**：所有端点需 `?tenant_id=xxx` 参数
+**多租户 API**：
+- 所有端点需 `?tenant_id=xxx` 参数
+- 支持租户级配置热重载（无需重启服务）
+- 租户配置 API: `/tenants/{id}/config` (GET/PUT/DELETE/refresh)
+- 存储方式可配置：
+  - `TENANT_CONFIG_STORAGE=local` - 本地文件存储（默认，适合开发/测试）
+  - `TENANT_CONFIG_STORAGE=redis` - Redis 存储（生产环境）
+- **注意**：租户配置不会降级到全局配置，避免 API key 混用
 
 ## File Structure
 - `main.py`: FastAPI 入口
-- `api/`: 路由模块 (insert, query, task, tenant, files, monitor)
-- `src/`: 核心逻辑 (rag, multi_tenant, mineru_client, logger, metrics)
+- `api/`: 路由模块 (insert, query, task, tenant, tenant_config, files, monitor)
+- `src/`: 核心逻辑 (rag, multi_tenant, tenant_config, config, mineru_client, logger, metrics)
 - `rag_local_storage/`: LightRAG 工作目录（git-ignored）
+- `test_tenant_config.sh`: 租户配置热重载测试脚本
 
 ## ⚠️ Critical Pitfalls
 

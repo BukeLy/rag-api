@@ -12,6 +12,7 @@ from lightrag import LightRAG
 from lightrag.utils import EmbeddingFunc
 from lightrag.llm.openai import openai_complete_if_cache, openai_embed
 from src.logger import logger
+from src.config import config  # 使用集中配置管理
 
 
 class MultiTenantRAGManager:
@@ -36,28 +37,28 @@ class MultiTenantRAGManager:
         # 租户实例缓存：tenant_id -> LightRAG
         self._instances: Dict[str, LightRAG] = {}
 
-        # 共享配置（从环境变量读取）
-        self.ark_api_key = os.getenv("ARK_API_KEY")
-        self.ark_base_url = os.getenv("ARK_BASE_URL")
-        self.ark_model = os.getenv("ARK_MODEL", "seed-1-6-250615")
+        # 共享配置（从集中配置管理读取）
+        self.ark_api_key = config.llm.api_key
+        self.ark_base_url = config.llm.base_url
+        self.ark_model = config.llm.model
 
-        self.sf_api_key = os.getenv("SF_API_KEY")
-        self.sf_base_url = os.getenv("SF_BASE_URL")
-        self.sf_embedding_model = os.getenv("SF_EMBEDDING_MODEL", "Qwen/Qwen3-Embedding-8B")
+        self.sf_api_key = config.embedding.api_key
+        self.sf_base_url = config.embedding.base_url
+        self.sf_embedding_model = config.embedding.model
 
-        self.rerank_model = os.getenv("RERANK_MODEL", "")
+        self.rerank_model = config.rerank.model
 
         # 性能配置
-        self.top_k = int(os.getenv("TOP_K", "20"))
-        self.chunk_top_k = int(os.getenv("CHUNK_TOP_K", "10"))
-        self.max_async = int(os.getenv("MAX_ASYNC", "8"))
-        self.vlm_timeout = float(os.getenv("VLM_TIMEOUT", "120"))
+        self.top_k = config.lightrag_query.top_k
+        self.chunk_top_k = config.lightrag_query.chunk_top_k
+        self.max_async = config.llm.max_async
+        self.vlm_timeout = config.llm.vlm_timeout
 
         # 存储配置
-        self.use_external_storage = os.getenv("USE_EXTERNAL_STORAGE", "false").lower() == "true"
-        self.kv_storage = os.getenv("KV_STORAGE", "JsonKVStorage")
-        self.vector_storage = os.getenv("VECTOR_STORAGE", "NanoVectorDB")
-        self.graph_storage = os.getenv("GRAPH_STORAGE", "NetworkXStorage")
+        self.use_external_storage = config.storage.use_external
+        self.kv_storage = config.storage.kv_storage
+        self.vector_storage = config.storage.vector_storage
+        self.graph_storage = config.storage.graph_storage
 
         logger.info(f"MultiTenantRAGManager initialized (max_instances={max_instances})")
 
@@ -77,8 +78,8 @@ class MultiTenantRAGManager:
 
     def _create_embedding_func(self):
         """创建共享的 Embedding 函数"""
-        # 从环境变量读取维度，避免硬编码
-        embedding_dim = int(os.getenv("EMBEDDING_DIM", "1024"))
+        # 从配置管理类读取维度
+        embedding_dim = config.embedding.dim
 
         return EmbeddingFunc(
             embedding_dim=embedding_dim,

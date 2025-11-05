@@ -327,15 +327,15 @@ uv run uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 最小配置（必填）：
 
 ```bash
-# LLM 服务（豆包）
-ARK_API_KEY=your_ark_api_key
-ARK_BASE_URL=https://ark.cn-beijing.volces.com/api/v3
-ARK_MODEL=ep-xxx-xxx
+# LLM 配置（功能导向命名）
+LLM_API_KEY=your_llm_api_key
+LLM_BASE_URL=https://ark.cn-beijing.volces.com/api/v3
+LLM_MODEL=ep-xxx-xxx
 
-# Embedding 服务（火山引擎）
-SF_API_KEY=your_sf_api_key
-SF_BASE_URL=https://api-vikingdb.volces.com/api/embeddings/v2
-SF_EMBEDDING_MODEL=Qwen/Qwen3-Embedding-0.6B
+# Embedding 配置（功能导向命名）
+EMBEDDING_API_KEY=your_embedding_api_key
+EMBEDDING_BASE_URL=https://api.siliconflow.cn/v1
+EMBEDDING_MODEL=Qwen/Qwen3-Embedding-0.6B
 EMBEDDING_DIM=1024
 
 # MinerU 模式（推荐远程模式）

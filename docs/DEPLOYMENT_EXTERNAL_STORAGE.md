@@ -81,15 +81,15 @@ MEMGRAPH_PASSWORD=
 # - Qwen3-Embedding-8B → 4096 维度（更高精度，需更多资源）
 EMBEDDING_DIM=1024
 
-# ====== LLM 配置（豆包大模型）======
-ARK_API_KEY=your_ark_api_key_here
-ARK_BASE_URL=https://ark.cn-beijing.volces.com/api/v3
-ARK_MODEL=seed-1-6-250615
+# ====== LLM 配置（功能导向命名）======
+LLM_API_KEY=your_llm_api_key_here
+LLM_BASE_URL=https://ark.cn-beijing.volces.com/api/v3
+LLM_MODEL=seed-1-6-250615
 
-# ====== Embedding 配置（火山引擎）======
-SF_API_KEY=your_sf_api_key_here
-SF_BASE_URL=https://api-vikingdb.volces.com/api/embeddings/v2
-SF_EMBEDDING_MODEL=Qwen/Qwen3-Embedding-0.6B  # 1024 维度
+# ====== Embedding 配置（功能导向命名）======
+EMBEDDING_API_KEY=your_embedding_api_key_here
+EMBEDDING_BASE_URL=https://api.siliconflow.cn/v1
+EMBEDDING_MODEL=Qwen/Qwen3-Embedding-0.6B  # 1024 维度
 ```
 
 ---
