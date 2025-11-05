@@ -29,8 +29,8 @@ RAG API 是一个企业级的检索增强生成（RAG）服务，结合了 **RAG
 - ⚡ **高性能检索** - 基于知识图谱的混合检索，查询响应 6-15 秒
 - 🔄 **灵活部署** - 支持生产模式和开发模式，一键切换
 - 📦 **开箱即用** - Docker 一键部署，3 分钟启动服务
-- 🎛️ **双解析引擎** - MinerU（强大）+ Docling（快速），智能自动选择
-- 🎨 **VLM 图表增强** - 三种模式（off/selective/full），深度理解图表内容
+- 🎛️ **多解析引擎** - DeepSeek-OCR(远程API) + MinerU（本地/远程API）+ Docling（快速）
+- 🎨 **RAG-Anything-VLM增强** - 三种模式（off/selective/full），深度理解图表内容
 
 ---
 
@@ -54,12 +54,12 @@ RAG API 是一个企业级的检索增强生成（RAG）服务，结合了 **RAG
   - 数学公式识别
   - 版面分析
 
-- ✅ **VLM 图表增强** 🆕
+- ✅ **RAG-Anything-VLM增强** 🆕
   - `off` - 仅 Markdown（最快）
   - `selective` - 选择性处理重要图表
   - `full` - 完整上下文增强处理
   - 智能过滤：有标题、大尺寸、首页内容
-  - ⚠️ **仅支持 remote MinerU 模式**
+  - ⚠️ **仅支持 remote MinerU 模式,本地模式会调用RAG-Anything原生方法**
 
 - ✅ **批量处理**
   - 单次最多 100 个文件
