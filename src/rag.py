@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 from functools import partial
 
 from src.logger import logger
+from src.config import config  # 新增：使用集中配置管理
 
 # -- 从 raganything_example.py 抄过来的组件 --
 from lightrag import LightRAG
@@ -42,41 +43,32 @@ async def lifespan(app):
     logger.info("🏢 Multi-Tenant Mode Enabled")
     logger.info("=" * 70)
 
-    # 读取 LLM 和 Embedding 配置
-    ark_api_key = os.getenv("ARK_API_KEY")
-    ark_base_url = os.getenv("ARK_BASE_URL")
-    ark_model = os.getenv("ARK_MODEL", "seed-1-6-250615")
-    
-    sf_api_key = os.getenv("SF_API_KEY")
-    sf_base_url = os.getenv("SF_BASE_URL")
-    sf_embedding_model = os.getenv("SF_EMBEDDING_MODEL", "Qwen/Qwen3-Embedding-8B")
-    
-    rerank_model = os.getenv("RERANK_MODEL", "")  # 可选配置
-    
-    # 验证必需配置
-    if not ark_api_key:
-        raise RuntimeError("ARK_API_KEY is not set!")
-    if not sf_api_key:
-        raise RuntimeError("SF_API_KEY is not set!")
-    if not sf_base_url:
-        raise RuntimeError("SF_BASE_URL is not set!")
-    if not ark_base_url:
-        raise RuntimeError("ARK_BASE_URL is not set!")
-    
+    # 读取 LLM 和 Embedding 配置（使用新的配置管理类）
+    # 配置已在 src/config.py 中验证，无需重复检查
+    ark_api_key = config.llm.api_key
+    ark_base_url = config.llm.base_url
+    ark_model = config.llm.model
+
+    sf_api_key = config.embedding.api_key
+    sf_base_url = config.embedding.base_url
+    sf_embedding_model = config.embedding.model
+
+    rerank_model = config.rerank.model  # 可选配置
+
     # 读取 LightRAG 查询优化参数
-    top_k = int(os.getenv("TOP_K", "20"))
-    chunk_top_k = int(os.getenv("CHUNK_TOP_K", "10"))
-    max_async = int(os.getenv("MAX_ASYNC", str(DEFAULT_MAX_ASYNC)))
-    max_parallel_insert = int(os.getenv("MAX_PARALLEL_INSERT", "2"))
-    max_entity_tokens = int(os.getenv("MAX_ENTITY_TOKENS", "6000"))
-    max_relation_tokens = int(os.getenv("MAX_RELATION_TOKENS", "8000"))
-    max_total_tokens = int(os.getenv("MAX_TOTAL_TOKENS", "30000"))
-    
+    top_k = config.lightrag_query.top_k
+    chunk_top_k = config.lightrag_query.chunk_top_k
+    max_async = config.llm.max_async
+    max_parallel_insert = config.lightrag_query.max_parallel_insert
+    max_entity_tokens = config.lightrag_query.max_entity_tokens
+    max_relation_tokens = config.lightrag_query.max_relation_tokens
+    max_total_tokens = config.lightrag_query.max_total_tokens
+
     # 读取多租户配置
-    max_tenant_instances = int(os.getenv("MAX_TENANT_INSTANCES", "50"))
-    
+    max_tenant_instances = config.multi_tenant.max_tenant_instances
+
     # 读取 Embedding 维度配置
-    embedding_dim = os.getenv("EMBEDDING_DIM", "1024")
+    embedding_dim = config.embedding.dim
 
     # 输出配置信息
     logger.info("=" * 70)
