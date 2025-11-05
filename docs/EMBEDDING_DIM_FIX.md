@@ -1,5 +1,10 @@
 # Embedding 维度配置修复报告
 
+> **⚠️ 配置更新说明（2025-11-05）**
+> 本文档是历史修复报告，文中使用 `SF_EMBEDDING_MODEL` 是修复时的变量名。
+> 当前项目已更新为功能导向命名：`EMBEDDING_MODEL`、`EMBEDDING_API_KEY`、`EMBEDDING_BASE_URL`。
+> 详见 [配置重构总结](./config_refactor/08_final_summary.md)。
+
 ## 问题总结
 
 修复了 `docker-compose.yml`、`docker-compose.dev.yml` 和 `src/rag.py` 中硬编码 `EMBEDDING_DIM=4096` 的配置不一致问题。

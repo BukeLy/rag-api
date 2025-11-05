@@ -69,13 +69,13 @@ curl -X POST "http://localhost:8000/query?tenant_id=tenant_b" \
 创建 `.env` 文件：
 
 ```bash
-# LLM API 配置
-ARK_API_KEY=your_ark_api_key
-ARK_BASE_URL=your_ark_base_url
+# LLM 配置（功能导向命名）
+LLM_API_KEY=your_llm_api_key
+LLM_BASE_URL=your_llm_base_url
 
-# Embedding API 配置
-SF_API_KEY=your_sf_api_key
-SF_BASE_URL=your_sf_base_url
+# Embedding 配置（功能导向命名）
+EMBEDDING_API_KEY=your_embedding_api_key
+EMBEDDING_BASE_URL=your_embedding_base_url
 ```
 
 ### 安装依赖
