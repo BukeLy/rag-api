@@ -37,14 +37,16 @@ flowchart TD
 
     E1 --> F[文件类型判断]
     F --> G1[纯文本]
-    F --> G2[解析器选择]
+    F --> G2[智能解析器选择<br/>基于复杂度评分]
 
-    G2 --> H1[MinerU]
-    G2 --> H2[Docling]
+    G2 --> H1[DeepSeek-OCR<br/>简单/中等文档]
+    G2 --> H2[MinerU<br/>复杂多模态]
+    G2 --> H3[Docling<br/>轻量级]
 
     G1 --> I1[LightRAG 实例<br/>tenant_a]
     H1 --> I1
     H2 --> I1
+    H3 --> I1
 
     E2 --> J[实例池 LRU]
     J --> K1[tenant_a]
@@ -106,25 +108,37 @@ flowchart TD
     D --> E{文件类型判断}
 
     E -->|.txt, .md| F1[纯文本<br/>→ 直接读取<br/>→ LightRAG.ainsert<br/>→ tenant_a 知识图谱]
-    E -->|PDF/Office < 500KB| F2[简单文档<br/>→ Docling 解析器<br/>→ 转 Markdown<br/>→ LightRAG.ainsert<br/>→ tenant_a 知识图谱]
-    E -->|图片/大文件| F3[复杂文档<br/>→ MinerU 解析器<br/>→ 提取图片/表格/公式<br/>→ 转 Markdown<br/>→ LightRAG.ainsert<br/>→ tenant_a 知识图谱]
+    E -->|PDF/Office| F0{智能选择解析器<br/>复杂度评分}
+
+    F0 -->|< 20 分<br/>简单文档| F2[DeepSeek-OCR<br/>Free OCR 模式<br/>→ 转 Markdown<br/>→ LightRAG.ainsert<br/>→ tenant_a 知识图谱]
+    F0 -->|20-40 分<br/>复杂表格| F3[DeepSeek-OCR<br/>Grounding 模式<br/>→ 精确表格提取<br/>→ LightRAG.ainsert<br/>→ tenant_a 知识图谱]
+    F0 -->|> 60 分<br/>多模态| F4[MinerU 解析器<br/>→ 提取图片/表格/公式<br/>→ RAG-Anything 后处理<br/>→ LightRAG.ainsert<br/>→ tenant_a 知识图谱]
+    F0 -->|小文件<br/>轻量级| F5[Docling 解析器<br/>→ 快速解析<br/>→ LightRAG.ainsert<br/>→ tenant_a 知识图谱]
 
     F1 --> G[知识图谱完成]
     F2 --> G
     F3 --> G
+    F4 --> G
+    F5 --> G
 
     style F1 fill:#d4edda
-    style F2 fill:#fff3cd
-    style F3 fill:#f8d7da
-    style G fill:#cfe2ff
+    style F2 fill:#cfe2ff
+    style F3 fill:#e7f3ff
+    style F4 fill:#f8d7da
+    style F5 fill:#fff3cd
+    style G fill:#d4edda
 
     note1[极快 ~1秒]
-    note2[快 ~5-10秒]
-    note3[强大 支持多模态]
+    note2[快速 ~5-11秒<br/>80% 场景]
+    note3[精确 ~5-8秒<br/>复杂表格]
+    note4[强大 ~10-60秒<br/>多模态增强]
+    note5[轻量 ~5-10秒]
 
     F1 -.- note1
     F2 -.- note2
     F3 -.- note3
+    F4 -.- note4
+    F5 -.- note5
 ```
 
 #### 查询流程(问题 → 答案)

@@ -116,9 +116,10 @@ graph TB
         TaskQueue[任务队列]
         
         subgraph "文档处理"
-            MinerU[MinerU 解析器<br/>强大 OCR/表格]
+            DeepSeekOCR[DeepSeek-OCR<br/>快速 OCR 80%场景]
+            MinerU[MinerU 解析器<br/>复杂多模态]
             Docling[Docling 解析器<br/>快速轻量]
-            FileRouter[智能路由<br/>自动选择]
+            FileRouter[智能路由<br/>复杂度评分选择]
         end
         
         subgraph "RAG 引擎"
@@ -149,8 +150,10 @@ graph TB
     TenantMgr --> LightRAG
     
     TaskQueue --> FileRouter
+    FileRouter --> DeepSeekOCR
     FileRouter --> MinerU
     FileRouter --> Docling
+    DeepSeekOCR --> LightRAG
     MinerU --> LightRAG
     Docling --> LightRAG
     
@@ -168,6 +171,7 @@ graph TB
     
     style FastAPI fill:#00C7B7
     style LightRAG fill:#FF6B6B
+    style DeepSeekOCR fill:#5DADE2
     style MinerU fill:#4ECDC4
     style Docling fill:#95E1D3
     style TenantMgr fill:#F38181
