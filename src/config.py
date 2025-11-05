@@ -22,7 +22,6 @@ class LLMConfig(BaseSettings):
     api_key: str = Field(..., description="LLM API Key")
     base_url: str = Field(..., description="LLM API Base URL")
     model: str = Field(default="seed-1-6-250615", description="LLM Model Name")
-    provider: str = Field(default="ark", description="LLM Provider (ark/openai/claude)")
     vlm_timeout: int = Field(default=120, description="VLM Image Understanding Timeout (seconds)")
     timeout: int = Field(default=60, description="General LLM Timeout (seconds)")
     max_async: int = Field(default=16, description="Maximum Concurrent LLM Requests")
@@ -48,10 +47,6 @@ class EmbeddingConfig(BaseSettings):
         default=1024,
         description="Embedding Dimension (Must match model output dimension!)"
     )
-    provider: str = Field(
-        default="siliconflow",
-        description="Embedding Provider (siliconflow/openai)"
-    )
 
     class Config:
         env_prefix = "EMBEDDING_"
@@ -69,10 +64,6 @@ class RerankConfig(BaseSettings):
     model: str = Field(
         default="Qwen/Qwen3-Reranker-8B",
         description="Rerank Model Name"
-    )
-    provider: str = Field(
-        default="siliconflow",
-        description="Rerank Provider (siliconflow/openai)"
     )
 
     class Config:
@@ -298,31 +289,18 @@ class AppConfig:
                 f"Please ensure it matches your embedding model output dimension."
             )
 
-        # Check provider values
-        valid_llm_providers = ["ark", "openai", "claude", "anthropic"]
-        if self.llm.provider not in valid_llm_providers:
-            raise ValueError(
-                f"LLM_PROVIDER must be one of {valid_llm_providers}, got {self.llm.provider}"
-            )
-
-        valid_embedding_providers = ["siliconflow", "openai"]
-        if self.embedding.provider not in valid_embedding_providers:
-            raise ValueError(
-                f"EMBEDDING_PROVIDER must be one of {valid_embedding_providers}, got {self.embedding.provider}"
-            )
-
     def print_summary(self) -> None:
         """Print Configuration Summary (for debugging)"""
         print("=" * 60)
         print("Configuration Summary")
         print("=" * 60)
-        print(f"LLM Provider: {self.llm.provider}")
         print(f"LLM Model: {self.llm.model}")
-        print(f"Embedding Provider: {self.embedding.provider}")
+        print(f"LLM Base URL: {self.llm.base_url}")
         print(f"Embedding Model: {self.embedding.model}")
+        print(f"Embedding Base URL: {self.embedding.base_url}")
         print(f"Embedding Dimension: {self.embedding.dim}")
-        print(f"Rerank Provider: {self.rerank.provider}")
         print(f"Rerank Model: {self.rerank.model}")
+        print(f"Rerank Base URL: {self.rerank.base_url}")
         print(f"DeepSeek-OCR Model: {self.ds_ocr.model}")
         print(f"DeepSeek-OCR Mode: {self.ds_ocr.default_mode}")
         print(f"Storage - KV: {self.storage.kv_storage}")

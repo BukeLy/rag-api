@@ -24,7 +24,6 @@ class TenantConfigModel(BaseModel):
         default=None,
         description="LLM 配置覆盖",
         example={
-            "provider": "openai",
             "model": "gpt-4",
             "api_key": "sk-xxx",
             "base_url": "https://api.openai.com/v1"
@@ -36,9 +35,9 @@ class TenantConfigModel(BaseModel):
         default=None,
         description="Embedding 配置覆盖",
         example={
-            "provider": "siliconflow",
             "model": "Qwen/Qwen3-Embedding-0.6B",
             "api_key": "sk-yyy",
+            "base_url": "https://api.siliconflow.cn/v1",
             "dim": 1024
         }
     )
@@ -281,7 +280,6 @@ class TenantConfigManager:
     def _merge_llm_config(self, tenant_config: Optional[TenantConfigModel]) -> Dict[str, Any]:
         """合并 LLM 配置"""
         base = {
-            "provider": config.llm.provider,
             "model": config.llm.model,
             "api_key": config.llm.api_key,
             "base_url": config.llm.base_url,
@@ -298,7 +296,6 @@ class TenantConfigManager:
     def _merge_embedding_config(self, tenant_config: Optional[TenantConfigModel]) -> Dict[str, Any]:
         """合并 Embedding 配置"""
         base = {
-            "provider": config.embedding.provider,
             "model": config.embedding.model,
             "api_key": config.embedding.api_key,
             "base_url": config.embedding.base_url,
@@ -313,7 +310,6 @@ class TenantConfigManager:
     def _merge_rerank_config(self, tenant_config: Optional[TenantConfigModel]) -> Dict[str, Any]:
         """合并 Rerank 配置"""
         base = {
-            "provider": config.rerank.provider,
             "model": config.rerank.model,
             "api_key": config.rerank.api_key,
             "base_url": config.rerank.base_url,

@@ -34,7 +34,6 @@
 def _merge_llm_config(self, tenant_config: Optional[TenantConfigModel]) -> Dict[str, Any]:
     """合并 LLM 配置"""
     base = {
-        "provider": config.llm.provider,
         "model": config.llm.model,
         "api_key": config.llm.api_key,
         "base_url": config.llm.base_url,
@@ -331,7 +330,6 @@ class TenantConfigManager:
     def _merge_llm_config(self, tenant_config: Optional[TenantConfigModel]) -> Dict[str, Any]:
         """合并 LLM 配置"""
         base = {
-            "provider": config.llm.provider,
             "model": config.llm.model,
             "api_key": config.llm.api_key,
             "base_url": config.llm.base_url,
