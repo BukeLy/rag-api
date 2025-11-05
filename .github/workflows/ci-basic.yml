@@ -79,13 +79,22 @@ jobs:
         run: |
           echo "🔍 Checking TASK_STORE_STORAGE documentation..."
 
-          # 验证 env.example 中是否有正确的注释说明
-          if ! grep -A 3 "TASK_STORE_STORAGE" env.example | grep -q "memory\|redis"; then
-            echo "❌ TASK_STORE_STORAGE documentation incomplete"
+          # 验证 env.example 中变量定义之前是否有正确的注释说明
+          # 使用 -B 7 查找变量定义之前的 7 行（覆盖所有文档注释）
+          # 检查文档中是否包含 memory 和 redis 两种存储方式的说明
+          doc_content=$(grep -B 7 "^TASK_STORE_STORAGE=" env.example)
+
+          if ! echo "$doc_content" | grep -q "memory"; then
+            echo "❌ TASK_STORE_STORAGE documentation missing 'memory' option"
             exit 1
           fi
 
-          echo "✅ TASK_STORE_STORAGE documented correctly"
+          if ! echo "$doc_content" | grep -q "redis"; then
+            echo "❌ TASK_STORE_STORAGE documentation missing 'redis' option"
+            exit 1
+          fi
+
+          echo "✅ TASK_STORE_STORAGE documented correctly (both memory and redis options)"
 
       - name: Check Docker Compose syntax
         run: |
