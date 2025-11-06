@@ -105,17 +105,13 @@ class MultiTenantRAGManager:
                 )
 
             # 如果已在事件循环中，使用 create_task
-            try:
-                loop = asyncio.get_running_loop()
-                # 创建任务并等待（不能直接 await，需要用 run_until_complete）
-                future = asyncio.ensure_future(_call_with_rate_limit())
-                # 这里有个问题：我们在同步函数中，不能直接等待异步任务
-                # 需要使用 asyncio.run_coroutine_threadsafe 或其他方法
-                import concurrent.futures
-                return asyncio.run_coroutine_threadsafe(_call_with_rate_limit(), loop).result()
-            except RuntimeError:
-                # 没有事件循环，创建新的
-                return asyncio.run(_call_with_rate_limit())
+            # 处理同步/异步调用 - 修复死锁问题
+            # 使用线程池执行器避免 asyncio.run_coroutine_threadsafe 的死锁
+            import concurrent.futures
+
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(asyncio.run, _call_with_rate_limit())
+                return future.result(timeout=60)  # 60秒超时避免永久阻塞（LLM需要更长时间）
 
         return llm_model_func
 
@@ -158,12 +154,13 @@ class MultiTenantRAGManager:
                     base_url=base_url
                 )
 
-            # 处理同步/异步调用
-            try:
-                loop = asyncio.get_running_loop()
-                return asyncio.run_coroutine_threadsafe(_call_with_rate_limit(), loop).result()
-            except RuntimeError:
-                return asyncio.run(_call_with_rate_limit())
+            # 处理同步/异步调用 - 修复死锁问题
+            # 使用线程池执行器避免 asyncio.run_coroutine_threadsafe 的死锁
+            import concurrent.futures
+
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(asyncio.run, _call_with_rate_limit())
+                return future.result(timeout=30)  # 30秒超时避免永久阻塞
 
         return EmbeddingFunc(
             embedding_dim=embedding_dim,
@@ -216,12 +213,13 @@ class MultiTenantRAGManager:
                         base_url=f"{base_url}/rerank"
                     )
 
-                # 处理同步/异步调用
-                try:
-                    loop = asyncio.get_running_loop()
-                    return asyncio.run_coroutine_threadsafe(_call_with_rate_limit(), loop).result()
-                except RuntimeError:
-                    return asyncio.run(_call_with_rate_limit())
+                # 处理同步/异步调用 - 修复死锁问题
+                # 使用线程池执行器避免 asyncio.run_coroutine_threadsafe 的死锁
+                import concurrent.futures
+
+                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                    future = executor.submit(asyncio.run, _call_with_rate_limit())
+                    return future.result(timeout=30)  # 30秒超时避免永久阻塞
 
             return rerank_func_with_rate_limit
 

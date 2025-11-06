@@ -439,6 +439,7 @@ curl -X POST "https://api.example.com" \
 - ✅ **必须使用 jq 构建 JSON**：自动处理转义、格式化、变量替换
 - ✅ **必须使用 `@filename` 传递 JSON**：避免命令行长度限制
 - ✅ **先验证 JSON 格式**：`jq . /tmp/payload.json` 确保格式正确
+- 🈲 **不允许使用"python3 -m json.tool"**: 本地用的uv所以global没有安装Python以外的其他东西. 
 
 ### 2. Git Commit 前置检查
 **必须完成以下检查**：
