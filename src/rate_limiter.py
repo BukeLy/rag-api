@@ -58,32 +58,65 @@ class RateLimiter:
         Args:
             estimated_tokens: Estimated tokens for this request
         """
-        async with self._lock:
-            now = time.time()
+        while True:
+            # Calculate wait time under lock
+            wait_time = 0
+            wait_reason = None
+            async with self._lock:
+                now = time.time()
 
-            # Clean up records older than 60 seconds
-            self._cleanup_old_records(now)
+                # Clean up records older than 60 seconds
+                self._cleanup_old_records(now)
 
-            # Check and wait for RPM limit
-            await self._check_rpm_limit(now)
+                # Check RPM limit
+                rpm_wait = self._get_rpm_wait_time(now)
 
-            # Check and wait for TPM limit
-            if estimated_tokens > 0:
-                await self._check_tpm_limit(now, estimated_tokens)
+                # Check TPM limit
+                tpm_wait = 0
+                if estimated_tokens > 0:
+                    tpm_wait = self._get_tpm_wait_time(now, estimated_tokens)
 
-            # Record this request
-            self.request_times.append(now)
-            if estimated_tokens > 0:
-                self.token_usage.append((now, estimated_tokens))
+                # Use the longer wait time
+                wait_time = max(rpm_wait, tpm_wait)
 
-            # Log rate limit status (debug level)
-            current_rpm = len(self.request_times)
-            current_tpm = sum(tokens for _, tokens in self.token_usage)
-            logger.debug(
-                f"[{self.service_name}] Rate limit status: "
-                f"RPM={current_rpm}/{self.rpm_limit}, "
-                f"TPM={current_tpm}/{self.tpm_limit}"
-            )
+                # Determine wait reason for logging
+                if wait_time > 0:
+                    if rpm_wait >= tpm_wait:
+                        wait_reason = "rpm"
+                    else:
+                        wait_reason = "tpm"
+
+                # If no wait needed, record request and return
+                if wait_time <= 0:
+                    # Record this request
+                    self.request_times.append(now)
+                    if estimated_tokens > 0:
+                        self.token_usage.append((now, estimated_tokens))
+
+                    # Log rate limit status (debug level)
+                    current_rpm = len(self.request_times)
+                    current_tpm = sum(tokens for _, tokens in self.token_usage)
+                    logger.debug(
+                        f"[{self.service_name}] Rate limit status: "
+                        f"RPM={current_rpm}/{self.rpm_limit}, "
+                        f"TPM={current_tpm}/{self.tpm_limit}"
+                    )
+                    return
+
+            # Wait without holding lock
+            if wait_time > 0:
+                # Log based on wait reason
+                if wait_reason == "rpm":
+                    logger.info(
+                        f"[{self.service_name}] RPM limit reached "
+                        f"({self.rpm_limit}/min), waiting {wait_time:.1f}s"
+                    )
+                else:
+                    logger.info(
+                        f"[{self.service_name}] TPM limit reached, "
+                        f"waiting {wait_time:.1f}s for {estimated_tokens} tokens"
+                    )
+                await asyncio.sleep(wait_time)
 
     def _cleanup_old_records(self, now: float) -> None:
         """Remove records older than 60 seconds."""
@@ -97,68 +130,54 @@ class RateLimiter:
         while self.token_usage and self.token_usage[0][0] < cutoff_time:
             self.token_usage.popleft()
 
-    async def _check_rpm_limit(self, now: float) -> None:
-        """Check and wait if RPM limit would be exceeded."""
+    def _get_rpm_wait_time(self, now: float) -> float:
+        """Calculate wait time needed for RPM limit."""
         if len(self.request_times) >= self.rpm_limit:
             # Calculate wait time until oldest request expires
             wait_time = 60 - (now - self.request_times[0])
-            if wait_time > 0:
-                logger.info(
-                    f"[{self.service_name}] RPM limit reached "
-                    f"({self.rpm_limit}/min), waiting {wait_time:.1f}s"
-                )
-                await asyncio.sleep(wait_time)
-                # Recursive call to re-check after waiting
-                now = time.time()
-                self._cleanup_old_records(now)
-                await self._check_rpm_limit(now)
+            return max(0, wait_time)
+        return 0
 
-    async def _check_tpm_limit(self, now: float, estimated_tokens: int) -> None:
-        """Check and wait if TPM limit would be exceeded."""
+    def _get_tpm_wait_time(self, now: float, estimated_tokens: int) -> float:
+        """Calculate wait time needed for TPM limit."""
         current_tpm = sum(tokens for _, tokens in self.token_usage)
 
         if current_tpm + estimated_tokens > self.tpm_limit:
-            # Calculate wait time until enough tokens expire
+            # Need to wait for some tokens to expire
             if self.token_usage:
+                # Simple strategy: wait for the oldest token record to expire
+                # More sophisticated: calculate exactly when enough tokens will expire
                 wait_time = 60 - (now - self.token_usage[0][0])
-                if wait_time > 0:
-                    logger.info(
-                        f"[{self.service_name}] TPM limit reached "
-                        f"({current_tpm}/{self.tpm_limit}), "
-                        f"waiting {wait_time:.1f}s for {estimated_tokens} tokens"
-                    )
-                    await asyncio.sleep(wait_time)
-                    # Recursive call to re-check after waiting
-                    now = time.time()
-                    self._cleanup_old_records(now)
-                    await self._check_tpm_limit(now, estimated_tokens)
+                return max(0, wait_time)
+        return 0
 
-    def get_status(self) -> dict:
+    async def get_status(self) -> dict:
         """
         Get current rate limit status.
 
         Returns:
             Dictionary with current RPM and TPM usage
         """
-        now = time.time()
-        self._cleanup_old_records(now)
+        async with self._lock:
+            now = time.time()
+            self._cleanup_old_records(now)
 
-        current_rpm = len(self.request_times)
-        current_tpm = sum(tokens for _, tokens in self.token_usage)
+            current_rpm = len(self.request_times)
+            current_tpm = sum(tokens for _, tokens in self.token_usage)
 
-        return {
-            "service": self.service_name,
-            "rpm": {
-                "current": current_rpm,
-                "limit": self.rpm_limit,
-                "available": max(0, self.rpm_limit - current_rpm)
-            },
-            "tpm": {
-                "current": current_tpm,
-                "limit": self.tpm_limit,
-                "available": max(0, self.tpm_limit - current_tpm)
+            return {
+                "service": self.service_name,
+                "rpm": {
+                    "current": current_rpm,
+                    "limit": self.rpm_limit,
+                    "available": max(0, self.rpm_limit - current_rpm)
+                },
+                "tpm": {
+                    "current": current_tpm,
+                    "limit": self.tpm_limit,
+                    "available": max(0, self.tpm_limit - current_tpm)
+                }
             }
-        }
 
 
 class AsyncSemaphoreWithRateLimit:
@@ -226,9 +245,9 @@ class AsyncSemaphoreWithRateLimit:
         """Release the semaphore."""
         self.semaphore.release()
 
-    def get_status(self) -> dict:
+    async def get_status(self) -> dict:
         """Get current status including semaphore and rate limits."""
-        status = self.rate_limiter.get_status()
+        status = await self.rate_limiter.get_status()
         status["concurrent"] = {
             "available": self.semaphore._value,
             "limit": self.semaphore._initial_value

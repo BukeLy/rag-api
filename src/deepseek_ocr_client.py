@@ -24,6 +24,7 @@ import requests
 
 from src.logger import logger
 from src.config import config  # 使用集中配置管理
+from src.rate_limiter import get_rate_limiter  # 导入速率限制器
 
 
 class DSSeekMode(Enum):
@@ -71,7 +72,15 @@ class DeepSeekOCRClient:
         """
         self.config = config or DSSeekConfig()
 
-        logger.info(f"DeepSeek-OCR Client initialized: {self.config.base_url}")
+        # 初始化速率限制器（使用 DS-OCR 配置）
+        self.rate_limiter = get_rate_limiter(
+            service="ds_ocr",
+            max_concurrent=getattr(self.config, 'max_async', config.ds_ocr.max_async),
+            requests_per_minute=getattr(self.config, 'requests_per_minute', config.ds_ocr.requests_per_minute),
+            tokens_per_minute=getattr(self.config, 'tokens_per_minute', config.ds_ocr.tokens_per_minute)
+        )
+
+        logger.info(f"DeepSeek-OCR Client initialized: {self.config.base_url} (with rate limiting)")
 
     def _build_prompt(self, mode: DSSeekMode, chinese_hint: bool = False) -> str:
         """
@@ -257,7 +266,7 @@ class DeepSeekOCRClient:
 
     async def _call_api(self, img_base64: str, prompt: str) -> str:
         """
-        调用 DeepSeek-OCR API（异步）
+        调用 DeepSeek-OCR API（异步，带速率限制）
 
         Args:
             img_base64: Base64 编码的图片
@@ -269,6 +278,12 @@ class DeepSeekOCRClient:
         Raises:
             Exception: API 调用失败时抛出异常
         """
+        # 估算 tokens（提示词 + 图片约 1000 tokens + 输出约 2000 tokens）
+        estimated_tokens = len(prompt) // 3 + 1000 + self.config.max_tokens
+
+        # 获取速率限制许可
+        await self.rate_limiter.rate_limiter.acquire(estimated_tokens)
+
         payload = {
             "model": self.config.model_name,
             "messages": [{
@@ -319,7 +334,7 @@ class DeepSeekOCRClient:
 
     def _call_api_sync(self, img_base64: str, prompt: str) -> str:
         """
-        调用 DeepSeek-OCR API（同步）
+        调用 DeepSeek-OCR API（同步，带速率限制）
 
         Args:
             img_base64: Base64 编码的图片
@@ -328,6 +343,26 @@ class DeepSeekOCRClient:
         Returns:
             API 返回的文本内容
         """
+        import asyncio
+
+        # 估算 tokens（提示词 + 图片约 1000 tokens + 输出约 2000 tokens）
+        estimated_tokens = len(prompt) // 3 + 1000 + self.config.max_tokens
+
+        # 在同步函数中调用异步速率限制器
+        try:
+            loop = asyncio.get_running_loop()
+            # 如果已在事件循环中，使用 run_coroutine_threadsafe
+            import concurrent.futures
+            concurrent.futures.Future(
+                asyncio.run_coroutine_threadsafe(
+                    self.rate_limiter.rate_limiter.acquire(estimated_tokens),
+                    loop
+                )
+            ).result()
+        except RuntimeError:
+            # 没有事件循环，创建新的
+            asyncio.run(self.rate_limiter.rate_limiter.acquire(estimated_tokens))
+
         payload = {
             "model": self.config.model_name,
             "messages": [{

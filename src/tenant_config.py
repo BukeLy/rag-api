@@ -278,7 +278,7 @@ class TenantConfigManager:
         return merged
 
     def _merge_llm_config(self, tenant_config: Optional[TenantConfigModel]) -> Dict[str, Any]:
-        """合并 LLM 配置"""
+        """合并 LLM 配置（包含速率限制）"""
         base = {
             "model": config.llm.model,
             "api_key": config.llm.api_key,
@@ -286,6 +286,9 @@ class TenantConfigManager:
             "timeout": config.llm.timeout,
             "max_async": config.llm.max_async,
             "vlm_timeout": config.llm.vlm_timeout,
+            # 速率限制配置
+            "requests_per_minute": config.llm.requests_per_minute,
+            "tokens_per_minute": config.llm.tokens_per_minute,
         }
 
         if tenant_config and tenant_config.llm_config:
@@ -294,12 +297,17 @@ class TenantConfigManager:
         return base
 
     def _merge_embedding_config(self, tenant_config: Optional[TenantConfigModel]) -> Dict[str, Any]:
-        """合并 Embedding 配置"""
+        """合并 Embedding 配置（包含速率限制）"""
         base = {
             "model": config.embedding.model,
             "api_key": config.embedding.api_key,
             "base_url": config.embedding.base_url,
             "dim": config.embedding.dim,
+            # 速率限制配置
+            "requests_per_minute": config.embedding.requests_per_minute,
+            "tokens_per_minute": config.embedding.tokens_per_minute,
+            "max_async": config.embedding.max_async,
+            "timeout": config.embedding.timeout,
         }
 
         if tenant_config and tenant_config.embedding_config:
@@ -308,11 +316,16 @@ class TenantConfigManager:
         return base
 
     def _merge_rerank_config(self, tenant_config: Optional[TenantConfigModel]) -> Dict[str, Any]:
-        """合并 Rerank 配置"""
+        """合并 Rerank 配置（包含速率限制）"""
         base = {
             "model": config.rerank.model,
             "api_key": config.rerank.api_key,
             "base_url": config.rerank.base_url,
+            # 速率限制配置
+            "requests_per_minute": config.rerank.requests_per_minute,
+            "tokens_per_minute": config.rerank.tokens_per_minute,
+            "max_async": config.rerank.max_async,
+            "timeout": config.rerank.timeout,
         }
 
         if tenant_config and tenant_config.rerank_config:
@@ -321,7 +334,7 @@ class TenantConfigManager:
         return base
 
     def _merge_ds_ocr_config(self, tenant_config: Optional[TenantConfigModel]) -> Dict[str, Any]:
-        """合并 DeepSeek-OCR 配置"""
+        """合并 DeepSeek-OCR 配置（包含速率限制）"""
         base = {
             "api_key": config.ds_ocr.api_key,
             "base_url": config.ds_ocr.base_url,
@@ -333,6 +346,10 @@ class TenantConfigManager:
             "fallback_enabled": config.ds_ocr.fallback_enabled,
             "fallback_mode": config.ds_ocr.fallback_mode,
             "min_output_threshold": config.ds_ocr.min_output_threshold,
+            # 速率限制配置
+            "requests_per_minute": config.ds_ocr.requests_per_minute,
+            "tokens_per_minute": config.ds_ocr.tokens_per_minute,
+            "max_async": config.ds_ocr.max_async,
         }
 
         if tenant_config and tenant_config.ds_ocr_config:

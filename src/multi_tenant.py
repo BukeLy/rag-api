@@ -13,6 +13,7 @@ from lightrag.utils import EmbeddingFunc
 from lightrag.llm.openai import openai_complete_if_cache, openai_embed
 from src.logger import logger
 from src.config import config  # 使用集中配置管理
+from src.rate_limiter import get_rate_limiter  # 导入速率限制器
 
 
 class MultiTenantRAGManager:
@@ -63,44 +64,116 @@ class MultiTenantRAGManager:
         logger.info(f"MultiTenantRAGManager initialized (max_instances={max_instances})")
 
     def _create_llm_func(self, llm_config: Dict):
-        """创建 LLM 函数（支持租户配置覆盖）"""
+        """创建 LLM 函数（支持租户配置覆盖 + 速率限制）"""
+        import asyncio
+
         # 从配置中提取参数（支持租户覆盖）
         model = llm_config.get("model", self.ark_model)
         api_key = llm_config.get("api_key", self.ark_api_key)
         base_url = llm_config.get("base_url", self.ark_base_url)
 
+        # 获取速率限制器
+        requests_per_minute = llm_config.get("requests_per_minute", config.llm.requests_per_minute)
+        tokens_per_minute = llm_config.get("tokens_per_minute", config.llm.tokens_per_minute)
+        max_concurrent = llm_config.get("max_async", config.llm.max_async)
+
+        rate_limiter = get_rate_limiter(
+            service="llm",
+            max_concurrent=max_concurrent,
+            requests_per_minute=requests_per_minute,
+            tokens_per_minute=tokens_per_minute
+        )
+
         def llm_model_func(prompt, **kwargs):
-            kwargs['enable_cot'] = False
-            if 'system_prompt' not in kwargs:
-                kwargs['system_prompt'] = self.default_system_prompt
-            return openai_complete_if_cache(
-                model, prompt,
-                api_key=api_key,
-                base_url=base_url,
-                **kwargs
-            )
+            # 估算 tokens（简单估算：字符数 / 3）
+            estimated_tokens = len(prompt) // 3 + 500  # 输入 + 预估输出
+
+            # 在同步函数中运行异步速率限制
+            async def _call_with_rate_limit():
+                # 获取速率限制许可
+                await rate_limiter.rate_limiter.acquire(estimated_tokens)
+
+                # 调用原始函数
+                kwargs['enable_cot'] = False
+                if 'system_prompt' not in kwargs:
+                    kwargs['system_prompt'] = self.default_system_prompt
+                return openai_complete_if_cache(
+                    model, prompt,
+                    api_key=api_key,
+                    base_url=base_url,
+                    **kwargs
+                )
+
+            # 如果已在事件循环中，使用 create_task
+            try:
+                loop = asyncio.get_running_loop()
+                # 创建任务并等待（不能直接 await，需要用 run_until_complete）
+                future = asyncio.ensure_future(_call_with_rate_limit())
+                # 这里有个问题：我们在同步函数中，不能直接等待异步任务
+                # 需要使用 asyncio.run_coroutine_threadsafe 或其他方法
+                import concurrent.futures
+                return asyncio.run_coroutine_threadsafe(_call_with_rate_limit(), loop).result()
+            except RuntimeError:
+                # 没有事件循环，创建新的
+                return asyncio.run(_call_with_rate_limit())
+
         return llm_model_func
 
     def _create_embedding_func(self, embedding_config: Dict):
-        """创建 Embedding 函数（支持租户配置覆盖）"""
+        """创建 Embedding 函数（支持租户配置覆盖 + 速率限制）"""
+        import asyncio
+
         # 从配置中提取参数（支持租户覆盖）
         model = embedding_config.get("model", self.sf_embedding_model)
         api_key = embedding_config.get("api_key", self.sf_api_key)
         base_url = embedding_config.get("base_url", self.sf_base_url)
         embedding_dim = embedding_config.get("dim", config.embedding.dim)
 
+        # 获取速率限制器
+        requests_per_minute = embedding_config.get("requests_per_minute", config.embedding.requests_per_minute)
+        tokens_per_minute = embedding_config.get("tokens_per_minute", config.embedding.tokens_per_minute)
+        max_concurrent = embedding_config.get("max_async", config.embedding.max_async)
+
+        rate_limiter = get_rate_limiter(
+            service="embedding",
+            max_concurrent=max_concurrent,
+            requests_per_minute=requests_per_minute,
+            tokens_per_minute=tokens_per_minute
+        )
+
+        def embedding_func_with_rate_limit(texts):
+            # 估算 tokens（所有文本的总字符数 / 3）
+            total_chars = sum(len(text) for text in texts)
+            estimated_tokens = total_chars // 3
+
+            async def _call_with_rate_limit():
+                # 获取速率限制许可
+                await rate_limiter.rate_limiter.acquire(estimated_tokens)
+
+                # 调用原始函数
+                return openai_embed(
+                    texts,
+                    model=model,
+                    api_key=api_key,
+                    base_url=base_url
+                )
+
+            # 处理同步/异步调用
+            try:
+                loop = asyncio.get_running_loop()
+                return asyncio.run_coroutine_threadsafe(_call_with_rate_limit(), loop).result()
+            except RuntimeError:
+                return asyncio.run(_call_with_rate_limit())
+
         return EmbeddingFunc(
             embedding_dim=embedding_dim,
-            func=lambda texts: openai_embed(
-                texts,
-                model=model,
-                api_key=api_key,
-                base_url=base_url
-            ),
+            func=embedding_func_with_rate_limit,
         )
 
     def _create_rerank_func(self, rerank_config: Dict):
-        """创建 Rerank 函数（支持租户配置覆盖）"""
+        """创建 Rerank 函数（支持租户配置覆盖 + 速率限制）"""
+        import asyncio
+
         # 从配置中提取参数（支持租户覆盖）
         model = rerank_config.get("model", self.rerank_model)
         api_key = rerank_config.get("api_key", self.sf_api_key)
@@ -111,20 +184,53 @@ class MultiTenantRAGManager:
 
         try:
             from lightrag.rerank import cohere_rerank
-            from functools import partial
 
-            return partial(
-                cohere_rerank,
-                model=model,
-                api_key=api_key,
-                base_url=f"{base_url}/rerank"
+            # 获取速率限制器
+            requests_per_minute = rerank_config.get("requests_per_minute", config.rerank.requests_per_minute)
+            tokens_per_minute = rerank_config.get("tokens_per_minute", config.rerank.tokens_per_minute)
+            max_concurrent = rerank_config.get("max_async", config.rerank.max_async)
+
+            rate_limiter = get_rate_limiter(
+                service="rerank",
+                max_concurrent=max_concurrent,
+                requests_per_minute=requests_per_minute,
+                tokens_per_minute=tokens_per_minute
             )
+
+            def rerank_func_with_rate_limit(query, documents, top_k=5):
+                # 估算 tokens（查询 + 所有文档的字符数 / 3）
+                total_chars = len(query) + sum(len(doc) for doc in documents)
+                estimated_tokens = total_chars // 3
+
+                async def _call_with_rate_limit():
+                    # 获取速率限制许可
+                    await rate_limiter.rate_limiter.acquire(estimated_tokens)
+
+                    # 调用原始函数
+                    return cohere_rerank(
+                        query=query,
+                        documents=documents,
+                        top_k=top_k,
+                        model=model,
+                        api_key=api_key,
+                        base_url=f"{base_url}/rerank"
+                    )
+
+                # 处理同步/异步调用
+                try:
+                    loop = asyncio.get_running_loop()
+                    return asyncio.run_coroutine_threadsafe(_call_with_rate_limit(), loop).result()
+                except RuntimeError:
+                    return asyncio.run(_call_with_rate_limit())
+
+            return rerank_func_with_rate_limit
+
         except ImportError:
             logger.warning("lightrag.rerank not available")
             return None
 
     def _create_vision_model_func(self, llm_config: Dict):
-        """创建 Vision Model 函数（支持租户配置覆盖）"""
+        """创建 Vision Model 函数（支持租户配置覆盖 + 速率限制）"""
         import aiohttp
 
         # 从配置中提取参数（支持租户覆盖）
@@ -133,9 +239,21 @@ class MultiTenantRAGManager:
         base_url = llm_config.get("base_url", self.ark_base_url)
         vlm_timeout = llm_config.get("vlm_timeout", self.vlm_timeout)
 
+        # 获取速率限制器（VLM 使用 LLM 的限制）
+        requests_per_minute = llm_config.get("requests_per_minute", config.llm.requests_per_minute)
+        tokens_per_minute = llm_config.get("tokens_per_minute", config.llm.tokens_per_minute)
+        max_concurrent = llm_config.get("max_async", config.llm.max_async)
+
+        rate_limiter = get_rate_limiter(
+            service="llm",  # VLM 共享 LLM 的速率限制
+            max_concurrent=max_concurrent,
+            requests_per_minute=requests_per_minute,
+            tokens_per_minute=tokens_per_minute
+        )
+
         async def seed_vision_model_func(prompt: str, image_data: str, system_prompt: str) -> str:
             """
-            使用 VLM 理解图片内容
+            使用 VLM 理解图片内容（带速率限制）
 
             Args:
                 prompt: 主要提示词（如"请描述这张图片"）
@@ -145,6 +263,12 @@ class MultiTenantRAGManager:
             Returns:
                 str: 图片描述文本
             """
+            # 估算 tokens（提示词 + 图片约 200 tokens + 输出 500）
+            estimated_tokens = len(prompt) // 3 + 200 + 500
+
+            # 获取速率限制许可
+            await rate_limiter.rate_limiter.acquire(estimated_tokens)
+
             payload = {
                 "model": model,
                 "messages": [
