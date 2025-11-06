@@ -31,6 +31,13 @@
 | [deepseek-ocr-complete.md](deepseek-ocr-complete.md) | DeepSeek-OCR 完整研究报告 | 开发者、研究人员 |
 | [smart-parser-selection-v2.md](smart-parser-selection-v2.md) | 智能 Parser 选择方案 v2.0 | 开发者、架构师 |
 | [parser-selection-upgrade-v1-to-v2.md](parser-selection-upgrade-v1-to-v2.md) | Parser 选择方案升级报告（v1→v2） | 开发者 |
+| [async-architecture-migration-plan.md](async-architecture-migration-plan.md) | 全异步架构迁移技术方案 | 开发者、架构师 |
+
+### 故障报告
+
+| 文档 | 描述 | 适用人群 |
+|------|------|---------|
+| [incident-report-2025-11-06-asyncio-deadlock.md](incident-report-2025-11-06-asyncio-deadlock.md) | 异步调用死锁故障分析报告 | 开发者、运维人员 |
 
 ---
 
@@ -156,8 +163,8 @@ git push origin main
 ## 📊 文档统计
 
 ### 公开文档
-- 总计：**6 个文档**
-- 总字数：约 **25,000 字**
+- 总计：**8 个文档**（新增故障报告和技术方案）
+- 总字数：约 **35,000 字**
 - 主要语言：中文
 
 ### 内部文档
@@ -201,5 +208,5 @@ git push origin main
 
 ---
 
-**最后更新**: 2025-11-05
+**最后更新**: 2025-11-06
 
