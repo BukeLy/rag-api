@@ -11,6 +11,7 @@ class TaskStatus(str, Enum):
     """任务状态枚举"""
     PENDING = "pending"        # 排队中
     PROCESSING = "processing"  # 处理中
+    DELETING = "deleting"      # 删除中
     COMPLETED = "completed"    # 完成
     FAILED = "failed"          # 失败
 
