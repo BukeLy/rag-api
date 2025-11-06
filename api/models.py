@@ -276,3 +276,125 @@ class TenantStats(BaseModel):
             }
         }
 
+
+class DeletionTaskInfo(BaseModel):
+    """
+    文档删除任务模型
+
+    记录文档删除任务的完整生命周期信息
+    """
+    task_id: str = Field(
+        ...,
+        description="删除任务唯一标识符",
+        example="deletion_abc123"
+    )
+    tenant_id: str = Field(
+        ...,
+        description="租户唯一标识符",
+        example="siraya"
+    )
+    doc_id: str = Field(
+        ...,
+        description="文档唯一标识符",
+        example="research_paper_001"
+    )
+    status: str = Field(
+        ...,
+        description="任务当前状态（pending/deleting/completed/failed）",
+        example="deleting"
+    )
+    created_at: str = Field(
+        ...,
+        description="任务创建时间（ISO 8601 格式）",
+        example="2025-11-06T10:00:00Z"
+    )
+    updated_at: str = Field(
+        ...,
+        description="任务最后更新时间（ISO 8601 格式）",
+        example="2025-11-06T10:00:02Z"
+    )
+    error: Optional[str] = Field(
+        None,
+        description="错误信息（仅在 failed 状态时存在）",
+        example="Document not found"
+    )
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "task_id": "deletion_abc123",
+                "tenant_id": "siraya",
+                "doc_id": "research_paper_001",
+                "status": "deleting",
+                "created_at": "2025-11-06T10:00:00Z",
+                "updated_at": "2025-11-06T10:00:02Z"
+            }
+        }
+
+
+class DocumentStatusResponse(BaseModel):
+    """
+    文档状态响应模型
+
+    返回文档在 LightRAG 中的处理状态和元数据
+    """
+    doc_id: str = Field(
+        ...,
+        description="文档唯一标识符",
+        example="doc-abc123"
+    )
+    status: str = Field(
+        ...,
+        description="文档处理状态（pending/processing/preprocessed/processed/failed）",
+        example="processed"
+    )
+    file_path: str = Field(
+        ...,
+        description="文件路径",
+        example="research_paper.pdf"
+    )
+    created_at: str = Field(
+        ...,
+        description="创建时间（ISO 8601 格式）",
+        example="2025-11-06T10:00:00+00:00"
+    )
+    updated_at: str = Field(
+        ...,
+        description="更新时间（ISO 8601 格式）",
+        example="2025-11-06T10:05:00+00:00"
+    )
+    content_summary: str = Field(
+        ...,
+        description="内容摘要（前 100 字符）",
+        example="This paper discusses machine learning..."
+    )
+    content_length: int = Field(
+        ...,
+        description="内容总长度（字符数）",
+        example=5000
+    )
+    chunks_count: Optional[int] = Field(
+        None,
+        description="切片数量",
+        example=15
+    )
+    error_msg: Optional[str] = Field(
+        None,
+        description="错误信息（仅 failed 状态时存在）",
+        example="Parsing failed: invalid format"
+    )
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "doc_id": "doc-abc123",
+                "status": "processed",
+                "file_path": "research_paper.pdf",
+                "created_at": "2025-11-06T10:00:00+00:00",
+                "updated_at": "2025-11-06T10:05:00+00:00",
+                "content_summary": "This paper discusses machine learning...",
+                "content_length": 5000,
+                "chunks_count": 15
+            }
+        }
+

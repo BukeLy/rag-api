@@ -15,6 +15,7 @@ from .files import router as files_router
 from .monitor import router as monitor_router
 from .tenant import router as tenant_router  # 租户管理路由
 from .tenant_config import router as tenant_config_router  # 租户配置管理路由
+from .documents import router as documents_router  # 文档管理路由
 
 # 注册子路由
 api_router.include_router(insert_router, tags=["Document Processing"])
@@ -24,4 +25,5 @@ api_router.include_router(files_router, tags=["File Service"])
 api_router.include_router(monitor_router, tags=["Performance Monitoring"])
 api_router.include_router(tenant_router)  # 租户管理（已在 tenant.py 中定义 tags）
 api_router.include_router(tenant_config_router)  # 租户配置管理（已在 tenant_config.py 中定义 tags）
+api_router.include_router(documents_router)  # 文档管理（已在 documents.py 中定义 tags）
 

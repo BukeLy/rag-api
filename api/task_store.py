@@ -377,3 +377,66 @@ def delete_batch(batch_id: str, tenant_id: str) -> bool:
         bool: 是否成功删除
     """
     return _store.delete_batch(tenant_id, batch_id)
+
+
+# ===== 文档删除任务管理函数 =====
+
+def create_deletion_task(tenant_id: str, doc_id: str) -> str:
+    """
+    创建删除任务
+
+    Args:
+        tenant_id: 租户ID
+        doc_id: 文档ID
+
+    Returns:
+        str: 删除任务ID
+    """
+    import uuid
+    from datetime import datetime
+    from .models import DeletionTaskInfo
+
+    task_id = f"deletion_{uuid.uuid4().hex[:8]}"
+    task_info = DeletionTaskInfo(
+        task_id=task_id,
+        tenant_id=tenant_id,
+        doc_id=doc_id,
+        status="pending",
+        created_at=datetime.now().isoformat(),
+        updated_at=datetime.now().isoformat()
+    )
+    _store.create_task(tenant_id, task_id, task_info.dict())
+    return task_id
+
+
+def get_deletion_task(tenant_id: str, doc_id: str):
+    """
+    查询是否有正在进行的删除任务
+
+    Args:
+        tenant_id: 租户ID
+        doc_id: 文档ID
+
+    Returns:
+        DeletionTaskInfo: 如果存在正在删除的任务则返回任务信息，否则返回 None
+    """
+    from .models import DeletionTaskInfo
+
+    tenant_tasks = get_tenant_tasks(tenant_id)
+    for task in tenant_tasks.values():
+        if (task.get("doc_id") == doc_id and
+            task.get("status") == "deleting"):
+            return DeletionTaskInfo(**task)
+    return None
+
+
+def update_deletion_task(task_id: str, tenant_id: str, **kwargs) -> None:
+    """
+    更新删除任务状态
+
+    Args:
+        task_id: 任务ID
+        tenant_id: 租户ID
+        **kwargs: 要更新的字段
+    """
+    _store.update_task(tenant_id, task_id, **kwargs)
