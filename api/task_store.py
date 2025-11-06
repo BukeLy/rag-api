@@ -437,8 +437,9 @@ def get_deletion_task(tenant_id: str, doc_id: str):
     tenant_tasks = get_tenant_tasks(tenant_id)
     for task in tenant_tasks.values():
         # TaskInfo 对象使用属性访问，不是字典
+        # 检查 pending 和 deleting 状态，防止并发删除同一文档
         if (task.doc_id == doc_id and
-            task.status == "deleting"):
+            task.status in ["pending", "deleting"]):
             return task
     return None
 
