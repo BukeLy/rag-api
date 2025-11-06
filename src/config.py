@@ -24,7 +24,11 @@ class LLMConfig(BaseSettings):
     model: str = Field(default="seed-1-6-250615", description="LLM Model Name")
     vlm_timeout: int = Field(default=120, description="VLM Image Understanding Timeout (seconds)")
     timeout: int = Field(default=60, description="General LLM Timeout (seconds)")
-    max_async: int = Field(default=16, description="Maximum Concurrent LLM Requests")
+    max_async: int = Field(default=8, description="Maximum Concurrent LLM Requests (lowered to avoid rate limits)")
+
+    # Rate limiting
+    requests_per_minute: int = Field(default=800, description="Maximum requests per minute")
+    tokens_per_minute: int = Field(default=40000, description="Maximum tokens per minute (input + output)")
 
     class Config:
         env_prefix = "LLM_"
@@ -48,6 +52,12 @@ class EmbeddingConfig(BaseSettings):
         description="Embedding Dimension (Must match model output dimension!)"
     )
 
+    # Rate limiting
+    requests_per_minute: int = Field(default=1600, description="Maximum requests per minute")
+    tokens_per_minute: int = Field(default=400000, description="Maximum tokens per minute")
+    max_async: int = Field(default=32, description="Maximum concurrent requests")
+    timeout: int = Field(default=30, description="HTTP request timeout (seconds)")
+
     class Config:
         env_prefix = "EMBEDDING_"
         env_file = ".env"
@@ -65,6 +75,12 @@ class RerankConfig(BaseSettings):
         default="Qwen/Qwen3-Reranker-8B",
         description="Rerank Model Name"
     )
+
+    # Rate limiting
+    requests_per_minute: int = Field(default=1600, description="Maximum requests per minute")
+    tokens_per_minute: int = Field(default=400000, description="Maximum tokens per minute")
+    max_async: int = Field(default=16, description="Maximum concurrent requests")
+    timeout: int = Field(default=30, description="HTTP request timeout (seconds)")
 
     class Config:
         env_prefix = "RERANK_"
@@ -127,6 +143,11 @@ class DeepSeekOCRConfig(BaseSettings):
         description="Minimum Output Length for Fallback",
         alias="DEEPSEEK_OCR_MIN_OUTPUT_THRESHOLD"
     )
+
+    # Rate limiting
+    requests_per_minute: int = Field(default=800, description="Maximum requests per minute")
+    tokens_per_minute: int = Field(default=40000, description="Maximum tokens per minute")
+    max_async: int = Field(default=8, description="Maximum concurrent requests")
 
     class Config:
         env_prefix = "DS_OCR_"
