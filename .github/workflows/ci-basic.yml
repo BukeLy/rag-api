@@ -100,12 +100,15 @@ jobs:
         run: |
           echo "🔍 Validating Docker Compose files..."
 
-          # 验证开发环境配置（使用 env.example 提供环境变量模板）
-          docker compose -f docker-compose.dev.yml --env-file env.example config > /dev/null
+          # 创建临时 .env 文件（Docker Compose 会尝试加载它）
+          cp env.example .env
+
+          # 验证开发环境配置
+          docker compose -f docker-compose.dev.yml config > /dev/null
           echo "✅ docker-compose.dev.yml is valid"
 
           # 验证生产环境配置
-          docker compose -f docker-compose.yml --env-file env.example config > /dev/null
+          docker compose -f docker-compose.yml config > /dev/null
           echo "✅ docker-compose.yml is valid"
 
       - name: Check TASK_STORE_STORAGE in docker-compose
@@ -175,7 +178,8 @@ jobs:
           failed=0
           for file in $shfiles; do
             echo "Checking $file..."
-            if ! shellcheck -x "$file"; then
+            # 排除 SC1091 (source .env 文件不存在的警告)
+            if ! shellcheck -x -e SC1091 "$file"; then
               failed=1
             fi
           done

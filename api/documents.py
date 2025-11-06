@@ -20,16 +20,16 @@ router = APIRouter(prefix="", tags=["Document Management"])
 
 # ============ GET 文档状态 ============
 
-@router.get("/documents/{doc_id}/status")
+@router.get("/documents/status")
 async def get_document_status(
-    doc_id: str,
+    doc_id: str = Query(..., description="文档 ID"),
     tenant_id: str = Depends(get_tenant_id)
 ):
     """
     查询文档处理状态
 
     **多租户支持**:
-    - 必填参数: `?tenant_id=your_tenant_id`
+    - 必填参数: `?tenant_id=your_tenant_id&doc_id=xxx`
     - 自动隔离: 只能查询本租户的文档
 
     **状态说明**:

@@ -397,15 +397,29 @@ def create_deletion_task(tenant_id: str, doc_id: str) -> str:
     from .models import DeletionTaskInfo
 
     task_id = f"deletion_{uuid.uuid4().hex[:8]}"
-    task_info = DeletionTaskInfo(
+
+    # 注意：使用 dict() 而不是 DeletionTaskInfo 对象，因为任务存储使用字典
+    task_data = {
+        "task_id": task_id,
+        "tenant_id": tenant_id,
+        "doc_id": doc_id,
+        "status": "pending",
+        "created_at": datetime.now().isoformat(),
+        "updated_at": datetime.now().isoformat()
+    }
+
+    # 创建 TaskInfo 对象（因为 create_task 需要 TaskInfo 类型）
+    # 注意：TaskInfo 模型需要 filename 字段，用 doc_id 代替
+    task_info = TaskInfo(
         task_id=task_id,
-        tenant_id=tenant_id,
-        doc_id=doc_id,
         status="pending",
+        doc_id=doc_id,
+        filename=doc_id,  # 删除任务使用 doc_id 作为 filename
         created_at=datetime.now().isoformat(),
         updated_at=datetime.now().isoformat()
     )
-    _store.create_task(tenant_id, task_id, task_info.dict())
+
+    _store.create_task(tenant_id, task_info)
     return task_id
 
 
@@ -418,15 +432,14 @@ def get_deletion_task(tenant_id: str, doc_id: str):
         doc_id: 文档ID
 
     Returns:
-        DeletionTaskInfo: 如果存在正在删除的任务则返回任务信息，否则返回 None
+        TaskInfo: 如果存在正在删除的任务则返回任务信息，否则返回 None
     """
-    from .models import DeletionTaskInfo
-
     tenant_tasks = get_tenant_tasks(tenant_id)
     for task in tenant_tasks.values():
-        if (task.get("doc_id") == doc_id and
-            task.get("status") == "deleting"):
-            return DeletionTaskInfo(**task)
+        # TaskInfo 对象使用属性访问，不是字典
+        if (task.doc_id == doc_id and
+            task.status == "deleting"):
+            return task
     return None
 
 
