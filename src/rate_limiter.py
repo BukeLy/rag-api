@@ -292,9 +292,9 @@ def calculate_optimal_concurrent(
         int: Safe concurrent count (≥2)
 
     Examples:
-        >>> # Embedding: TPM=400000, avg_tokens=500
-        >>> calculate_optimal_concurrent(1600, 400000, 500)
-        26  # (400000 / 500) / 30 = 26.67 → 26
+        >>> # Embedding: TPM=400000, avg_tokens=20000 (large batch)
+        >>> calculate_optimal_concurrent(1600, 400000, 20000)
+        2  # (400000 / 20000) / 30 = 0.67 → max(2, 0) = 2
 
         >>> # LLM: TPM=40000, avg_tokens=3500
         >>> calculate_optimal_concurrent(800, 40000, 3500)
@@ -354,12 +354,12 @@ def get_rate_limiter(
         # Import config for global defaults
         from src.config import config
 
-        # Token estimation per service (based on research)
+        # Token estimation per service (based on production observation)
         avg_tokens_map = {
-            "llm": 3500,       # Insert: 2840, Query: 3000-5000, Conservative: 3500
-            "embedding": 500,  # Batch encoding average
-            "rerank": 500,     # Document scoring average
-            "ds_ocr": 3500     # Similar to LLM (OCR + description)
+            "llm": 3500,        # Insert: 2840, Query: 3000-5000, Conservative: 3500
+            "embedding": 20000, # Large batch: observed 17181 tokens/request (2.4MB doc)
+            "rerank": 500,      # Document scoring average
+            "ds_ocr": 3500      # Similar to LLM (OCR + description)
         }
 
         # Default RPM/TPM values (used if not provided)
