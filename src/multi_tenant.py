@@ -15,6 +15,10 @@ from src.logger import logger
 from src.config import config  # 使用集中配置管理
 from src.rate_limiter import get_rate_limiter  # 导入速率限制器
 
+# 模型调用 Future 超时（秒）= rate limiter 等待 + API 调用 + 缓冲
+# 从环境变量读取，默认 90 秒
+MODEL_CALL_TIMEOUT = float(os.getenv("MODEL_CALL_TIMEOUT", "90"))
+
 
 class MultiTenantRAGManager:
     """
@@ -66,8 +70,12 @@ class MultiTenantRAGManager:
     def _create_llm_func(self, llm_config: Dict):
         """创建 LLM 函数（支持租户配置覆盖 + 速率限制）
 
+        Tenant Configuration Scope:
+        - ✅ Can configure: api_key, model, base_url, RateLimiter params (max_async, RPM, TPM)
+        - ❌ Cannot configure: LightRAG's llm_model_max_async (always uses RateLimiter's value)
+
         Returns:
-            tuple: (llm_func, max_concurrent) - 函数和实际并发数
+            tuple: (llm_func, actual_max_concurrent) - 函数和实际并发数
         """
         import asyncio
 
@@ -76,19 +84,21 @@ class MultiTenantRAGManager:
         api_key = llm_config.get("api_key", self.ark_api_key)
         base_url = llm_config.get("base_url", self.ark_base_url)
 
-        # 获取速率限制器（不从环境变量读取 max_async，使用 rate_limiter 默认值）
+        # 获取 RateLimiter 参数（租户可配置）
+        # 注意：这里的 max_async 是 RateLimiter 的并发控制，不是 LightRAG 的
         requests_per_minute = llm_config.get("requests_per_minute", config.llm.requests_per_minute)
         tokens_per_minute = llm_config.get("tokens_per_minute", config.llm.tokens_per_minute)
-        max_concurrent = llm_config.get("max_async", None)  # 允许租户覆盖，但默认 None
+        max_concurrent = llm_config.get("max_async", None)  # RateLimiter 的并发数（可选）
 
+        # 创建速率限制器（会自动计算 max_concurrent，除非显式提供）
         rate_limiter = get_rate_limiter(
             service="llm",
-            max_concurrent=max_concurrent,  # None 时使用 rate_limiter 默认值
+            max_concurrent=max_concurrent,  # 租户的 RateLimiter 配置
             requests_per_minute=requests_per_minute,
             tokens_per_minute=tokens_per_minute
         )
 
-        # 获取 rate_limiter 实际使用的并发数
+        # 获取 rate_limiter 实际使用的并发数（将用于 LightRAG）
         actual_max_concurrent = rate_limiter.semaphore._initial_value
 
         def llm_model_func(prompt, **kwargs):
@@ -119,7 +129,7 @@ class MultiTenantRAGManager:
             with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
                 future = executor.submit(asyncio.run, _call_with_rate_limit())
                 # 超时 = 60s (rate limiter最大等待) + 30s (API调用+缓冲)
-                return future.result(timeout=90)
+                return future.result(timeout=MODEL_CALL_TIMEOUT)
 
         return llm_model_func, actual_max_concurrent
 
@@ -169,7 +179,7 @@ class MultiTenantRAGManager:
             with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
                 future = executor.submit(asyncio.run, _call_with_rate_limit())
                 # 超时 = 60s (rate limiter最大等待) + 30s (API调用+缓冲)
-                return future.result(timeout=90)
+                return future.result(timeout=MODEL_CALL_TIMEOUT)
 
         return EmbeddingFunc(
             embedding_dim=embedding_dim,
@@ -229,7 +239,7 @@ class MultiTenantRAGManager:
                 with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
                     future = executor.submit(asyncio.run, _call_with_rate_limit())
                     # 超时 = 60s (rate limiter最大等待) + 30s (API调用+缓冲)
-                    return future.result(timeout=90)
+                    return future.result(timeout=MODEL_CALL_TIMEOUT)
 
             return rerank_func_with_rate_limit
 
@@ -394,17 +404,22 @@ class MultiTenantRAGManager:
             storage_kwargs["graph_storage"] = self.graph_storage
             logger.info(f"[{tenant_id}] Using external storage: KV={self.kv_storage}, Vector={self.vector_storage}, Graph={self.graph_storage}")
 
-        # 创建 LightRAG 实例（使用 rate_limiter 的并发数，确保一致性）
+        # 创建 LightRAG 实例
+        # CRITICAL: llm_model_max_async MUST match RateLimiter's concurrent value
+        # This ensures LightRAG's worker pool doesn't bypass rate limiting
         instance = LightRAG(
             working_dir="./rag_local_storage",  # 共享工作目录
             workspace=tenant_id,  # 关键：使用 tenant_id 作为 workspace
             llm_model_func=llm_func,
             embedding_func=embedding_func,
-            llm_model_max_async=llm_max_concurrent,  # 🔧 使用 rate_limiter 的并发数
+            llm_model_max_async=llm_max_concurrent,  # 🔒 Force use RateLimiter's value (not tenant-controllable)
             **storage_kwargs
         )
 
-        logger.info(f"[{tenant_id}] LightRAG worker pool: {llm_max_concurrent} concurrent (controlled by rate_limiter)")
+        logger.info(
+            f"[{tenant_id}] LightRAG instance created: "
+            f"worker_pool={llm_max_concurrent} (enforced by RateLimiter, tenant cannot override)"
+        )
 
         # 初始化存储
         await instance.initialize_storages()

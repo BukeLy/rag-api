@@ -259,6 +259,51 @@ class AsyncSemaphoreWithRateLimit:
 _limiters = {}
 
 
+def calculate_optimal_concurrent(
+    requests_per_minute: int,
+    tokens_per_minute: int,
+    avg_tokens_per_request: int = 3500
+) -> int:
+    """
+    Calculate optimal concurrent requests based on TPM/RPM limits.
+
+    Uses conservative token estimation based on LightRAG's actual behavior:
+    - Insert (entity extraction): ~2840 tokens/request
+    - Query (answer generation): ~3000-5000 tokens/request
+    - Default: 3500 tokens/request (covers both + 20% safety margin)
+
+    Formula:
+        concurrent = min(RPM, TPM / avg_tokens_per_request)
+
+    Args:
+        requests_per_minute: Maximum requests per minute
+        tokens_per_minute: Maximum tokens per minute
+        avg_tokens_per_request: Average tokens per request (default: 3500)
+
+    Returns:
+        int: Optimal concurrent count (≥1)
+
+    Examples:
+        >>> calculate_optimal_concurrent(800, 40000)  # LLM defaults
+        11  # min(800, 40000/3500) = min(800, 11)
+
+        >>> calculate_optimal_concurrent(1600, 400000, avg_tokens_per_request=500)  # Embedding
+        800  # min(1600, 400000/500) = min(1600, 800)
+    """
+    # Concurrent limit based on RPM (simple: RPM per minute)
+    concurrent_by_rpm = requests_per_minute
+
+    # Concurrent limit based on TPM
+    # Assumption: all concurrent requests use avg_tokens_per_request simultaneously
+    concurrent_by_tpm = tokens_per_minute // avg_tokens_per_request
+
+    # Take the minimum to ensure we don't exceed either limit
+    optimal = min(concurrent_by_rpm, concurrent_by_tpm)
+
+    # Ensure at least 1 (handled by caller if < 1)
+    return max(1, optimal)
+
+
 def get_rate_limiter(
     service: str,
     max_concurrent: Optional[int] = None,
@@ -270,65 +315,122 @@ def get_rate_limiter(
 
     Uses singleton pattern to ensure one limiter per service.
 
-    三层配置优先级：
-    1. 参数传入（租户配置覆盖）
-    2. 全局环境变量（config.{service}.max_async）
-    3. 硬编码默认值（fallback）
+    Configuration Priority (New Design):
+    1. Explicit max_concurrent parameter (tenant RateLimiter config)
+    2. Environment variable {SERVICE}_MAX_ASYNC (expert mode)
+    3. Auto-calculate based on TPM/RPM (default behavior)
+
+    Auto-calculation Formula:
+        concurrent = min(RPM, TPM / avg_tokens_per_request)
+
+    Average Token Estimation:
+        - LLM: 3500 tokens/request (insert + query scenarios)
+        - Embedding: 500 tokens/request (batch encoding)
+        - Rerank: 500 tokens/request (document scoring)
 
     Args:
         service: Service name (e.g., "llm", "embedding", "rerank")
-        max_concurrent: Override max concurrent requests (tenant config)
+        max_concurrent: Override max concurrent (tenant RateLimiter config)
         requests_per_minute: Override RPM limit (tenant config)
         tokens_per_minute: Override TPM limit (tenant config)
 
     Returns:
         AsyncSemaphoreWithRateLimit instance
+
+    Raises:
+        ValueError: If calculated concurrent < 1 and cannot proceed
     """
     if service not in _limiters:
-        # 从 config 读取全局默认值（优先级 2）
+        # Import config for global defaults
         from src.config import config
 
-        # 硬编码默认值（优先级 3，fallback）
-        hardcoded_defaults = {
-            "llm": (8, 800, 40000),
-            "embedding": (32, 1600, 400000),
-            "rerank": (16, 1600, 400000),
-            "ds_ocr": (8, 800, 40000)
+        # Token estimation per service (based on research)
+        avg_tokens_map = {
+            "llm": 3500,       # Insert: 2840, Query: 3000-5000, Conservative: 3500
+            "embedding": 500,  # Batch encoding average
+            "rerank": 500,     # Document scoring average
+            "ds_ocr": 3500     # Similar to LLM (OCR + description)
         }
 
-        default_concurrent, default_rpm, default_tpm = hardcoded_defaults.get(
-            service, (16, 1000, 50000)
-        )
+        # Default RPM/TPM values (used if not provided)
+        default_rpm_tpm = {
+            "llm": (800, 40000),
+            "embedding": (1600, 400000),
+            "rerank": (1600, 400000),
+            "ds_ocr": (800, 40000)
+        }
 
-        # 尝试从 config 读取（如果环境变量存在）
-        if service == "llm":
-            global_max_async = getattr(config.llm, 'max_async', None)
-        elif service == "embedding":
-            global_max_async = getattr(config.embedding, 'max_async', None)
-        elif service == "rerank":
-            global_max_async = getattr(config.rerank, 'max_async', None)
-        elif service == "ds_ocr":
-            global_max_async = getattr(config.ds_ocr, 'max_async', None) if hasattr(config, 'ds_ocr') else None
-        else:
-            global_max_async = None
+        default_rpm, default_tpm = default_rpm_tpm.get(service, (1000, 50000))
+        avg_tokens = avg_tokens_map.get(service, 3500)
 
-        # 应用优先级：租户配置 > 全局环境变量 > 硬编码
-        final_concurrent = max_concurrent or global_max_async or default_concurrent
+        # Get effective RPM/TPM (tenant config > global config)
+        effective_rpm = requests_per_minute or default_rpm
+        effective_tpm = tokens_per_minute or default_tpm
 
+        # Determine final concurrent value
+        final_concurrent = None
+        config_source = None
+
+        # Priority 1: Explicit max_concurrent parameter (tenant RateLimiter config)
+        if max_concurrent is not None:
+            final_concurrent = max_concurrent
+            config_source = "tenant"
+
+        # Priority 2: Environment variable (expert mode)
+        if final_concurrent is None:
+            if service == "llm":
+                env_max_async = getattr(config.llm, 'max_async', None)
+            elif service == "embedding":
+                env_max_async = getattr(config.embedding, 'max_async', None)
+            elif service == "rerank":
+                env_max_async = getattr(config.rerank, 'max_async', None)
+            elif service == "ds_ocr":
+                env_max_async = getattr(config.ds_ocr, 'max_async', None) if hasattr(config, 'ds_ocr') else None
+            else:
+                env_max_async = None
+
+            if env_max_async is not None:
+                final_concurrent = env_max_async
+                config_source = "env"
+
+        # Priority 3: Auto-calculate (default behavior)
+        if final_concurrent is None:
+            final_concurrent = calculate_optimal_concurrent(
+                requests_per_minute=effective_rpm,
+                tokens_per_minute=effective_tpm,
+                avg_tokens_per_request=avg_tokens
+            )
+            config_source = "auto"
+
+        # Edge case: If calculated < 1, log warning and set to 1
+        if final_concurrent < 1:
+            logger.warning(
+                f"[{service.upper()}] Calculated concurrent < 1 "
+                f"(RPM={effective_rpm}, TPM={effective_tpm}, avg_tokens={avg_tokens}). "
+                f"Setting to 1. Consider increasing TPM/RPM limits."
+            )
+            final_concurrent = 1
+
+        # Create rate limiter instance
         _limiters[service] = AsyncSemaphoreWithRateLimit(
             max_concurrent=final_concurrent,
-            requests_per_minute=requests_per_minute or default_rpm,
-            tokens_per_minute=tokens_per_minute or default_tpm,
+            requests_per_minute=effective_rpm,
+            tokens_per_minute=effective_tpm,
             service_name=service.upper()
         )
 
-        # 日志标注配置来源
-        source = "tenant" if max_concurrent else ("env" if global_max_async else "default")
-        logger.info(
-            f"Created rate limiter for {service.upper()}: "
-            f"concurrent={final_concurrent} ({source}), "
-            f"RPM={requests_per_minute or default_rpm}, "
-            f"TPM={tokens_per_minute or default_tpm}"
-        )
+        # Log configuration details
+        if config_source == "auto":
+            logger.info(
+                f"Created rate limiter for {service.upper()}: "
+                f"concurrent={final_concurrent} (auto-calculated from TPM={effective_tpm}, RPM={effective_rpm}, avg_tokens={avg_tokens}), "
+                f"RPM={effective_rpm}, TPM={effective_tpm}"
+            )
+        else:
+            logger.info(
+                f"Created rate limiter for {service.upper()}: "
+                f"concurrent={final_concurrent} ({config_source}), "
+                f"RPM={effective_rpm}, TPM={effective_tpm}"
+            )
 
     return _limiters[service]

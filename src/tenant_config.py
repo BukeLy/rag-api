@@ -278,13 +278,17 @@ class TenantConfigManager:
         return merged
 
     def _merge_llm_config(self, tenant_config: Optional[TenantConfigModel]) -> Dict[str, Any]:
-        """合并 LLM 配置（包含速率限制）"""
+        """合并 LLM 配置（包含速率限制）
+
+        Note: max_async 控制 RateLimiter 的并发数，不直接控制 LightRAG 的 llm_model_max_async。
+        LightRAG 的并发数会在 multi_tenant.py 中被强制设置为 RateLimiter 的实际值，确保一致性。
+        """
         base = {
             "model": config.llm.model,
             "api_key": config.llm.api_key,
             "base_url": config.llm.base_url,
             "timeout": config.llm.timeout,
-            "max_async": config.llm.max_async,
+            "max_async": config.llm.max_async,  # RateLimiter 的并发数（可选，未设置时自动计算）
             "vlm_timeout": config.llm.vlm_timeout,
             # 速率限制配置
             "requests_per_minute": config.llm.requests_per_minute,
@@ -297,7 +301,10 @@ class TenantConfigManager:
         return base
 
     def _merge_embedding_config(self, tenant_config: Optional[TenantConfigModel]) -> Dict[str, Any]:
-        """合并 Embedding 配置（包含速率限制）"""
+        """合并 Embedding 配置（包含速率限制）
+
+        Note: max_async 控制 RateLimiter 的并发数（可选，未设置时基于 TPM/RPM 自动计算）。
+        """
         base = {
             "model": config.embedding.model,
             "api_key": config.embedding.api_key,
@@ -306,7 +313,7 @@ class TenantConfigManager:
             # 速率限制配置
             "requests_per_minute": config.embedding.requests_per_minute,
             "tokens_per_minute": config.embedding.tokens_per_minute,
-            "max_async": config.embedding.max_async,
+            "max_async": config.embedding.max_async,  # RateLimiter 的并发数（可选）
             "timeout": config.embedding.timeout,
         }
 
@@ -316,7 +323,10 @@ class TenantConfigManager:
         return base
 
     def _merge_rerank_config(self, tenant_config: Optional[TenantConfigModel]) -> Dict[str, Any]:
-        """合并 Rerank 配置（包含速率限制）"""
+        """合并 Rerank 配置（包含速率限制）
+
+        Note: max_async 控制 RateLimiter 的并发数（可选，未设置时基于 TPM/RPM 自动计算）。
+        """
         base = {
             "model": config.rerank.model,
             "api_key": config.rerank.api_key,
@@ -324,7 +334,7 @@ class TenantConfigManager:
             # 速率限制配置
             "requests_per_minute": config.rerank.requests_per_minute,
             "tokens_per_minute": config.rerank.tokens_per_minute,
-            "max_async": config.rerank.max_async,
+            "max_async": config.rerank.max_async,  # RateLimiter 的并发数（可选）
             "timeout": config.rerank.timeout,
         }
 
