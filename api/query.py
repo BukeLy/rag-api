@@ -154,6 +154,9 @@ async def query_rag(
         logger.info(f"[Tenant {tenant_id}] Query successful: {request.query[:50]}... (mode: {request.mode})")
         return {"answer": answer}
 
+    except HTTPException:
+        # 直接传递 HTTPException，不要重新包装
+        raise
     except Exception as e:
         logger.error(f"[Tenant {tenant_id}] Error during query: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
