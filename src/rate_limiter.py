@@ -264,45 +264,53 @@ def calculate_optimal_concurrent(
     requests_per_minute: int,
     tokens_per_minute: int,
     avg_tokens_per_request: int = 3500,
-    safety_factor: float = 10.0
+    avg_request_duration_seconds: float = 2.0
 ) -> int:
     """
-    Calculate optimal concurrent requests with safety margin to prevent rate limit bursts.
+    Calculate optimal concurrent requests based on request duration and TPM/RPM limits.
 
     **Critical Fix**: The old formula assumed all concurrent requests could fire simultaneously,
-    causing instant TPM exhaustion. The new formula adds a safety factor to distribute load.
+    causing instant TPM exhaustion. The new formula uses actual request duration.
 
     **Problem**: If concurrent=800 and all fire at once:
         800 workers × 500 tokens = 400,000 tokens (instant TPM limit!)
 
-    **Solution**: Divide by safety factor to ensure concurrent requests spread over time:
-        concurrent = min(RPM, TPM / avg_tokens) / safety_factor
+    **Solution**: Calculate concurrent based on how many tokens can be consumed during request duration:
+        concurrent = (TPM × duration / 60) / avg_tokens
+
+    **Physical Meaning**:
+        - If a request takes T seconds, during that time you can use (TPM × T/60) tokens
+        - Divide by avg_tokens to get how many concurrent requests can run
 
     Args:
         requests_per_minute: Maximum requests per minute
         tokens_per_minute: Maximum tokens per minute
         avg_tokens_per_request: Average tokens per request (default: 3500)
-        safety_factor: Divisor to prevent burst exhaustion (default: 10)
-            - Higher = more conservative (fewer 429 errors)
-            - Lower = more aggressive (better performance)
+        avg_request_duration_seconds: Average API response time in seconds (default: 2.0)
+            - Embedding: ~1-2 seconds (lightweight)
+            - LLM: ~3-5 seconds (text generation)
+            - Rerank: ~1-2 seconds (lightweight)
 
     Returns:
         int: Safe concurrent count (≥2)
 
     Examples:
-        >>> calculate_optimal_concurrent(800, 40000)  # LLM defaults
-        2  # min(800/10, 40000/3500/10) = min(80, 1.14) → max(2, 1) = 2
+        >>> # Embedding: TPM=400000, duration=1s, avg_tokens=500
+        >>> calculate_optimal_concurrent(1600, 400000, 500, 1.0)
+        13  # (400000 × 1/60) / 500 = 13.33 → min(1600, 13) = 13
 
-        >>> calculate_optimal_concurrent(1600, 400000, avg_tokens_per_request=500)  # Embedding
-        80  # min(1600/10, 400000/500/10) = min(160, 80) = 80
+        >>> # LLM: TPM=40000, duration=3s, avg_tokens=3500
+        >>> calculate_optimal_concurrent(800, 40000, 3500, 3.0)
+        2  # (40000 × 3/60) / 3500 = 0.57 → max(2, 0) = 2
     """
-    # RPM-based limit with safety margin
-    # (prevents too many requests per minute)
-    concurrent_by_rpm = int(requests_per_minute / safety_factor)
+    # RPM-based limit (simple: how many requests per minute)
+    concurrent_by_rpm = requests_per_minute
 
-    # TPM-based limit with safety margin
-    # (prevents instant token exhaustion)
-    concurrent_by_tpm = int(tokens_per_minute / safety_factor / avg_tokens_per_request)
+    # TPM-based limit (physics-based calculation)
+    # During request_duration seconds, we can consume: TPM × (duration / 60) tokens
+    # Divide by avg_tokens to get concurrent count
+    tokens_per_duration = tokens_per_minute * (avg_request_duration_seconds / 60.0)
+    concurrent_by_tpm = int(tokens_per_duration / avg_tokens_per_request)
 
     # Take the minimum to ensure we don't exceed either limit
     optimal = min(concurrent_by_rpm, concurrent_by_tpm)
@@ -359,6 +367,14 @@ def get_rate_limiter(
             "ds_ocr": 3500     # Similar to LLM (OCR + description)
         }
 
+        # Request duration estimation per service (seconds)
+        request_duration_map = {
+            "llm": 3.0,        # Text generation: ~3-5 seconds
+            "embedding": 1.0,  # Batch encoding: ~1-2 seconds
+            "rerank": 1.0,     # Document scoring: ~1-2 seconds
+            "ds_ocr": 3.0      # OCR + generation: ~3-5 seconds
+        }
+
         # Default RPM/TPM values (used if not provided)
         default_rpm_tpm = {
             "llm": (800, 40000),
@@ -369,6 +385,7 @@ def get_rate_limiter(
 
         default_rpm, default_tpm = default_rpm_tpm.get(service, (1000, 50000))
         avg_tokens = avg_tokens_map.get(service, 3500)
+        request_duration = request_duration_map.get(service, 2.0)
 
         # Get effective RPM/TPM (tenant config > global config)
         effective_rpm = requests_per_minute or default_rpm
@@ -405,18 +422,19 @@ def get_rate_limiter(
             final_concurrent = calculate_optimal_concurrent(
                 requests_per_minute=effective_rpm,
                 tokens_per_minute=effective_tpm,
-                avg_tokens_per_request=avg_tokens
+                avg_tokens_per_request=avg_tokens,
+                avg_request_duration_seconds=request_duration
             )
             config_source = "auto"
 
-        # Edge case: If calculated < 1, log warning and set to 1
-        if final_concurrent < 1:
+        # Edge case: If calculated < 2, log warning and set to 2
+        if final_concurrent < 2:
             logger.warning(
-                f"[{service.upper()}] Calculated concurrent < 1 "
-                f"(RPM={effective_rpm}, TPM={effective_tpm}, avg_tokens={avg_tokens}). "
-                f"Setting to 1. Consider increasing TPM/RPM limits."
+                f"[{service.upper()}] Calculated concurrent < 2 "
+                f"(RPM={effective_rpm}, TPM={effective_tpm}, avg_tokens={avg_tokens}, duration={request_duration}s). "
+                f"Setting to 2. Consider increasing TPM/RPM limits."
             )
-            final_concurrent = 1
+            final_concurrent = 2
 
         # Create rate limiter instance
         _limiters[service] = AsyncSemaphoreWithRateLimit(
@@ -430,7 +448,8 @@ def get_rate_limiter(
         if config_source == "auto":
             logger.info(
                 f"Created rate limiter for {service.upper()}: "
-                f"concurrent={final_concurrent} (auto-calculated from TPM={effective_tpm}, RPM={effective_rpm}, avg_tokens={avg_tokens}), "
+                f"concurrent={final_concurrent} (auto: TPM={effective_tpm}, RPM={effective_rpm}, "
+                f"avg_tokens={avg_tokens}, duration={request_duration}s), "
                 f"RPM={effective_rpm}, TPM={effective_tpm}"
             )
         else:
