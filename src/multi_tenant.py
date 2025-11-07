@@ -213,7 +213,8 @@ class MultiTenantRAGManager:
                 tokens_per_minute=tokens_per_minute
             )
 
-            def rerank_func_with_rate_limit(query, documents, top_n=None):
+            def rerank_func_with_rate_limit(query, documents, top_n=None, **kwargs):
+                # 接受 **kwargs 以兼容 LightRAG 可能传递的其他参数
                 # 估算 tokens（查询 + 所有文档的字符数 / 3）
                 total_chars = len(query) + sum(len(doc) for doc in documents)
                 estimated_tokens = total_chars // 3
