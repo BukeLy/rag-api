@@ -129,6 +129,12 @@ async def query_rag(
             param=query_param
         )
 
+        # 检查查询是否成功
+        if answer is None:
+            error_msg = "Query failed: LLM API returned no response. Please check your API configuration and quota."
+            logger.error(f"[Tenant {tenant_id}] {error_msg} (query: {request.query[:50]}...)")
+            return {"answer": error_msg}
+
         # 清理 LLM 输出中的 think 标签
         answer = strip_think_tags(answer)
 
@@ -253,13 +259,20 @@ async def query_stream(
                 # Fallback：一次性获取全部结果然后分块发送
                 logger.warning(f"[Tenant {tenant_id}] LightRAG does not support streaming, using fallback mode")
                 answer = await lightrag.aquery(request.query, param=query_param)
-                answer = strip_think_tags(answer)
 
-                # 将结果分块发送（模拟流式输出）
-                chunk_size = 50  # 每块 50 个字符
-                for i in range(0, len(answer), chunk_size):
-                    chunk = answer[i:i + chunk_size]
-                    yield f"data: {json.dumps({'chunk': chunk, 'done': False})}\n\n"
+                # 检查查询是否成功
+                if answer is None:
+                    error_msg = "Query failed: LLM API returned no response. Please check your API configuration and quota."
+                    logger.error(f"[Tenant {tenant_id}] {error_msg} (query: {request.query[:50]}...)")
+                    yield f"data: {json.dumps({'chunk': error_msg, 'done': False})}\n\n"
+                else:
+                    answer = strip_think_tags(answer)
+
+                    # 将结果分块发送（模拟流式输出）
+                    chunk_size = 50  # 每块 50 个字符
+                    for i in range(0, len(answer), chunk_size):
+                        chunk = answer[i:i + chunk_size]
+                        yield f"data: {json.dumps({'chunk': chunk, 'done': False})}\n\n"
 
             # 发送完成标记
             yield f"data: {json.dumps({'done': True})}\n\n"
