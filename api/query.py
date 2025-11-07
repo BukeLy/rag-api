@@ -139,25 +139,14 @@ async def query_rag(
 
         # 检查查询是否成功
         if answer is None:
-            # 构建用户友好的错误消息
-            if error_detail:
-                # 检查特定错误类型并提供有针对性的建议
-                if "AccountOverdueError" in error_detail or "403" in error_detail:
-                    error_msg = "查询失败：API 账户存在问题（可能是欠费或权限不足）"
-                elif "timeout" in error_detail.lower():
-                    error_msg = "查询失败：请求超时，请稍后重试"
-                elif "connection" in error_detail.lower():
-                    error_msg = "查询失败：无法连接到 API 服务"
-                elif "rate" in error_detail.lower() or "429" in error_detail:
-                    error_msg = "查询失败：请求频率超限，请稍后重试"
-                else:
-                    # 宽泛的错误消息，不暴露内部细节
-                    error_msg = "查询处理失败，请稍后重试或联系管理员"
-            else:
-                # 完全未知的情况
-                error_msg = "查询返回空结果，请检查系统配置"
+            # 返回 503 Service Unavailable 表示服务暂时不可用
+            error_msg = "查询服务暂时不可用"
 
-            return {"answer": error_msg}
+            if error_detail:
+                # 记录详细错误但只返回通用消息
+                logger.error(f"[Tenant {tenant_id}] Query error detail: {error_detail}")
+
+            raise HTTPException(status_code=503, detail=error_msg)
 
         # 清理 LLM 输出中的 think 标签
         answer = strip_think_tags(answer)
@@ -294,22 +283,13 @@ async def query_stream(
 
                 # 检查查询是否成功
                 if answer is None:
-                    # 构建用户友好的错误消息
-                    if error_detail:
-                        if "AccountOverdueError" in error_detail or "403" in error_detail:
-                            error_msg = "查询失败：API 账户存在问题（可能是欠费或权限不足）"
-                        elif "timeout" in error_detail.lower():
-                            error_msg = "查询失败：请求超时，请稍后重试"
-                        elif "connection" in error_detail.lower():
-                            error_msg = "查询失败：无法连接到 API 服务"
-                        elif "rate" in error_detail.lower() or "429" in error_detail:
-                            error_msg = "查询失败：请求频率超限，请稍后重试"
-                        else:
-                            error_msg = "查询处理失败，请稍后重试或联系管理员"
-                    else:
-                        error_msg = "查询返回空结果，请检查系统配置"
+                    error_msg = "查询服务暂时不可用"
 
-                    yield f"data: {json.dumps({'chunk': error_msg, 'done': False})}\n\n"
+                    if error_detail:
+                        logger.error(f"[Tenant {tenant_id}] Stream query error detail: {error_detail}")
+
+                    # 流式响应中发送错误信息
+                    yield f"data: {json.dumps({'error': error_msg, 'done': True})}\n\n"
                 else:
                     answer = strip_think_tags(answer)
 
