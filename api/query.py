@@ -123,40 +123,22 @@ async def query_rag(
         # 创建 QueryParam
         query_param = QueryParam(**query_param_kwargs)
 
-        # 执行查询，捕获具体错误
-        answer = None
-        error_detail = None
-
-        try:
-            answer = await lightrag.aquery(
-                request.query,
-                param=query_param
-            )
-        except Exception as query_error:
-            # 记录详细错误到日志
-            logger.error(f"[Tenant {tenant_id}] Query failed: {query_error}", exc_info=True)
-            error_detail = str(query_error)
+        # 执行查询
+        answer = await lightrag.aquery(
+            request.query,
+            param=query_param
+        )
 
         # 检查查询是否成功
         if answer is None:
-            # 返回 503 Service Unavailable 表示服务暂时不可用
-            error_msg = "查询服务暂时不可用"
+            answer = "查询服务暂时不可用"
+            logger.error(f"[Tenant {tenant_id}] Query returned None for: {request.query[:50]}...")
+        else:
+            # 清理 LLM 输出中的 think 标签
+            answer = strip_think_tags(answer)
+            logger.info(f"[Tenant {tenant_id}] Query successful: {request.query[:50]}... (mode: {request.mode})")
 
-            if error_detail:
-                # 记录详细错误但只返回通用消息
-                logger.error(f"[Tenant {tenant_id}] Query error detail: {error_detail}")
-
-            raise HTTPException(status_code=503, detail=error_msg)
-
-        # 清理 LLM 输出中的 think 标签
-        answer = strip_think_tags(answer)
-
-        logger.info(f"[Tenant {tenant_id}] Query successful: {request.query[:50]}... (mode: {request.mode})")
         return {"answer": answer}
-
-    except HTTPException:
-        # 直接传递 HTTPException，不要重新包装
-        raise
     except Exception as e:
         logger.error(f"[Tenant {tenant_id}] Error during query: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
@@ -274,33 +256,20 @@ async def query_stream(
             else:
                 # Fallback：一次性获取全部结果然后分块发送
                 logger.warning(f"[Tenant {tenant_id}] LightRAG does not support streaming, using fallback mode")
-
-                answer = None
-                error_detail = None
-
-                try:
-                    answer = await lightrag.aquery(request.query, param=query_param)
-                except Exception as query_error:
-                    logger.error(f"[Tenant {tenant_id}] Stream query failed: {query_error}", exc_info=True)
-                    error_detail = str(query_error)
+                answer = await lightrag.aquery(request.query, param=query_param)
 
                 # 检查查询是否成功
                 if answer is None:
-                    error_msg = "查询服务暂时不可用"
-
-                    if error_detail:
-                        logger.error(f"[Tenant {tenant_id}] Stream query error detail: {error_detail}")
-
-                    # 流式响应中发送错误信息
-                    yield f"data: {json.dumps({'error': error_msg, 'done': True})}\n\n"
+                    answer = "查询服务暂时不可用"
+                    logger.error(f"[Tenant {tenant_id}] Stream query returned None for: {request.query[:50]}...")
                 else:
                     answer = strip_think_tags(answer)
 
-                    # 将结果分块发送（模拟流式输出）
-                    chunk_size = 50  # 每块 50 个字符
-                    for i in range(0, len(answer), chunk_size):
-                        chunk = answer[i:i + chunk_size]
-                        yield f"data: {json.dumps({'chunk': chunk, 'done': False})}\n\n"
+                # 将结果分块发送（模拟流式输出）
+                chunk_size = 50  # 每块 50 个字符
+                for i in range(0, len(answer), chunk_size):
+                    chunk = answer[i:i + chunk_size]
+                    yield f"data: {json.dumps({'chunk': chunk, 'done': False})}\n\n"
 
             # 发送完成标记
             yield f"data: {json.dumps({'done': True})}\n\n"
