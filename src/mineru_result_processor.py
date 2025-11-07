@@ -24,26 +24,31 @@ class MinerUResultProcessor:
     def __init__(self):
         self.temp_dir = tempfile.gettempdir()
     
-    async def download_result_zip(self, zip_url: str) -> str:
+    async def download_result_zip(self, zip_url: str, timeout: float = None) -> str:
         """
         下载 MinerU 解析结果压缩包
-        
+
         Args:
             zip_url: 结果 ZIP 文件 URL
-        
+            timeout: 下载超时时间（秒），默认从环境变量 MINERU_HTTP_TIMEOUT 读取
+
         Returns:
             str: 本地 ZIP 文件路径
-        
+
         Raises:
             Exception: 下载失败
         """
         try:
+            # 读取超时配置（默认 300 秒）
+            if timeout is None:
+                timeout = float(os.getenv("MINERU_HTTP_TIMEOUT", "60"))
+
             zip_path = os.path.join(self.temp_dir, f"mineru_{os.path.basename(zip_url)}")
-            
-            logger.info(f"Downloading MinerU result: {zip_url}")
-            
+
+            logger.info(f"Downloading MinerU result: {zip_url} (timeout={timeout}s)")
+
             async with aiohttp.ClientSession() as session:
-                async with session.get(zip_url, timeout=aiohttp.ClientTimeout(total=300)) as response:
+                async with session.get(zip_url, timeout=aiohttp.ClientTimeout(total=timeout)) as response:
                     if response.status != 200:
                         raise Exception(f"Download failed with status {response.status}")
                     
