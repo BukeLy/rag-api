@@ -111,7 +111,8 @@ class MultiTenantRAGManager:
 
             with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
                 future = executor.submit(asyncio.run, _call_with_rate_limit())
-                return future.result(timeout=60)  # 60秒超时避免永久阻塞（LLM需要更长时间）
+                # 超时 = 60s (rate limiter最大等待) + 30s (API调用+缓冲)
+                return future.result(timeout=90)
 
         return llm_model_func
 
@@ -160,7 +161,8 @@ class MultiTenantRAGManager:
 
             with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
                 future = executor.submit(asyncio.run, _call_with_rate_limit())
-                return future.result(timeout=30)  # 30秒超时避免永久阻塞
+                # 超时 = 60s (rate limiter最大等待) + 30s (API调用+缓冲)
+                return future.result(timeout=90)
 
         return EmbeddingFunc(
             embedding_dim=embedding_dim,
@@ -219,7 +221,8 @@ class MultiTenantRAGManager:
 
                 with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
                     future = executor.submit(asyncio.run, _call_with_rate_limit())
-                    return future.result(timeout=30)  # 30秒超时避免永久阻塞
+                    # 超时 = 60s (rate limiter最大等待) + 30s (API调用+缓冲)
+                    return future.result(timeout=90)
 
             return rerank_func_with_rate_limit
 

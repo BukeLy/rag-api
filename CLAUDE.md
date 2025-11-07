@@ -40,8 +40,18 @@ mcp__memory__open_nodes(names=["RAG-Anything", "LightRAG"])
 
 **已记录内容**：
 - **库实体**：RAG-Anything, LightRAG, MinerU（核心 API、方法签名、配置参数）
-- **BUG 实体**：9 个历史 BUG（问题、根因、修复、教训）
+- **BUG 实体**：13 个历史 BUG（问题、根因、修复、教训）
 - **项目实体**：rag-api Project（架构、模块、依赖）
+
+**最新 BUG 快速查询**：
+```bash
+# 查询最新的 BUG（如参考资料格式问题）
+mcp__memory__search_nodes(query="Document Title One reference")
+# 查询所有 BUG
+mcp__memory__search_nodes(query="BUG")
+# 查看特定 BUG 详情
+mcp__memory__open_nodes(names=["BUG-13-LightRAG-Reference-Document-Title-One"])
+```
 
 ### 3. **filesystem** - 文件系统操作
 **使用场景**：批量文件操作、目录树结构、文件元数据
@@ -126,6 +136,7 @@ mcp__context7__resolve-library-id(libraryName="{服务名}")
 | 命令失败（command not found） | `search_nodes(query="subprocess CLI")` | BUG-4 |
 | 数据缺失（missing field） | `search_nodes(query="API response")` | BUG-8 |
 | ZIP 解析失败（content_list） | `search_nodes(query="content_list filename")` | BUG-9 |
+| 参考资料异常（Document Title One） | `search_nodes(query="Document Title reference")` | BUG-13 |
 
 **流程**：
 1. 遇到错误 → 提取关键词 → 查询 Memory
