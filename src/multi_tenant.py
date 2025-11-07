@@ -155,6 +155,9 @@ class MultiTenantRAGManager:
             tokens_per_minute=tokens_per_minute
         )
 
+        # 获取 rate_limiter 实际使用的并发数（将用于 LightRAG）
+        actual_max_concurrent = rate_limiter.max_concurrent
+
         def embedding_func_with_rate_limit(texts):
             # 估算 tokens（所有文本的总字符数 / 3）
             total_chars = sum(len(text) for text in texts)
@@ -184,7 +187,7 @@ class MultiTenantRAGManager:
         return EmbeddingFunc(
             embedding_dim=embedding_dim,
             func=embedding_func_with_rate_limit,
-        )
+        ), actual_max_concurrent
 
     def _create_rerank_func(self, rerank_config: Dict):
         """创建 Rerank 函数（支持租户配置覆盖 + 速率限制）"""
@@ -392,7 +395,7 @@ class MultiTenantRAGManager:
 
         # 准备租户专属函数（使用合并后的配置）
         llm_func, llm_max_concurrent = self._create_llm_func(merged_config["llm"])
-        embedding_func = self._create_embedding_func(merged_config["embedding"])
+        embedding_func, embedding_max_concurrent = self._create_embedding_func(merged_config["embedding"])
         rerank_func = self._create_rerank_func(merged_config["rerank"])
         vision_func = self._create_vision_model_func(merged_config["llm"])  # 🆕 创建 VLM 函数
 
@@ -406,7 +409,7 @@ class MultiTenantRAGManager:
             logger.info(f"[{tenant_id}] Using external storage: KV={self.kv_storage}, Vector={self.vector_storage}, Graph={self.graph_storage}")
 
         # 创建 LightRAG 实例
-        # CRITICAL: llm_model_max_async MUST match RateLimiter's concurrent value
+        # CRITICAL: llm_model_max_async & embedding_func_max_async MUST match RateLimiter's concurrent value
         # This ensures LightRAG's worker pool doesn't bypass rate limiting
         instance = LightRAG(
             working_dir="./rag_local_storage",  # 共享工作目录
@@ -414,12 +417,14 @@ class MultiTenantRAGManager:
             llm_model_func=llm_func,
             embedding_func=embedding_func,
             llm_model_max_async=llm_max_concurrent,  # 🔒 Force use RateLimiter's value (not tenant-controllable)
+            embedding_func_max_async=embedding_max_concurrent,  # 🔒 Force use RateLimiter's value
             **storage_kwargs
         )
 
         logger.info(
             f"[{tenant_id}] LightRAG instance created: "
-            f"worker_pool={llm_max_concurrent} (enforced by RateLimiter, tenant cannot override)"
+            f"LLM workers={llm_max_concurrent}, Embedding workers={embedding_max_concurrent} "
+            f"(enforced by RateLimiter, tenant cannot override)"
         )
 
         # 初始化存储
