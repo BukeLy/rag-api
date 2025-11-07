@@ -191,6 +191,7 @@ async def update_tenant_config(
             "rerank_config": request.rerank_config,
             "ds_ocr_config": request.ds_ocr_config,  # 🆕 DeepSeek-OCR
             "mineru_config": request.mineru_config,  # 🆕 MinerU
+            "custom_prompts": request.custom_prompts,  # 🆕 Custom Prompts
         }
 
     try:
