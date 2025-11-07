@@ -416,7 +416,8 @@ class MultiTenantRAGManager:
             storage_kwargs["kv_storage"] = self.kv_storage
             storage_kwargs["vector_storage"] = self.vector_storage
             storage_kwargs["graph_storage"] = self.graph_storage
-            logger.info(f"[{tenant_id}] Using external storage: KV={self.kv_storage}, Vector={self.vector_storage}, Graph={self.graph_storage}")
+            storage_kwargs["doc_status_storage"] = "RedisDocStatusStorage"  # 🆕 使用 Redis 存储 doc_status
+            logger.info(f"[{tenant_id}] Using external storage: KV={self.kv_storage}, Vector={self.vector_storage}, Graph={self.graph_storage}, DocStatus=RedisDocStatusStorage")
 
         # 创建 LightRAG 实例
         # CRITICAL: llm_model_max_async & embedding_func_max_async MUST match RateLimiter's concurrent value

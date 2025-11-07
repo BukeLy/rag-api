@@ -483,6 +483,10 @@ curl -X POST "https://api.example.com" \
 - ✅ **必须显式设置超时**：写入环境变量，可配置
 - ✅ **Batch API 状态聚合**：从子项聚合，不能直接获取
 - ✅ **追踪数据流**：修复 API 解析后，确保所有下游代码路径同步更新
+- ❌ **禁止在 curl 后面加 grep/python3 管道**：curl 必须直接返回原值，不允许过滤
+  - ❌ 错误示例：`curl ... | grep ...` 或 `curl ... | python3 -m json.tool`
+  - ✅ 正确示例：`curl -s https://api.example.com/v1/status`
+  - 原因：grep/python3 过滤会隐藏实际响应，导致误判请求失败
 
 ### 5. 环境配置陷阱
 - ❌ **禁止 `MINERU_MODE=local` 用于生产**：本地 VLM 模型资源耗尽，仅开发用
