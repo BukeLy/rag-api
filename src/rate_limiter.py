@@ -263,46 +263,52 @@ _limiters = {}
 def calculate_optimal_concurrent(
     requests_per_minute: int,
     tokens_per_minute: int,
-    avg_tokens_per_request: int = 3500
+    avg_tokens_per_request: int = 3500,
+    safety_factor: float = 10.0
 ) -> int:
     """
-    Calculate optimal concurrent requests based on TPM/RPM limits.
+    Calculate optimal concurrent requests with safety margin to prevent rate limit bursts.
 
-    Uses conservative token estimation based on LightRAG's actual behavior:
-    - Insert (entity extraction): ~2840 tokens/request
-    - Query (answer generation): ~3000-5000 tokens/request
-    - Default: 3500 tokens/request (covers both + 20% safety margin)
+    **Critical Fix**: The old formula assumed all concurrent requests could fire simultaneously,
+    causing instant TPM exhaustion. The new formula adds a safety factor to distribute load.
 
-    Formula:
-        concurrent = min(RPM, TPM / avg_tokens_per_request)
+    **Problem**: If concurrent=800 and all fire at once:
+        800 workers × 500 tokens = 400,000 tokens (instant TPM limit!)
+
+    **Solution**: Divide by safety factor to ensure concurrent requests spread over time:
+        concurrent = min(RPM, TPM / avg_tokens) / safety_factor
 
     Args:
         requests_per_minute: Maximum requests per minute
         tokens_per_minute: Maximum tokens per minute
         avg_tokens_per_request: Average tokens per request (default: 3500)
+        safety_factor: Divisor to prevent burst exhaustion (default: 10)
+            - Higher = more conservative (fewer 429 errors)
+            - Lower = more aggressive (better performance)
 
     Returns:
-        int: Optimal concurrent count (≥1)
+        int: Safe concurrent count (≥2)
 
     Examples:
         >>> calculate_optimal_concurrent(800, 40000)  # LLM defaults
-        11  # min(800, 40000/3500) = min(800, 11)
+        2  # min(800/10, 40000/3500/10) = min(80, 1.14) → max(2, 1) = 2
 
         >>> calculate_optimal_concurrent(1600, 400000, avg_tokens_per_request=500)  # Embedding
-        800  # min(1600, 400000/500) = min(1600, 800)
+        80  # min(1600/10, 400000/500/10) = min(160, 80) = 80
     """
-    # Concurrent limit based on RPM (simple: RPM per minute)
-    concurrent_by_rpm = requests_per_minute
+    # RPM-based limit with safety margin
+    # (prevents too many requests per minute)
+    concurrent_by_rpm = int(requests_per_minute / safety_factor)
 
-    # Concurrent limit based on TPM
-    # Assumption: all concurrent requests use avg_tokens_per_request simultaneously
-    concurrent_by_tpm = tokens_per_minute // avg_tokens_per_request
+    # TPM-based limit with safety margin
+    # (prevents instant token exhaustion)
+    concurrent_by_tpm = int(tokens_per_minute / safety_factor / avg_tokens_per_request)
 
     # Take the minimum to ensure we don't exceed either limit
     optimal = min(concurrent_by_rpm, concurrent_by_tpm)
 
-    # Ensure at least 1 (handled by caller if < 1)
-    return max(1, optimal)
+    # Ensure at least 2 concurrent (minimum for reasonable performance)
+    return max(2, optimal)
 
 
 def get_rate_limiter(
