@@ -123,16 +123,40 @@ async def query_rag(
         # 创建 QueryParam
         query_param = QueryParam(**query_param_kwargs)
 
-        # 执行查询
-        answer = await lightrag.aquery(
-            request.query,
-            param=query_param
-        )
+        # 执行查询，捕获具体错误
+        answer = None
+        error_detail = None
+
+        try:
+            answer = await lightrag.aquery(
+                request.query,
+                param=query_param
+            )
+        except Exception as query_error:
+            # 记录详细错误到日志
+            logger.error(f"[Tenant {tenant_id}] Query failed: {query_error}", exc_info=True)
+            error_detail = str(query_error)
 
         # 检查查询是否成功
         if answer is None:
-            error_msg = "Query failed: LLM API returned no response. Please check your API configuration and quota."
-            logger.error(f"[Tenant {tenant_id}] {error_msg} (query: {request.query[:50]}...)")
+            # 构建用户友好的错误消息
+            if error_detail:
+                # 检查特定错误类型并提供有针对性的建议
+                if "AccountOverdueError" in error_detail or "403" in error_detail:
+                    error_msg = "查询失败：API 账户存在问题（可能是欠费或权限不足）"
+                elif "timeout" in error_detail.lower():
+                    error_msg = "查询失败：请求超时，请稍后重试"
+                elif "connection" in error_detail.lower():
+                    error_msg = "查询失败：无法连接到 API 服务"
+                elif "rate" in error_detail.lower() or "429" in error_detail:
+                    error_msg = "查询失败：请求频率超限，请稍后重试"
+                else:
+                    # 宽泛的错误消息，不暴露内部细节
+                    error_msg = "查询处理失败，请稍后重试或联系管理员"
+            else:
+                # 完全未知的情况
+                error_msg = "查询返回空结果，请检查系统配置"
+
             return {"answer": error_msg}
 
         # 清理 LLM 输出中的 think 标签
@@ -258,12 +282,33 @@ async def query_stream(
             else:
                 # Fallback：一次性获取全部结果然后分块发送
                 logger.warning(f"[Tenant {tenant_id}] LightRAG does not support streaming, using fallback mode")
-                answer = await lightrag.aquery(request.query, param=query_param)
+
+                answer = None
+                error_detail = None
+
+                try:
+                    answer = await lightrag.aquery(request.query, param=query_param)
+                except Exception as query_error:
+                    logger.error(f"[Tenant {tenant_id}] Stream query failed: {query_error}", exc_info=True)
+                    error_detail = str(query_error)
 
                 # 检查查询是否成功
                 if answer is None:
-                    error_msg = "Query failed: LLM API returned no response. Please check your API configuration and quota."
-                    logger.error(f"[Tenant {tenant_id}] {error_msg} (query: {request.query[:50]}...)")
+                    # 构建用户友好的错误消息
+                    if error_detail:
+                        if "AccountOverdueError" in error_detail or "403" in error_detail:
+                            error_msg = "查询失败：API 账户存在问题（可能是欠费或权限不足）"
+                        elif "timeout" in error_detail.lower():
+                            error_msg = "查询失败：请求超时，请稍后重试"
+                        elif "connection" in error_detail.lower():
+                            error_msg = "查询失败：无法连接到 API 服务"
+                        elif "rate" in error_detail.lower() or "429" in error_detail:
+                            error_msg = "查询失败：请求频率超限，请稍后重试"
+                        else:
+                            error_msg = "查询处理失败，请稍后重试或联系管理员"
+                    else:
+                        error_msg = "查询返回空结果，请检查系统配置"
+
                     yield f"data: {json.dumps({'chunk': error_msg, 'done': False})}\n\n"
                 else:
                     answer = strip_think_tags(answer)
