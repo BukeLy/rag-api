@@ -367,10 +367,10 @@ def calculate_optimal_concurrent(
 ```mermaid
 flowchart TD
     A[RateLimiter 初始化] --> B{检查 max_concurrent 参数}
-    B -->|显式传入| C[优先级 1: 租户 RateLimiter 配置<br/>max_concurrent=N]
+    B -->|显式传入| C[优先级 1: 租户配置<br/>max_concurrent=N]
     B -->|未传入| D{检查环境变量}
     D -->|已设置| E[优先级 2: 环境变量<br/>*_MAX_ASYNC=N]
-    D -->|未设置| F[优先级 3: 自动计算<br/>min(RPM, TPM/avg_tokens)]
+    D -->|未设置| F[优先级 3: 自动计算<br/>基于 TPM/RPM]
 
     C --> G[创建 RateLimiter<br/>concurrent=N]
     E --> G
@@ -388,6 +388,7 @@ flowchart TD
 1. **租户 RateLimiter 配置**（tenant config 中的 `max_async`）
 2. **环境变量**（`LLM_MAX_ASYNC`, `EMBEDDING_MAX_ASYNC`, `RERANK_MAX_ASYNC`）
 3. **自动计算**（推荐，彻底避免 429 错误）
+   - 计算公式：`concurrent = min(RPM, TPM / avg_tokens_per_request)`
 
 #### 3.3 默认并发数（自动计算）
 
