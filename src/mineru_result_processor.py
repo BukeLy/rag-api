@@ -184,7 +184,7 @@ class MinerUResultProcessor:
 
         return False
     
-    async def process_markdown_content(self, markdown_files: List[str], lightrag_instance, original_filename: str = "document") -> int:
+    async def process_markdown_content(self, markdown_files: List[str], lightrag_instance, original_filename: str = "document", doc_id: str = None) -> int:
         """
         处理 Markdown 文件，将内容插入 LightRAG
 
@@ -192,6 +192,7 @@ class MinerUResultProcessor:
             markdown_files: Markdown 文件路径列表
             lightrag_instance: LightRAG 实例
             original_filename: 原始文件名（用于参考文献生成）
+            doc_id: 用户指定的文档 ID（用于去重检测）
 
         Returns:
             int: 成功插入的文件数量
@@ -208,9 +209,9 @@ class MinerUResultProcessor:
                     logger.warning(f"Empty Markdown file: {md_file}")
                     continue
                 
-                # 直接插入到 LightRAG
+                # 直接插入到 LightRAG（带 doc_id）
                 logger.info(f"Inserting Markdown content to LightRAG: {os.path.basename(md_file)} ({len(content)} chars)")
-                await lightrag_instance.ainsert(content, file_paths=original_filename)
+                await lightrag_instance.ainsert(content, ids=doc_id, file_paths=original_filename)
 
                 success_count += 1
                 logger.info(f"✓ Successfully inserted: {os.path.basename(md_file)} (file: {original_filename})")
@@ -228,7 +229,8 @@ class MinerUResultProcessor:
         vision_func=None,
         original_filename: str = "document",
         importance_threshold: float = 0.5,
-        rag_config: Optional[Dict[str, Any]] = None
+        rag_config: Optional[Dict[str, Any]] = None,
+        doc_id: str = None  # 🆕 用户指定的文档 ID
     ) -> Dict[str, Any]:
         """
         一站式处理 MinerU 解析结果（支持三种模式）
@@ -241,6 +243,7 @@ class MinerUResultProcessor:
             original_filename: 原始文件名（用于 RAG-Anything）
             importance_threshold: 重要性阈值（mode=selective 时使用）
             rag_config: RAG-Anything 配置字典（mode=full 时使用）
+            doc_id: 用户指定的文档 ID（用于去重检测）
 
         Returns:
             Dict[str, Any]: 处理结果摘要
@@ -259,13 +262,13 @@ class MinerUResultProcessor:
             # 根据模式选择处理策略
             if mode == "off":
                 # 模式 1：仅 Markdown（当前方案）
-                return await self._process_markdown_only(zip_path, lightrag_instance, result.task_id, original_filename)
+                return await self._process_markdown_only(zip_path, lightrag_instance, result.task_id, original_filename, doc_id=doc_id)
 
             elif mode == "selective":
                 # 模式 2：混合模式（Markdown + 选择性 VLM）
                 return await self._process_selective_mode(
                     zip_path, lightrag_instance, vision_func,
-                    original_filename, importance_threshold, result.task_id
+                    original_filename, importance_threshold, result.task_id, doc_id=doc_id
                 )
 
             elif mode == "full":
@@ -283,7 +286,7 @@ class MinerUResultProcessor:
             raise
 
     async def _process_markdown_only(
-        self, zip_path: str, lightrag_instance, task_id: str, original_filename: str = "document"
+        self, zip_path: str, lightrag_instance, task_id: str, original_filename: str = "document", doc_id: str = None
     ) -> Dict[str, Any]:
         """模式 1：仅提取 Markdown 文件并插入（最快）"""
         try:
@@ -295,8 +298,8 @@ class MinerUResultProcessor:
             if not markdown_files:
                 raise Exception("No Markdown files found in result")
 
-            # 2. 插入 LightRAG
-            success_count = await self.process_markdown_content(markdown_files, lightrag_instance, original_filename)
+            # 2. 插入 LightRAG（传递 doc_id）
+            success_count = await self.process_markdown_content(markdown_files, lightrag_instance, original_filename, doc_id=doc_id)
 
             # 3. 清理临时文件
             self._cleanup_temp_files(zip_path, markdown_files)
@@ -318,7 +321,7 @@ class MinerUResultProcessor:
 
     async def _process_selective_mode(
         self, zip_path: str, lightrag_instance, vision_func,
-        original_filename: str, threshold: float, task_id: str
+        original_filename: str, threshold: float, task_id: str, doc_id: str = None
     ) -> Dict[str, Any]:
         """模式 2：Markdown + 选择性 VLM（平衡性能和质量）"""
         try:
@@ -326,12 +329,12 @@ class MinerUResultProcessor:
 
             if not vision_func:
                 logger.warning(f"[Task {task_id}] vision_func is None, fallback to off mode")
-                return await self._process_markdown_only(zip_path, lightrag_instance, task_id, original_filename)
+                return await self._process_markdown_only(zip_path, lightrag_instance, task_id, original_filename, doc_id=doc_id)
 
-            # 1. 快速路径：提取并插入 Markdown
+            # 1. 快速路径：提取并插入 Markdown（传递 doc_id）
             markdown_files = self.extract_markdown_files(zip_path)
             if markdown_files:
-                await self.process_markdown_content(markdown_files, lightrag_instance, original_filename)
+                await self.process_markdown_content(markdown_files, lightrag_instance, original_filename, doc_id=doc_id)
                 logger.info(f"✓ [Task {task_id}] Markdown inserted ({len(markdown_files)} files)")
 
             # 2. 提取 content_list.json 和图片
