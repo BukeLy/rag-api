@@ -64,7 +64,11 @@ class MultiTenantRAGManager:
         logger.info(f"MultiTenantRAGManager initialized (max_instances={max_instances})")
 
     def _create_llm_func(self, llm_config: Dict):
-        """创建 LLM 函数（支持租户配置覆盖 + 速率限制）"""
+        """创建 LLM 函数（支持租户配置覆盖 + 速率限制）
+
+        Returns:
+            tuple: (llm_func, max_concurrent) - 函数和实际并发数
+        """
         import asyncio
 
         # 从配置中提取参数（支持租户覆盖）
@@ -72,17 +76,20 @@ class MultiTenantRAGManager:
         api_key = llm_config.get("api_key", self.ark_api_key)
         base_url = llm_config.get("base_url", self.ark_base_url)
 
-        # 获取速率限制器
+        # 获取速率限制器（不从环境变量读取 max_async，使用 rate_limiter 默认值）
         requests_per_minute = llm_config.get("requests_per_minute", config.llm.requests_per_minute)
         tokens_per_minute = llm_config.get("tokens_per_minute", config.llm.tokens_per_minute)
-        max_concurrent = llm_config.get("max_async", config.llm.max_async)
+        max_concurrent = llm_config.get("max_async", None)  # 允许租户覆盖，但默认 None
 
         rate_limiter = get_rate_limiter(
             service="llm",
-            max_concurrent=max_concurrent,
+            max_concurrent=max_concurrent,  # None 时使用 rate_limiter 默认值
             requests_per_minute=requests_per_minute,
             tokens_per_minute=tokens_per_minute
         )
+
+        # 获取 rate_limiter 实际使用的并发数
+        actual_max_concurrent = rate_limiter.semaphore._initial_value
 
         def llm_model_func(prompt, **kwargs):
             # 估算 tokens（简单估算：字符数 / 3）
@@ -114,7 +121,7 @@ class MultiTenantRAGManager:
                 # 超时 = 60s (rate limiter最大等待) + 30s (API调用+缓冲)
                 return future.result(timeout=90)
 
-        return llm_model_func
+        return llm_model_func, actual_max_concurrent
 
     def _create_embedding_func(self, embedding_config: Dict):
         """创建 Embedding 函数（支持租户配置覆盖 + 速率限制）"""
@@ -373,7 +380,7 @@ class MultiTenantRAGManager:
             logger.debug(f"[{tenant_id}] Using global config (no tenant config found)")
 
         # 准备租户专属函数（使用合并后的配置）
-        llm_func = self._create_llm_func(merged_config["llm"])
+        llm_func, llm_max_concurrent = self._create_llm_func(merged_config["llm"])
         embedding_func = self._create_embedding_func(merged_config["embedding"])
         rerank_func = self._create_rerank_func(merged_config["rerank"])
         vision_func = self._create_vision_model_func(merged_config["llm"])  # 🆕 创建 VLM 函数
@@ -387,15 +394,17 @@ class MultiTenantRAGManager:
             storage_kwargs["graph_storage"] = self.graph_storage
             logger.info(f"[{tenant_id}] Using external storage: KV={self.kv_storage}, Vector={self.vector_storage}, Graph={self.graph_storage}")
 
-        # 创建 LightRAG 实例（使用 workspace 隔离）
+        # 创建 LightRAG 实例（使用 rate_limiter 的并发数，确保一致性）
         instance = LightRAG(
             working_dir="./rag_local_storage",  # 共享工作目录
             workspace=tenant_id,  # 关键：使用 tenant_id 作为 workspace
             llm_model_func=llm_func,
             embedding_func=embedding_func,
-            llm_model_max_async=self.max_async,
+            llm_model_max_async=llm_max_concurrent,  # 🔧 使用 rate_limiter 的并发数
             **storage_kwargs
         )
+
+        logger.info(f"[{tenant_id}] LightRAG worker pool: {llm_max_concurrent} concurrent (controlled by rate_limiter)")
 
         # 初始化存储
         await instance.initialize_storages()
