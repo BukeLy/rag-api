@@ -170,20 +170,15 @@ async def update_tenant_config(
     # 获取现有配置
     existing_config = manager.get(tenant_id)
 
+    # 获取请求中实际设置的字段（区分"未设置"和"设置为 null"）
+    request_data = request.model_dump(exclude_unset=True)
+
     # 构建新配置
     if existing_config:
-        # 更新现有配置
+        # 更新现有配置（只更新请求中出现的字段）
         config_data = existing_config.model_dump()
-        if request.llm_config is not None:
-            config_data["llm_config"] = request.llm_config
-        if request.embedding_config is not None:
-            config_data["embedding_config"] = request.embedding_config
-        if request.rerank_config is not None:
-            config_data["rerank_config"] = request.rerank_config
-        if request.ds_ocr_config is not None:  # 🆕 DeepSeek-OCR
-            config_data["ds_ocr_config"] = request.ds_ocr_config
-        if request.mineru_config is not None:  # 🆕 MinerU
-            config_data["mineru_config"] = request.mineru_config
+        for key in request_data:
+            config_data[key] = request_data[key]
     else:
         # 创建新配置
         config_data = {
