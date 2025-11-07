@@ -181,6 +181,11 @@ class StorageConfig(BaseSettings):
         description="Graph Storage Type",
         alias="GRAPH_STORAGE"
     )
+    doc_status_storage: str = Field(
+        default="RedisDocStatusStorage",
+        description="Document Status Storage Type",
+        alias="DOC_STATUS_STORAGE"
+    )
     redis_uri: str = Field(
         default="redis://dragonflydb:6379/0",
         description="Redis Connection URI",
@@ -327,6 +332,7 @@ class AppConfig:
         print(f"Storage - KV: {self.storage.kv_storage}")
         print(f"Storage - Vector: {self.storage.vector_storage}")
         print(f"Storage - Graph: {self.storage.graph_storage}")
+        print(f"Storage - DocStatus: {self.storage.doc_status_storage}")
         print(f"Max Tenant Instances: {self.multi_tenant.max_tenant_instances}")
         print("=" * 60)
 

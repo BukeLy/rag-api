@@ -392,6 +392,9 @@ mcp__memory__add_observations(observations=[{
 - ✅ **优先使用原生能力**：不重新发明轮子（如 `MineruParser._read_output_files()`）
 - ✅ **用 curl 测试 API**：先验证响应结构，再写解析代码
 - ❌ **禁止猜测**：不猜测 API 参数、环境变量名、响应格式
+- ❌ **禁止硬编码存储类型**：使用配置文件，不在代码中硬编码（如 `doc_status_storage="RedisDocStatusStorage"`）
+  - ✅ 正确：从 `config.storage.doc_status_storage` 读取
+  - ❌ 错误：`storage_kwargs["doc_status_storage"] = "RedisDocStatusStorage"`
 
 #### curl 调用 API 的正确姿势（MANDATORY）
 **❌ 错误做法**：在 `-d` 参数中直接使用多行 JSON + 命令替换

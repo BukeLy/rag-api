@@ -11,7 +11,6 @@ from contextlib import asynccontextmanager
 from lightrag import LightRAG
 from lightrag.utils import EmbeddingFunc
 from lightrag.llm.openai import openai_complete_if_cache, openai_embed
-from openai import max_retries
 from src.logger import logger
 from src.config import config  # 使用集中配置管理
 from src.rate_limiter import get_rate_limiter  # 导入速率限制器
@@ -121,8 +120,6 @@ class MultiTenantRAGManager:
                         model, prompt,
                         api_key=api_key,
                         base_url=base_url,
-                        max_retries=0,
-                        **kwargs
                     )
 
             # 如果已在事件循环中，使用 create_task
