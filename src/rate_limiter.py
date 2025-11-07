@@ -12,7 +12,68 @@ import asyncio
 import time
 from typing import List, Optional, Tuple
 from collections import deque
+from functools import lru_cache
 from src.logger import logger
+
+try:
+    import tiktoken
+    TIKTOKEN_AVAILABLE = True
+except ImportError:
+    TIKTOKEN_AVAILABLE = False
+    logger.warning("tiktoken not available, falling back to character-based estimation")
+
+
+@lru_cache(maxsize=10)
+def get_encoding(model: str = "cl100k_base"):
+    """
+    Get tiktoken encoding for a model (cached).
+
+    Args:
+        model: Model name or encoding name
+               - "cl100k_base": GPT-4, GPT-3.5-turbo, Claude
+               - "o200k_base": GPT-4o, GPT-4o-mini
+
+    Returns:
+        tiktoken.Encoding object
+    """
+    if not TIKTOKEN_AVAILABLE:
+        return None
+
+    try:
+        # Try as encoding name first
+        return tiktoken.get_encoding(model)
+    except Exception:
+        try:
+            # Try as model name
+            return tiktoken.encoding_for_model(model)
+        except Exception:
+            # Fallback to cl100k_base (works for most models)
+            logger.warning(f"Unknown model '{model}', using cl100k_base encoding")
+            return tiktoken.get_encoding("cl100k_base")
+
+
+def count_tokens(text: str, model: str = "cl100k_base") -> int:
+    """
+    Count tokens in text using tiktoken.
+
+    Args:
+        text: Input text
+        model: Model name or encoding (default: cl100k_base for Claude/GPT-4)
+
+    Returns:
+        int: Exact token count (or character-based estimate if tiktoken unavailable)
+    """
+    if not TIKTOKEN_AVAILABLE or not text:
+        # Fallback: conservative character-based estimate
+        # Chinese ≈ 0.5 char/token, English ≈ 4 char/token, average ≈ 2 char/token
+        return len(text) // 2
+
+    try:
+        encoding = get_encoding(model)
+        return len(encoding.encode(text))
+    except Exception as e:
+        logger.warning(f"tiktoken encoding failed: {e}, using fallback")
+        return len(text) // 2
 
 
 class RateLimiter:

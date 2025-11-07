@@ -20,6 +20,7 @@ dependencies = [
     "gqlalchemy>=1.4.0",
     "pillow>=11.3.0",
     "pymupdf>=1.26.5",
+    "tiktoken>=0.8.0", # for accurate token counting
 ]
 
 [dependency-groups]

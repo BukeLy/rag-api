@@ -13,7 +13,7 @@ from lightrag.utils import EmbeddingFunc
 from lightrag.llm.openai import openai_complete_if_cache, openai_embed
 from src.logger import logger
 from src.config import config  # 使用集中配置管理
-from src.rate_limiter import get_rate_limiter  # 导入速率限制器
+from src.rate_limiter import get_rate_limiter, count_tokens  # 导入速率限制器和 token 计数
 
 # 模型调用 Future 超时（秒）= rate limiter 等待 + API 调用 + 缓冲
 # 从环境变量读取，默认 90 秒
@@ -102,8 +102,11 @@ class MultiTenantRAGManager:
         actual_max_concurrent = rate_limiter.max_concurrent
 
         def llm_model_func(prompt, **kwargs):
-            # 估算 tokens（简单估算：字符数 / 3）
-            estimated_tokens = len(prompt) // 3 + 500  # 输入 + 预估输出
+            # 精确计算输入 tokens（使用 tiktoken）
+            input_tokens = count_tokens(prompt, model="cl100k_base")
+            # 保守估算输出 tokens（实体提取通常输出较长）
+            estimated_output = 3000  # 50 entities + 46 relations ≈ 3000 tokens
+            estimated_tokens = input_tokens + estimated_output
 
             # 在同步函数中运行异步速率限制
             async def _call_with_rate_limit():
@@ -160,9 +163,8 @@ class MultiTenantRAGManager:
         actual_max_concurrent = rate_limiter.max_concurrent
 
         def embedding_func_with_rate_limit(texts):
-            # 估算 tokens（所有文本的总字符数 / 3）
-            total_chars = sum(len(text) for text in texts)
-            estimated_tokens = total_chars // 3
+            # 精确计算 tokens（使用 tiktoken，批量文本累加）
+            estimated_tokens = sum(count_tokens(text, model="cl100k_base") for text in texts)
 
             async def _call_with_rate_limit():
                 # 🔒 CRITICAL: Must acquire semaphore first to limit concurrency
@@ -221,9 +223,10 @@ class MultiTenantRAGManager:
 
             def rerank_func_with_rate_limit(query, documents, top_n=None, **kwargs):
                 # 接受 **kwargs 以兼容 LightRAG 可能传递的其他参数
-                # 估算 tokens（查询 + 所有文档的字符数 / 3）
-                total_chars = len(query) + sum(len(doc) for doc in documents)
-                estimated_tokens = total_chars // 3
+                # 精确计算 tokens（使用 tiktoken）
+                query_tokens = count_tokens(query, model="cl100k_base")
+                doc_tokens = sum(count_tokens(doc, model="cl100k_base") for doc in documents)
+                estimated_tokens = query_tokens + doc_tokens
 
                 async def _call_with_rate_limit():
                     # 🔒 CRITICAL: Must acquire semaphore first to limit concurrency
@@ -290,8 +293,11 @@ class MultiTenantRAGManager:
             Returns:
                 str: 图片描述文本
             """
-            # 估算 tokens（提示词 + 图片约 200 tokens + 输出 500）
-            estimated_tokens = len(prompt) // 3 + 200 + 500
+            # 精确计算 tokens（使用 tiktoken）
+            prompt_tokens = count_tokens(prompt, model="cl100k_base")
+            image_tokens = 200  # 图片约 200 tokens（固定估算）
+            estimated_output = 500  # VLM 输出通常较短
+            estimated_tokens = prompt_tokens + image_tokens + estimated_output
 
             # 🔒 CRITICAL: Must acquire semaphore first to limit concurrency
             async with rate_limiter.semaphore:
