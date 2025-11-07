@@ -270,38 +270,63 @@ def get_rate_limiter(
 
     Uses singleton pattern to ensure one limiter per service.
 
+    三层配置优先级：
+    1. 参数传入（租户配置覆盖）
+    2. 全局环境变量（config.{service}.max_async）
+    3. 硬编码默认值（fallback）
+
     Args:
         service: Service name (e.g., "llm", "embedding", "rerank")
-        max_concurrent: Override max concurrent requests
-        requests_per_minute: Override RPM limit
-        tokens_per_minute: Override TPM limit
+        max_concurrent: Override max concurrent requests (tenant config)
+        requests_per_minute: Override RPM limit (tenant config)
+        tokens_per_minute: Override TPM limit (tenant config)
 
     Returns:
         AsyncSemaphoreWithRateLimit instance
     """
     if service not in _limiters:
-        # Default values based on service type
-        defaults = {
+        # 从 config 读取全局默认值（优先级 2）
+        from src.config import config
+
+        # 硬编码默认值（优先级 3，fallback）
+        hardcoded_defaults = {
             "llm": (8, 800, 40000),
             "embedding": (32, 1600, 400000),
             "rerank": (16, 1600, 400000),
             "ds_ocr": (8, 800, 40000)
         }
 
-        default_concurrent, default_rpm, default_tpm = defaults.get(
+        default_concurrent, default_rpm, default_tpm = hardcoded_defaults.get(
             service, (16, 1000, 50000)
         )
 
+        # 尝试从 config 读取（如果环境变量存在）
+        if service == "llm":
+            global_max_async = getattr(config.llm, 'max_async', None)
+        elif service == "embedding":
+            global_max_async = getattr(config.embedding, 'max_async', None)
+        elif service == "rerank":
+            global_max_async = getattr(config.rerank, 'max_async', None)
+        elif service == "ds_ocr":
+            global_max_async = getattr(config.ds_ocr, 'max_async', None) if hasattr(config, 'ds_ocr') else None
+        else:
+            global_max_async = None
+
+        # 应用优先级：租户配置 > 全局环境变量 > 硬编码
+        final_concurrent = max_concurrent or global_max_async or default_concurrent
+
         _limiters[service] = AsyncSemaphoreWithRateLimit(
-            max_concurrent=max_concurrent or default_concurrent,
+            max_concurrent=final_concurrent,
             requests_per_minute=requests_per_minute or default_rpm,
             tokens_per_minute=tokens_per_minute or default_tpm,
             service_name=service.upper()
         )
 
+        # 日志标注配置来源
+        source = "tenant" if max_concurrent else ("env" if global_max_async else "default")
         logger.info(
             f"Created rate limiter for {service.upper()}: "
-            f"concurrent={max_concurrent or default_concurrent}, "
+            f"concurrent={final_concurrent} ({source}), "
             f"RPM={requests_per_minute or default_rpm}, "
             f"TPM={tokens_per_minute or default_tpm}"
         )
