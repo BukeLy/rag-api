@@ -99,7 +99,7 @@ class MultiTenantRAGManager:
         )
 
         # 获取 rate_limiter 实际使用的并发数（将用于 LightRAG）
-        actual_max_concurrent = rate_limiter.semaphore._initial_value
+        actual_max_concurrent = rate_limiter.max_concurrent
 
         def llm_model_func(prompt, **kwargs):
             # 估算 tokens（简单估算：字符数 / 3）

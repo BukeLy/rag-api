@@ -203,6 +203,7 @@ class AsyncSemaphoreWithRateLimit:
             tokens_per_minute: Maximum tokens per minute
             service_name: Name of the service
         """
+        self.max_concurrent = max_concurrent  # Store for external access
         self.semaphore = asyncio.Semaphore(max_concurrent)
         self.rate_limiter = RateLimiter(
             requests_per_minute=requests_per_minute,
