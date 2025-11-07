@@ -406,6 +406,14 @@ class MultiTenantRAGManager:
         rerank_func = self._create_rerank_func(merged_config["rerank"])
         vision_func = self._create_vision_model_func(merged_config["llm"])  # 🆕 创建 VLM 函数
 
+        # 🆕 应用自定义 Prompts（在创建 LightRAG 实例之前）
+        from src.prompt_manager import apply_custom_prompts, get_custom_entity_types
+        tenant_custom_prompts = tenant_config.custom_prompts if tenant_config else None
+        apply_custom_prompts(tenant_id=tenant_id, tenant_custom_prompts=tenant_custom_prompts)
+
+        # 获取自定义 entity types（如果有）
+        custom_entity_types = get_custom_entity_types(tenant_custom_prompts)
+
         # 准备存储配置
         storage_kwargs = {}
         if self.use_external_storage:

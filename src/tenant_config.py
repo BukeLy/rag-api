@@ -72,6 +72,19 @@ class TenantConfigModel(BaseModel):
         }
     )
 
+    # 🆕 Custom Prompts 配置（可选）
+    custom_prompts: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="LightRAG 自定义 Prompts 覆盖",
+        example={
+            "entity_extraction_system_prompt": "你的自定义 system prompt...",
+            "entity_extraction_user_prompt": "你的自定义 user prompt...",
+            "entity_continue_extraction_user_prompt": "你的自定义 continue prompt...",
+            "entity_extraction_examples": ["示例1", "示例2"],
+            "entity_types": ["product", "feature", "error_code", "configuration"]
+        }
+    )
+
     # 元数据
     created_at: Optional[datetime] = Field(default=None)
     updated_at: Optional[datetime] = Field(default=None)

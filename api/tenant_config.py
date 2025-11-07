@@ -25,6 +25,7 @@ class ConfigUpdateRequest(BaseModel):
     rerank_config: Optional[Dict[str, Any]] = None
     ds_ocr_config: Optional[Dict[str, Any]] = None  # 🆕 DeepSeek-OCR 配置
     mineru_config: Optional[Dict[str, Any]] = None  # 🆕 MinerU 配置
+    custom_prompts: Optional[Dict[str, Any]] = None  # 🆕 Custom Prompts 配置
 
 
 class ConfigResponse(BaseModel):
@@ -35,6 +36,7 @@ class ConfigResponse(BaseModel):
     rerank_config: Optional[Dict[str, Any]]
     ds_ocr_config: Optional[Dict[str, Any]]  # 🆕 DeepSeek-OCR 配置
     mineru_config: Optional[Dict[str, Any]]  # 🆕 MinerU 配置
+    custom_prompts: Optional[Dict[str, Any]]  # 🆕 Custom Prompts 配置
     created_at: Optional[datetime]
     updated_at: Optional[datetime]
     merged_config: Optional[Dict[str, Any]] = None
@@ -141,6 +143,7 @@ async def get_tenant_config(tenant_id: str):
         rerank_config=mask_config(tenant_config.rerank_config),
         ds_ocr_config=mask_config(tenant_config.ds_ocr_config),  # 🆕 DeepSeek-OCR
         mineru_config=mask_config(tenant_config.mineru_config),  # 🆕 MinerU
+        custom_prompts=tenant_config.custom_prompts,  # 🆕 Custom Prompts（无需脱敏）
         created_at=tenant_config.created_at,
         updated_at=tenant_config.updated_at,
         merged_config=masked_merged
@@ -208,6 +211,7 @@ async def update_tenant_config(
             rerank_config=mask_config(new_config.rerank_config),
             ds_ocr_config=mask_config(new_config.ds_ocr_config),  # 🆕 DeepSeek-OCR
             mineru_config=mask_config(new_config.mineru_config),  # 🆕 MinerU
+            custom_prompts=new_config.custom_prompts,  # 🆕 Custom Prompts（无需脱敏）
             created_at=new_config.created_at,
             updated_at=new_config.updated_at,
             merged_config=None
@@ -309,6 +313,7 @@ async def refresh_tenant_config(tenant_id: str):
         rerank_config=mask_config(tenant_config.rerank_config),
         ds_ocr_config=mask_config(tenant_config.ds_ocr_config),  # 🆕 DeepSeek-OCR
         mineru_config=mask_config(tenant_config.mineru_config),  # 🆕 MinerU
+        custom_prompts=tenant_config.custom_prompts,  # 🆕 Custom Prompts（无需脱敏）
         created_at=tenant_config.created_at,
         updated_at=tenant_config.updated_at,
         merged_config=masked_merged
