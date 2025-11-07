@@ -67,3 +67,4 @@ DEPLOYMENT_PRIVATE.md
 tenant_configs/
 docs/AWS_MIGRATION_GUIDE.md
 docs/incident-report-2025-11-06-asyncio-deadlock.md
+docs/DELETE_CHUNKS_BUG_REPORT.md

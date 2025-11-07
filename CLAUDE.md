@@ -40,17 +40,17 @@ mcp__memory__open_nodes(names=["RAG-Anything", "LightRAG"])
 
 **已记录内容**：
 - **库实体**：RAG-Anything, LightRAG, MinerU（核心 API、方法签名、配置参数）
-- **BUG 实体**：13 个历史 BUG（问题、根因、修复、教训）
+- **BUG 实体**：10 个历史 BUG（问题、根因、修复、教训）
 - **项目实体**：rag-api Project（架构、模块、依赖）
 
 **最新 BUG 快速查询**：
 ```bash
-# 查询最新的 BUG（如参考资料格式问题）
-mcp__memory__search_nodes(query="Document Title One reference")
+# 查询最新的 BUG（如 Docker Compose 混用问题）
+mcp__memory__search_nodes(query="Docker compose dev production")
 # 查询所有 BUG
 mcp__memory__search_nodes(query="BUG")
 # 查看特定 BUG 详情
-mcp__memory__open_nodes(names=["BUG-13-LightRAG-Reference-Document-Title-One"])
+mcp__memory__open_nodes(names=["BUG-10-Docker-Compose-Dev-Production-Confusion"])
 ```
 
 ### 3. **filesystem** - 文件系统操作
@@ -136,7 +136,7 @@ mcp__context7__resolve-library-id(libraryName="{服务名}")
 | 命令失败（command not found） | `search_nodes(query="subprocess CLI")` | BUG-4 |
 | 数据缺失（missing field） | `search_nodes(query="API response")` | BUG-8 |
 | ZIP 解析失败（content_list） | `search_nodes(query="content_list filename")` | BUG-9 |
-| 参考资料异常（Document Title One） | `search_nodes(query="Document Title reference")` | BUG-13 |
+| Docker 容器旧代码（热重载失效） | `search_nodes(query="Docker compose dev")` | BUG-10 |
 
 **流程**：
 1. 遇到错误 → 提取关键词 → 查询 Memory
@@ -473,6 +473,11 @@ curl -X POST "https://api.example.com" \
 - `docker compose restart` 不重载环境变量，必须 `up -d`
 - 开发模式部署：`git pull` 即可（代码热重载），不需要 `--build`
 - 生产模式部署：`docker compose up -d --build`（重新构建镜像）
+- ❌ **禁止混用 compose 文件**：dev 服务器必须始终使用 `docker-compose.dev.yml`，禁止使用 `docker-compose.yml`
+  - `docker-compose.dev.yml`：代码热重载（volume mounts），适合开发测试
+  - `docker-compose.yml`：生产配置，代码在构建时复制进镜像，不支持热重载
+  - 切换 compose 文件：必须 `down` 旧配置 → `up` 新配置，`restart` 无效
+  - 参考：BUG-10-Docker-Compose-Dev-Production-Confusion
 
 ### 4. 第三方 API 调用
 - ✅ **必须显式设置超时**：写入环境变量，可配置
@@ -578,11 +583,11 @@ mcp__memory__open_nodes(names=["RAG-Anything", "LightRAG", "MinerU"])
 ```
 
 **记录内容包含**：
-- 9 个历史 BUG：问题、根因、修复步骤、核心教训
+- 10 个历史 BUG：问题、根因、修复步骤、核心教训
 - RAG-Anything：核心类、方法签名、VLM 模式、配置参数
 - LightRAG：insert/query 方法、API 端点、配置参数
 - MinerU：CLI/API 用法、输出格式、backend 类型
 
 ---
 
-**最后更新**：2025-11-02
+**最后更新**：2025-11-07

@@ -213,7 +213,7 @@ class MultiTenantRAGManager:
                 tokens_per_minute=tokens_per_minute
             )
 
-            def rerank_func_with_rate_limit(query, documents, top_k=5):
+            def rerank_func_with_rate_limit(query, documents, top_n=None):
                 # 估算 tokens（查询 + 所有文档的字符数 / 3）
                 total_chars = len(query) + sum(len(doc) for doc in documents)
                 estimated_tokens = total_chars // 3
@@ -226,7 +226,7 @@ class MultiTenantRAGManager:
                     return cohere_rerank(
                         query=query,
                         documents=documents,
-                        top_k=top_k,
+                        top_n=top_n,
                         model=model,
                         api_key=api_key,
                         base_url=f"{base_url}/rerank"
