@@ -1,8 +1,8 @@
 # RAG API 架构设计文档
 
-**版本**: 3.1
-**更新日期**: 2025-11-05
-**架构**: 多租户 LightRAG + 多解析器 + 任务持久化
+**版本**: 3.2
+**更新日期**: 2025-11-07
+**架构**: 多租户 LightRAG + 多解析器 + 任务持久化 + 自动并发控制
 
 ---
 
@@ -324,11 +324,90 @@ async def validate_tenant_access(tenant_id: str) -> bool:
 - 格式验证和鉴权(预留扩展点)
 - 为未来 JWT 认证提供升级路径
 
-### 3. 租户配置管理 (NEW) 🆕
+### 3. RateLimiter 自动并发数计算 (NEW v3.2) 🆕
+
+**定义位置**: `src/rate_limiter.py`
+
+#### 3.1 核心原理
+
+```python
+def calculate_optimal_concurrent(
+    requests_per_minute: int,
+    tokens_per_minute: int,
+    avg_tokens_per_request: int = 3500
+) -> int:
+    """
+    基于 TPM/RPM 自动计算最优并发数
+
+    公式：concurrent = min(RPM, TPM / avg_tokens_per_request)
+
+    Token 估算（基于 LightRAG 实际行为）：
+    - LLM: 3500 tokens/request（覆盖 insert 和 query 场景）
+    - Embedding: 500 tokens/request（批量编码平均值）
+    - Rerank: 500 tokens/request（文档评分平均值）
+
+    Returns:
+        最优并发数（≥1）
+
+    Examples:
+        >>> calculate_optimal_concurrent(800, 40000)  # LLM 默认
+        11  # min(800, 40000/3500) = min(800, 11)
+
+        >>> calculate_optimal_concurrent(1600, 400000, avg_tokens_per_request=500)  # Embedding
+        800  # min(1600, 400000/500) = min(1600, 800)
+    """
+    concurrent_by_rpm = requests_per_minute
+    concurrent_by_tpm = tokens_per_minute // avg_tokens_per_request
+    optimal = min(concurrent_by_rpm, concurrent_by_tpm)
+    return max(1, optimal)
+```
+
+#### 3.2 三层配置优先级
+
+```mermaid
+flowchart TD
+    A[RateLimiter 初始化] --> B{检查 max_concurrent 参数}
+    B -->|显式传入| C[优先级 1: 租户 RateLimiter 配置<br/>max_concurrent=N]
+    B -->|未传入| D{检查环境变量}
+    D -->|已设置| E[优先级 2: 环境变量<br/>*_MAX_ASYNC=N]
+    D -->|未设置| F[优先级 3: 自动计算<br/>min(RPM, TPM/avg_tokens)]
+
+    C --> G[创建 RateLimiter<br/>concurrent=N]
+    E --> G
+    F --> G
+
+    G --> H[LightRAG 使用<br/>llm_model_max_async=N]
+
+    style F fill:#d4edda
+    style C fill:#fff4e1
+    style E fill:#cfe2ff
+    style H fill:#f8d7da
+```
+
+**配置优先级**：
+1. **租户 RateLimiter 配置**（tenant config 中的 `max_async`）
+2. **环境变量**（`LLM_MAX_ASYNC`, `EMBEDDING_MAX_ASYNC`, `RERANK_MAX_ASYNC`）
+3. **自动计算**（推荐，彻底避免 429 错误）
+
+#### 3.3 默认并发数（自动计算）
+
+| 服务 | RPM | TPM | avg_tokens | 自动并发数 | 计算公式 |
+|------|-----|-----|------------|-----------|---------|
+| **LLM** | 800 | 40000 | 3500 | **11** | min(800, 40000/3500) |
+| **Embedding** | 1600 | 400000 | 500 | **800** | min(1600, 400000/500) |
+| **Rerank** | 1600 | 400000 | 500 | **800** | min(1600, 400000/500) |
+
+**优势**：
+- ✅ 彻底避免 429 错误（TPM limit reached）
+- ✅ 基于实际 TPM/RPM 动态调整
+- ✅ 无需手动配置，开箱即用
+- ✅ 支持专家模式手动覆盖
+
+### 4. 租户配置管理 (NEW v3.0) 🆕
 
 **定义位置**: `src/tenant_config.py`, `api/tenant_config.py`
 
-#### 3.1 配置模型
+#### 4.1 配置模型
 
 ```python
 class TenantConfigModel(BaseModel):
@@ -347,7 +426,7 @@ class TenantConfigModel(BaseModel):
     updated_at: Optional[datetime] = None
 ```
 
-#### 3.2 配置隔离架构
+#### 4.2 配置隔离架构
 
 ```mermaid
 flowchart TD
@@ -374,7 +453,7 @@ flowchart TD
     style G fill:#d4edda
 ```
 
-#### 3.3 配置管理器
+#### 4.3 配置管理器
 
 ```python
 class TenantConfigManager:
@@ -413,7 +492,7 @@ class TenantConfigManager:
         return merged
 ```
 
-#### 3.4 配置 API
+#### 4.4 配置 API
 
 ```bash
 # 创建/更新租户配置
@@ -429,7 +508,7 @@ POST /tenants/{tenant_id}/config/refresh
 DELETE /tenants/{tenant_id}/config
 ```
 
-#### 3.5 配置使用示例
+#### 4.5 配置使用示例
 
 ```bash
 # 为租户 A 配置独立的 DeepSeek-OCR API key
@@ -447,7 +526,7 @@ curl -X POST "http://localhost:8000/insert?tenant_id=tenant_a&doc_id=doc1" \
   -F "file=@document.pdf"
 ```
 
-#### 3.6 应用场景
+#### 4.6 应用场景
 
 | 场景 | 说明 |
 |------|------|
@@ -456,7 +535,135 @@ curl -X POST "http://localhost:8000/insert?tenant_id=tenant_a&doc_id=doc1" \
 | **A/B 测试** | 对比不同模型/参数的效果 |
 | **成本控制** | 按租户跟踪 API 使用量 |
 
-### 4. MinerU 解析器
+### 5. 文档插入验证 (NEW v3.2) 🆕
+
+**定义位置**: `api/insert.py`
+
+#### 5.1 验证机制
+
+**问题背景**：
+- LightRAG 的 `ainsert()` 方法在检测到重复 `doc_id` 时，仅记录 warning 日志，不抛出异常
+- rag-api 无条件将任务标记为 COMPLETED，用户无法得知文档未真正插入
+
+**解决方案**：基于 `track_id` 验证文档是否真正插入
+
+```python
+async def verify_document_insertion(
+    lightrag_instance,
+    track_id: str,      # ainsert() 返回的 track_id
+    doc_id: str,
+    timeout_seconds: float = None,
+    poll_interval_seconds: float = None
+) -> dict:
+    """
+    验证文档是否真正插入到 LightRAG（基于 track_id 查询）
+
+    原理：
+    - 通过 ainsert() 返回的 track_id 查询该批次的文档状态
+    - 如果 doc_id 不在返回的字典中，说明文档被去重忽略
+
+    Returns:
+        {
+            "success": True/False,
+            "reason": "inserted" / "ignored",
+            "error": "错误信息（如果失败）",
+            "status": "文档状态（如果成功）"
+        }
+    """
+    # 读取环境变量配置
+    if timeout_seconds is None:
+        timeout_seconds = float(os.getenv("DOC_INSERT_VERIFICATION_TIMEOUT", "300"))
+    if poll_interval_seconds is None:
+        poll_interval_seconds = float(os.getenv("DOC_INSERT_VERIFICATION_POLL_INTERVAL", "0.5"))
+
+    start_time = asyncio.get_event_loop().time()
+
+    while asyncio.get_event_loop().time() - start_time < timeout_seconds:
+        # 查询该 track_id 下的所有文档状态
+        docs = await lightrag_instance.aget_docs_by_track_id(track_id)
+
+        # 去重检测：如果 doc_id 不在结果中 → 被去重忽略
+        if doc_id not in docs:
+            return {
+                "success": False,
+                "reason": "ignored",
+                "error": "Document already exists (duplicate ignored by LightRAG)"
+            }
+
+        # 检查处理状态
+        doc_status = str(docs[doc_id].status)
+        if doc_status == "processed":
+            return {"success": True, "reason": "inserted", "status": doc_status}
+
+        await asyncio.sleep(poll_interval_seconds)
+
+    # 超时
+    return {"success": False, "reason": "timeout", "error": "Verification timeout"}
+```
+
+#### 5.2 应用场景
+
+**所有 5 个插入路径都添加了验证**：
+
+1. **文本文件直插** (`.txt`, `.md`)
+```python
+track_id = await lightrag_instance.ainsert(text_content, ids=doc_id, file_paths=filename)
+verify_result = await verify_document_insertion(lightrag_instance, track_id, doc_id)
+if not verify_result["success"]:
+    raise ValueError(verify_result["error"])
+```
+
+2. **DeepSeek-OCR 模式**
+```python
+track_id = await lightrag_instance.ainsert(markdown_content, ids=doc_id, file_paths=filename)
+verify_result = await verify_document_insertion(lightrag_instance, track_id, doc_id)
+```
+
+3. **MinerU Remote / Local / Docling 模式**
+```python
+# 处理完成后获取 track_id
+doc_data = await lightrag_instance.doc_status.get_by_id(doc_id)
+track_id = doc_data.get("track_id")
+
+# 验证
+verify_result = await verify_document_insertion(lightrag_instance, track_id, doc_id)
+```
+
+#### 5.3 环境变量配置
+
+```bash
+# 文档插入验证配置
+DOC_INSERT_VERIFICATION_TIMEOUT=300        # 验证超时时间（秒，默认 5 分钟）
+DOC_INSERT_VERIFICATION_POLL_INTERVAL=0.5  # 轮询间隔（秒，默认 500ms）
+```
+
+### 6. 超时配置统一管理 (NEW v3.2) 🆕
+
+**问题背景**：代码中存在多处硬编码超时，不便于配置和调优
+
+**解决方案**：所有超时参数改为环境变量配置
+
+#### 6.1 新增超时配置
+
+```bash
+# 模型调用超时配置
+MODEL_CALL_TIMEOUT=90  # 模型调用最大超时（秒，默认 90）
+# 用于控制 LLM/Embedding/Rerank 的 ThreadPoolExecutor future 超时
+# 超时包含：RateLimiter 等待(60s) + API 调用(20s) + 缓冲(10s) = 90s
+
+# MinerU 下载超时配置
+MINERU_HTTP_TIMEOUT=60  # MinerU 下载超时（秒，默认 60）
+# 用于控制 download_result_zip() 的 HTTP 请求超时
+```
+
+#### 6.2 移除硬编码超时
+
+**修改文件**：
+- `src/multi_tenant.py`: 3 处 `future.result(timeout=90)` → `MODEL_CALL_TIMEOUT`
+- `src/mineru_result_processor.py`: `download_result_zip(timeout=300)` → `MINERU_HTTP_TIMEOUT`
+- `api/insert.py`: `verify_document_insertion()` 使用环境变量
+
+### 7. MinerU 解析器
 
 **配置**: `src/rag.py`
 
@@ -489,7 +696,7 @@ async def process_document_task(task_id, tenant_id, ...):
 - 包含表格/公式的文档
 - 手写文档
 
-### 4. Docling 解析器
+### 8. Docling 解析器
 
 **配置**: `src/rag.py`
 
@@ -512,7 +719,7 @@ rag_anything = RAGAnything(
 - 纯文本 PDF
 - Office 文档(DOCX、XLSX)
 
-### 5. 智能路由与降级策略
+### 9. 智能路由与降级策略
 
 **实现位置**: `src/rag.py` - `select_parser_by_file()`
 
@@ -1166,10 +1373,23 @@ MAX_TENANT_INSTANCES=50  # 最多缓存多少个租户实例(LRU 策略)
 #### 性能优化参数
 
 ```bash
+# 并发控制（v3.2 新增自动计算）🆕
+# LLM_MAX_ASYNC=8                    # 【专家模式】手动指定 LLM 并发数
+#                                    # 未设置时自动计算: min(RPM, TPM/3500) ≈ 11
+# EMBEDDING_MAX_ASYNC=32             # 【专家模式】手动指定 Embedding 并发数
+#                                    # 未设置时自动计算: min(RPM, TPM/500) ≈ 800
+# RERANK_MAX_ASYNC=16                # 【专家模式】手动指定 Rerank 并发数
+#                                    # 未设置时自动计算: min(RPM, TPM/500) ≈ 800
+
+# 速率限制配置
+LLM_REQUESTS_PER_MINUTE=800         # LLM 请求速率
+LLM_TOKENS_PER_MINUTE=40000         # LLM Token 速率
+EMBEDDING_REQUESTS_PER_MINUTE=1600  # Embedding 请求速率
+EMBEDDING_TOKENS_PER_MINUTE=400000  # Embedding Token 速率
+
 # 查询优化
 TOP_K=20                    # 检索数量(默认 60)
 CHUNK_TOP_K=10              # 文本块数量(默认 20)
-MAX_ASYNC=8                 # LLM 并发数(优化:从 4 提升到 8)
 MAX_PARALLEL_INSERT=2       # 插入并发数
 
 # Token 限制
@@ -1180,6 +1400,8 @@ MAX_TOTAL_TOKENS=30000
 # 文档处理并发
 DOCUMENT_PROCESSING_CONCURRENCY=1
 ```
+
+**⚡ 推荐配置**：不设置 `*_MAX_ASYNC`，让系统自动计算，彻底避免 429 错误
 
 #### 外部存储配置（默认已启用）
 
@@ -1224,6 +1446,33 @@ TASK_STORE_STORAGE=redis  # memory（默认）或 redis（生产推荐）
 # - 实例池 LRU=50，超过会驱逐实例
 # - memory 模式下实例驱逐会导致任务丢失
 # - 生产环境强烈建议使用 redis 模式
+```
+
+#### 文档插入验证配置（v3.2 新增）🆕
+
+```bash
+# 文档插入验证配置
+DOC_INSERT_VERIFICATION_TIMEOUT=300        # 验证超时时间（秒，默认 5 分钟）
+DOC_INSERT_VERIFICATION_POLL_INTERVAL=0.5  # 轮询间隔（秒，默认 500ms）
+
+# 说明：
+# - 基于 track_id 验证文档是否真正插入到 LightRAG
+# - 原理：通过 ainsert() 返回的 track_id 查询文档状态
+# - 如果 doc_id 不在查询结果中 → 文档被去重忽略
+# - 适用于所有 5 个插入路径（文本/DS-OCR/MinerU/Docling）
+```
+
+#### 超时配置统一管理（v3.2 新增）🆕
+
+```bash
+# 模型调用超时配置
+MODEL_CALL_TIMEOUT=90  # 模型调用最大超时（秒，默认 90）
+# 用于控制 LLM/Embedding/Rerank 的 ThreadPoolExecutor future 超时
+# 超时包含：RateLimiter 等待(60s) + API 调用(20s) + 缓冲(10s) = 90s
+
+# MinerU 下载超时配置
+MINERU_HTTP_TIMEOUT=60  # MinerU 下载超时（秒，默认 60）
+# 用于控制 download_result_zip() 的 HTTP 请求超时
 ```
 
 ---
@@ -1535,18 +1784,22 @@ Pipeline namespace 'pipeline_status' not found
 
 ## 总结
 
-RAG API 采用**多租户 LightRAG 实例池 + 多解析器**架构,通过 workspace 隔离和 LRU 缓存,实现:
+RAG API 采用**多租户 LightRAG 实例池 + 多解析器 + 自动并发控制**架构,通过 workspace 隔离、LRU 缓存和智能速率限制,实现:
 
 1. ✅ **完全租户隔离**:基于 workspace 的命名空间隔离
-2. ✅ **高性能**:实例复用、并发优化、读写分离
+2. ✅ **高性能**:实例复用、自动并发计算、读写分离
 3. ✅ **动态扩展**:支持无限租户,按需创建实例
 4. ✅ **资源可控**:LRU 驱逐策略,最多 50 个实例
 5. ✅ **架构清晰**:职责分离,便于维护和扩展
 6. ✅ **功能完整**:支持多模态、智能路由、异步处理
+7. ✅ **速率优化**:自动计算并发数,彻底避免 429 错误 🆕
+8. ✅ **数据完整性**:基于 track_id 的文档插入验证 🆕
 
-**设计哲学**:隔离、高效、可扩展。
+**设计哲学**:隔离、高效、可扩展、自动化。
 
 **版本历史**:
 - v1.0: 单一 LightRAG 实例
 - v2.0: 单一 LightRAG + 多解析器(读写分离)
-- v3.0: **多租户 LightRAG + 多解析器**(当前版本)
+- v3.0: 多租户 LightRAG + 多解析器 + 任务持久化
+- v3.1: 新增任务存储持久化
+- v3.2: **自动并发控制 + 文档插入验证 + 超时配置统一管理**（当前版本）

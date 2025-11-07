@@ -343,16 +343,22 @@ uv run uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 LLM_API_KEY=your_llm_api_key
 LLM_BASE_URL=https://ark.cn-beijing.volces.com/api/v3
 LLM_MODEL=ep-xxx-xxx
+# LLM_REQUESTS_PER_MINUTE=800        # 速率限制（可选）
+# LLM_TOKENS_PER_MINUTE=40000        # 速率限制（可选）
+# LLM_MAX_ASYNC=8                    # 【可选,专家模式】手动指定并发数
+#                                    # 未设置时自动计算: min(RPM, TPM/3500) = 11
 
 # Embedding 配置（功能导向命名）
 EMBEDDING_API_KEY=your_embedding_api_key
 EMBEDDING_BASE_URL=https://api.siliconflow.cn/v1
 EMBEDDING_MODEL=Qwen/Qwen3-Embedding-0.6B
 EMBEDDING_DIM=1024
+# EMBEDDING_MAX_ASYNC=32             # 【可选,专家模式】未设置时自动计算: 800
 
 # MinerU 模式（推荐远程模式）
 MINERU_MODE=remote
 MINERU_API_TOKEN=your_token
+MINERU_HTTP_TIMEOUT=60              # MinerU 下载超时（秒，默认 60）
 FILE_SERVICE_BASE_URL=http://your-ip:8000
 
 # VLM 图表增强配置 🆕
@@ -365,7 +371,21 @@ RAG_MAX_CONTEXT_TOKENS=3000         # 最大上下文 tokens
 
 # 任务存储配置 🆕
 TASK_STORE_STORAGE=redis            # memory / redis（生产推荐 redis）
+
+# 文档插入验证配置 🆕
+DOC_INSERT_VERIFICATION_TIMEOUT=300        # 验证超时时间（秒，默认 5 分钟）
+DOC_INSERT_VERIFICATION_POLL_INTERVAL=0.5  # 轮询间隔（秒，默认 500ms）
+
+# 模型调用超时配置 🆕
+MODEL_CALL_TIMEOUT=90               # 模型调用最大超时（秒，默认 90）
 ```
+
+**⚡ 自动并发数计算**：
+- **LLM**: 未设置 `LLM_MAX_ASYNC` 时，自动计算为 `min(RPM, TPM/3500)` ≈ 11
+- **Embedding**: 未设置 `EMBEDDING_MAX_ASYNC` 时，自动计算为 `min(RPM, TPM/500)` ≈ 800
+- **Rerank**: 未设置 `RERANK_MAX_ASYNC` 时，自动计算为 `min(RPM, TPM/500)` ≈ 800
+
+**✅ 推荐**: 不设置 `*_MAX_ASYNC`，让系统自动计算，彻底避免 429 错误
 
 完整配置参考 `env.example`。
 
@@ -691,8 +711,13 @@ docker compose -f docker-compose.dev.yml up -d
 在 `.env` 中配置：
 
 ```bash
-# LLM 并发数（影响实体提取速度）
-MAX_ASYNC=8  # EC2/ECS 持久容器推荐 8，Fargate 推荐 4
+# ⚡ 并发控制（推荐：使用自动计算）
+# LLM_MAX_ASYNC=8                    # 【专家模式】手动指定 LLM 并发数
+#                                    # 未设置时自动计算: min(RPM, TPM/3500) ≈ 11
+# EMBEDDING_MAX_ASYNC=32             # 【专家模式】手动指定 Embedding 并发数
+#                                    # 未设置时自动计算: min(RPM, TPM/500) ≈ 800
+# RERANK_MAX_ASYNC=16                # 【专家模式】手动指定 Rerank 并发数
+#                                    # 未设置时自动计算: min(RPM, TPM/500) ≈ 800
 
 # 检索数量（影响查询质量和速度）
 TOP_K=20  # 实体/关系检索数量
@@ -701,6 +726,11 @@ CHUNK_TOP_K=10  # 文本块检索数量
 # 文档处理并发
 DOCUMENT_PROCESSING_CONCURRENCY=10  # 远程模式可设高，本地模式设为 1
 ```
+
+**🎯 并发数配置建议**：
+- **推荐方式**：不设置 `*_MAX_ASYNC`，让系统根据 TPM/RPM 自动计算
+- **专家模式**：如果需要手动控制，可设置 `LLM_MAX_ASYNC` 等参数
+- **优势**：自动计算可彻底避免 429 错误（TPM limit reached）
 
 #### 模式选择
 
