@@ -108,20 +108,22 @@ class MultiTenantRAGManager:
 
             # 在同步函数中运行异步速率限制
             async def _call_with_rate_limit():
-                # 获取速率限制许可
-                await rate_limiter.rate_limiter.acquire(estimated_tokens)
+                # 🔒 CRITICAL: Must acquire semaphore first to limit concurrency
+                async with rate_limiter.semaphore:
+                    # Then acquire rate limit permission
+                    await rate_limiter.rate_limiter.acquire(estimated_tokens)
 
-                # 调用原始函数
-                kwargs['enable_cot'] = False
-                if 'system_prompt' not in kwargs:
-                    kwargs['system_prompt'] = self.default_system_prompt
-                return openai_complete_if_cache(
-                    model, prompt,
-                    api_key=api_key,
-                    base_url=base_url,
-                    max_retries=0,
-                    **kwargs
-                )
+                    # Finally call the API
+                    kwargs['enable_cot'] = False
+                    if 'system_prompt' not in kwargs:
+                        kwargs['system_prompt'] = self.default_system_prompt
+                    return openai_complete_if_cache(
+                        model, prompt,
+                        api_key=api_key,
+                        base_url=base_url,
+                        max_retries=0,
+                        **kwargs
+                    )
 
             # 如果已在事件循环中，使用 create_task
             # 处理同步/异步调用 - 修复死锁问题
@@ -166,16 +168,18 @@ class MultiTenantRAGManager:
             estimated_tokens = total_chars // 3
 
             async def _call_with_rate_limit():
-                # 获取速率限制许可
-                await rate_limiter.rate_limiter.acquire(estimated_tokens)
+                # 🔒 CRITICAL: Must acquire semaphore first to limit concurrency
+                async with rate_limiter.semaphore:
+                    # Then acquire rate limit permission
+                    await rate_limiter.rate_limiter.acquire(estimated_tokens)
 
-                # 调用原始函数
-                return openai_embed(
-                    texts,
-                    model=model,
-                    api_key=api_key,
-                    base_url=base_url
-                )
+                    # Finally call the API
+                    return openai_embed(
+                        texts,
+                        model=model,
+                        api_key=api_key,
+                        base_url=base_url
+                    )
 
             # 处理同步/异步调用 - 修复死锁问题
             # 使用线程池执行器避免 asyncio.run_coroutine_threadsafe 的死锁
@@ -225,18 +229,20 @@ class MultiTenantRAGManager:
                 estimated_tokens = total_chars // 3
 
                 async def _call_with_rate_limit():
-                    # 获取速率限制许可
-                    await rate_limiter.rate_limiter.acquire(estimated_tokens)
+                    # 🔒 CRITICAL: Must acquire semaphore first to limit concurrency
+                    async with rate_limiter.semaphore:
+                        # Then acquire rate limit permission
+                        await rate_limiter.rate_limiter.acquire(estimated_tokens)
 
-                    # 调用原始函数
-                    return cohere_rerank(
-                        query=query,
-                        documents=documents,
-                        top_n=top_n,
-                        model=model,
-                        api_key=api_key,
-                        base_url=f"{base_url}/rerank"
-                    )
+                        # Finally call the API
+                        return cohere_rerank(
+                            query=query,
+                            documents=documents,
+                            top_n=top_n,
+                            model=model,
+                            api_key=api_key,
+                            base_url=f"{base_url}/rerank"
+                        )
 
                 # 处理同步/异步调用 - 修复死锁问题
                 # 使用线程池执行器避免 asyncio.run_coroutine_threadsafe 的死锁
@@ -290,53 +296,55 @@ class MultiTenantRAGManager:
             # 估算 tokens（提示词 + 图片约 200 tokens + 输出 500）
             estimated_tokens = len(prompt) // 3 + 200 + 500
 
-            # 获取速率限制许可
-            await rate_limiter.rate_limiter.acquire(estimated_tokens)
+            # 🔒 CRITICAL: Must acquire semaphore first to limit concurrency
+            async with rate_limiter.semaphore:
+                # Then acquire rate limit permission
+                await rate_limiter.rate_limiter.acquire(estimated_tokens)
 
-            payload = {
-                "model": model,
-                "messages": [
-                    {"role": "system", "content": system_prompt},
-                    {
-                        "role": "user",
-                        "content": [
-                            {"type": "text", "text": prompt},
-                            {
-                                "type": "image_url",
-                                "image_url": {"url": f"data:image/png;base64,{image_data}"}
-                            }
-                        ]
-                    }
-                ],
-                "max_tokens": 500,
-                "temperature": 0.1
-            }
+                payload = {
+                    "model": model,
+                    "messages": [
+                        {"role": "system", "content": system_prompt},
+                        {
+                            "role": "user",
+                            "content": [
+                                {"type": "text", "text": prompt},
+                                {
+                                    "type": "image_url",
+                                    "image_url": {"url": f"data:image/png;base64,{image_data}"}
+                                }
+                            ]
+                        }
+                    ],
+                    "max_tokens": 500,
+                    "temperature": 0.1
+                }
 
-            headers = {
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json"
-            }
+                headers = {
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json"
+                }
 
-            try:
-                async with aiohttp.ClientSession() as session:
-                    async with session.post(
-                        f"{base_url}/chat/completions",
-                        json=payload,
-                        headers=headers,
-                        timeout=aiohttp.ClientTimeout(total=vlm_timeout)
-                    ) as response:
-                        if response.status != 200:
-                            error_text = await response.text()
-                            logger.error(f"VLM API error ({response.status}): {error_text}")
-                            raise Exception(f"VLM API error: {error_text}")
+                try:
+                    async with aiohttp.ClientSession() as session:
+                        async with session.post(
+                            f"{base_url}/chat/completions",
+                            json=payload,
+                            headers=headers,
+                            timeout=aiohttp.ClientTimeout(total=vlm_timeout)
+                        ) as response:
+                            if response.status != 200:
+                                error_text = await response.text()
+                                logger.error(f"VLM API error ({response.status}): {error_text}")
+                                raise Exception(f"VLM API error: {error_text}")
 
-                        result = await response.json()
-                        content = result["choices"][0]["message"]["content"]
-                        logger.debug(f"VLM response: {content[:100]}...")
-                        return content
-            except Exception as e:
-                logger.error(f"Failed to call VLM API: {e}")
-                raise
+                            result = await response.json()
+                            content = result["choices"][0]["message"]["content"]
+                            logger.debug(f"VLM response: {content[:100]}...")
+                            return content
+                except Exception as e:
+                    logger.error(f"Failed to call VLM API: {e}")
+                    raise
 
         return seed_vision_model_func
 
