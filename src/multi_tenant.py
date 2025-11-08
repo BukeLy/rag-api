@@ -108,6 +108,9 @@ class MultiTenantRAGManager:
             estimated_output = 3000  # 50 entities + 46 relations ≈ 3000 tokens
             estimated_tokens = input_tokens + estimated_output
 
+            # Debug: 输出 token 计数
+            logger.debug(f"[LLM] Estimated tokens: input={input_tokens}, output={estimated_output}, total={estimated_tokens}")
+
             # 在同步函数中运行异步速率限制
             async def _call_with_rate_limit():
                 # 🔒 CRITICAL: Must acquire semaphore first to limit concurrency
@@ -165,6 +168,9 @@ class MultiTenantRAGManager:
         def embedding_func_with_rate_limit(texts):
             # 精确计算 tokens（使用 tiktoken，批量文本累加）
             estimated_tokens = sum(count_tokens(text, model="cl100k_base") for text in texts)
+
+            # Debug: 输出 token 计数
+            logger.debug(f"[EMBEDDING] Estimated tokens: {estimated_tokens} for {len(texts)} texts")
 
             async def _call_with_rate_limit():
                 # 🔒 CRITICAL: Must acquire semaphore first to limit concurrency
@@ -227,6 +233,9 @@ class MultiTenantRAGManager:
                 query_tokens = count_tokens(query, model="cl100k_base")
                 doc_tokens = sum(count_tokens(doc, model="cl100k_base") for doc in documents)
                 estimated_tokens = query_tokens + doc_tokens
+
+                # Debug: 输出 token 计数
+                logger.debug(f"[RERANK] Estimated tokens: query={query_tokens}, docs={doc_tokens}, total={estimated_tokens}")
 
                 async def _call_with_rate_limit():
                     # 🔒 CRITICAL: Must acquire semaphore first to limit concurrency
@@ -298,6 +307,9 @@ class MultiTenantRAGManager:
             image_tokens = 200  # 图片约 200 tokens（固定估算）
             estimated_output = 500  # VLM 输出通常较短
             estimated_tokens = prompt_tokens + image_tokens + estimated_output
+
+            # Debug: 输出 token 计数
+            logger.debug(f"[VLM] Estimated tokens: prompt={prompt_tokens}, image={image_tokens}, output={estimated_output}, total={estimated_tokens}")
 
             # 🔒 CRITICAL: Must acquire semaphore first to limit concurrency
             async with rate_limiter.semaphore:
