@@ -62,8 +62,8 @@ services:
         condition: service_healthy
     networks:
       - rag-network
-    # 热重载命令
-    command: ["uv", "run", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    # 热重载命令（10秒超时避免卡住）
+    command: ["uv", "run", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload", "--timeout-graceful-shutdown", "10"]
     logging:
       driver: "json-file"
       options:
