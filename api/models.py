@@ -158,6 +158,12 @@ class QueryRequest(BaseModel):
         example=False
     )
 
+    only_need_prompt: bool = Field(
+        False,
+        description="是否仅返回最终提示词（用于调试，查看发送给 LLM 的完整提示）",
+        example=False
+    )
+
     # ===== 关键词提取 =====
     hl_keywords: Optional[List[str]] = Field(
         None,

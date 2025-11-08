@@ -93,6 +93,7 @@ async def query_rag(
             "chunk_top_k": DEFAULT_CHUNK_TOP_K,
             "enable_rerank": True,
             "only_need_context": request.only_need_context,
+            "only_need_prompt": request.only_need_prompt,
         }
 
         # 添加高级参数（如果提供）
