@@ -30,130 +30,126 @@ from src.file_url_service import get_file_service
 router = APIRouter()
 
 
-async def verify_document_insertion(
+async def check_document_submission_status(
     lightrag_instance,
     track_id: str,
-    doc_id: str,
-    timeout_seconds: float = None,
-    poll_interval_seconds: float = None
+    doc_id: str
 ) -> dict:
     """
-    验证文档是否真正插入到 LightRAG（基于 track_id 查询）
+    检查文档提交状态（基于 track_id 查询）
+
+    功能：
+    1. 去重检测：检查 doc_id 是否被 LightRAG 接受（未被去重忽略）
+    2. 状态查询：返回文档当前处理状态（不等待完成）
 
     原理：
-    - 通过 ainsert() 返回的 track_id 查询该批次的文档状态
-    - 如果 doc_id 不在返回的字典中，说明文档被去重忽略
-    - 如果 doc_id 在字典中，检查其处理状态
+    - LightRAG.ainsert() 遇到重复 doc_id 会静默跳过，不抛异常
+    - 必须通过 aget_docs_by_track_id(track_id) 查询文档是否真正提交成功
 
     Args:
         lightrag_instance: LightRAG 实例
         track_id: ainsert() 返回的追踪 ID
-        doc_id: 用户指定的文档 ID（用于检测去重）
-        timeout_seconds: 验证超时时间（秒），默认从环境变量 DOC_INSERT_VERIFICATION_TIMEOUT 读取
-        poll_interval_seconds: 轮询间隔（秒），默认从环境变量 DOC_INSERT_VERIFICATION_POLL_INTERVAL 读取
+        doc_id: 用户指定的文档 ID
 
     Returns:
         dict: {
-            "success": bool,                          # 是否成功插入（新文档）
-            "reason": str,                            # "inserted" / "ignored" / "failed" / "timeout"
-            "doc_status": str | None,                 # 文档处理状态
+            "reason": str,                            # "inserted" / "ignored" / "failed" / "processing"
+            "doc_status": str | None,                 # LightRAG 内部状态（processed/failed/processing/pending）
             "created_at": str | None,                 # 文档创建时间（ISO 格式）
-            "chunks_count": int | None,               # 分块数量
-            "error": str | None                       # 错误信息
+            "chunks_count": int | None,               # 分块数量（仅 processed 状态有值）
+            "error": str | None                       # 错误信息（仅 failed/ignored 状态有值）
         }
+
+    Raises:
+        不抛出异常，所有错误通过返回 dict 传递
     """
-    import asyncio
+    try:
+        # 查询该 track_id 下的所有文档状态
+        docs = await lightrag_instance.aget_docs_by_track_id(track_id)
 
-    # 读取环境变量配置（带默认值）
-    if timeout_seconds is None:
-        timeout_seconds = float(os.getenv("DOC_INSERT_VERIFICATION_TIMEOUT", "300"))
-    if poll_interval_seconds is None:
-        poll_interval_seconds = float(os.getenv("DOC_INSERT_VERIFICATION_POLL_INTERVAL", "0.5"))
-
-    start_time = asyncio.get_event_loop().time()
-
-    while asyncio.get_event_loop().time() - start_time < timeout_seconds:
-        try:
-            # 查询该 track_id 下的所有文档状态
-            docs = await lightrag_instance.aget_docs_by_track_id(track_id)
-
-            # 检查 doc_id 是否在结果中（去重检测）
-            if doc_id not in docs:
-                # 文档被去重忽略（LightRAG 跳过了该 doc_id）
-                logger.warning(f"[Track {track_id}] Document '{doc_id}' not found in track (duplicate ignored)")
-                return {
-                    "success": False,
-                    "reason": "ignored",
-                    "doc_status": None,
-                    "created_at": None,
-                    "chunks_count": None,
-                    "error": f"Document '{doc_id}' already exists (duplicate ignored by LightRAG)"
-                }
-
-            # 获取文档状态
-            doc_status_obj = docs[doc_id]
-            doc_status = str(doc_status_obj.status)  # DocStatus 枚举转字符串
-
-            # 检查处理状态
-            if doc_status == "processed":
-                # 处理完成，成功插入
-                return {
-                    "success": True,
-                    "reason": "inserted",
-                    "doc_status": doc_status,
-                    "created_at": doc_status_obj.created_at,
-                    "chunks_count": doc_status_obj.chunks_count,
-                    "error": None
-                }
-
-            elif doc_status == "failed":
-                # 处理失败
-                return {
-                    "success": False,
-                    "reason": "failed",
-                    "doc_status": doc_status,
-                    "created_at": doc_status_obj.created_at,
-                    "chunks_count": None,
-                    "error": f"Document processing failed: {doc_status_obj.error_msg or 'Unknown error'}"
-                }
-
-            elif doc_status in ["pending", "processing", "preprocessed"]:
-                # 仍在处理中，继续等待
-                logger.debug(f"[Track {track_id}] Doc '{doc_id}' status: {doc_status}, waiting...")
-                await asyncio.sleep(poll_interval_seconds)
-                continue
-
-            else:
-                # 未知状态
-                logger.warning(f"[Track {track_id}] Unknown status for doc '{doc_id}': {doc_status}")
-                await asyncio.sleep(poll_interval_seconds)
-                continue
-
-        except AttributeError as e:
-            # 可能 aget_docs_by_track_id 方法不存在（版本兼容问题）
-            logger.error(f"[Track {track_id}] LightRAG version does not support aget_docs_by_track_id: {e}")
+        # 检查 doc_id 是否在结果中（去重检测）
+        if doc_id not in docs:
+            # 文档被去重忽略（LightRAG 跳过了该 doc_id）
+            logger.info(f"[Track {track_id}] Document '{doc_id}' not found in track (duplicate ignored)")
             return {
-                "success": False,
-                "reason": "error",
+                "reason": "ignored",
                 "doc_status": None,
                 "created_at": None,
                 "chunks_count": None,
-                "error": f"LightRAG version incompatible (missing aget_docs_by_track_id method)"
+                "error": f"Document '{doc_id}' already exists (duplicate ignored by LightRAG)"
             }
 
-        except Exception as e:
-            logger.warning(f"[Track {track_id}] Error during verification: {e}")
-            await asyncio.sleep(1)
+        # 获取文档状态
+        doc_status_obj = docs[doc_id]
+        doc_status = str(doc_status_obj.status)  # DocStatus 枚举转字符串
 
-    # 超时
-    return {
-        "success": False,
-        "reason": "timeout",
-        "doc_status": None,
-        "created_at": None,
-        "chunks_count": None,
-        "error": f"Document verification timeout after {timeout_seconds} seconds"
-    }
+        # 检查处理状态
+        if doc_status == "processed":
+            # 处理完成
+            logger.debug(f"[Track {track_id}] Document '{doc_id}' processed successfully")
+            return {
+                "reason": "inserted",
+                "doc_status": doc_status,
+                "created_at": doc_status_obj.created_at,
+                "chunks_count": doc_status_obj.chunks_count,
+                "error": None
+            }
+
+        elif doc_status == "failed":
+            # 处理失败
+            error_msg = doc_status_obj.error_msg or "Unknown error"
+            logger.warning(f"[Track {track_id}] Document '{doc_id}' processing failed: {error_msg}")
+            return {
+                "reason": "failed",
+                "doc_status": doc_status,
+                "created_at": doc_status_obj.created_at,
+                "chunks_count": None,
+                "error": f"Document processing failed: {error_msg}"
+            }
+
+        else:
+            # 仍在处理中（pending, processing, preprocessed）
+            logger.debug(f"[Track {track_id}] Document '{doc_id}' status: {doc_status}, background processing continues")
+            return {
+                "reason": "processing",
+                "doc_status": doc_status,
+                "created_at": doc_status_obj.created_at,
+                "chunks_count": None,
+                "error": None
+            }
+
+    except AttributeError as e:
+        # aget_docs_by_track_id 方法不存在（LightRAG 版本不兼容）
+        logger.error(f"[Track {track_id}] LightRAG version does not support aget_docs_by_track_id: {e}")
+        return {
+            "reason": "error",
+            "doc_status": None,
+            "created_at": None,
+            "chunks_count": None,
+            "error": f"LightRAG version incompatible (missing aget_docs_by_track_id method)"
+        }
+
+    except (ConnectionError, TimeoutError) as e:
+        # 网络或连接错误（可重试）
+        logger.error(f"[Track {track_id}] Connection error during status check: {e}")
+        return {
+            "reason": "error",
+            "doc_status": None,
+            "created_at": None,
+            "chunks_count": None,
+            "error": f"Service temporarily unavailable: {str(e)}"
+        }
+
+    except KeyError as e:
+        # 数据不一致（doc_status 对象缺少必需字段）
+        logger.error(f"[Track {track_id}] Data inconsistency in doc_status: {e}")
+        return {
+            "reason": "error",
+            "doc_status": None,
+            "created_at": None,
+            "chunks_count": None,
+            "error": f"Internal data error: {str(e)}"
+        }
 
 
 async def process_document_task(
@@ -207,23 +203,20 @@ async def process_document_task(
 
             # 直接插入到租户的 LightRAG 实例（轻量级，无需解析）
             track_id = await lightrag_instance.ainsert(text_content, ids=doc_id, file_paths=original_filename)
-            logger.info(f"[Task {task_id}] [Tenant {tenant_id}] Text content inserted (track_id={track_id}), verifying...")
+            logger.info(f"[Task {task_id}] [Tenant {tenant_id}] Text content inserted (track_id={track_id}), checking status...")
 
-            # 验证插入结果
-            verify_result = await verify_document_insertion(
-                lightrag_instance,
-                track_id,
-                doc_id
-            )
+            # 检查文档提交状态
+            status = await check_document_submission_status(lightrag_instance, track_id, doc_id)
 
-            if not verify_result["success"]:
-                # 插入失败（被去重或处理失败）
-                raise ValueError(verify_result["error"])
+            # 根据 reason 决定如何处理
+            if status["reason"] in ["ignored", "failed", "error"]:
+                # 去重忽略、处理失败或系统错误 → 抛出异常
+                raise ValueError(status["error"])
 
+            # processing 或 inserted 状态 → 继续执行
             logger.info(
-                f"[Task {task_id}] [Tenant {tenant_id}] Text content inserted successfully "
-                f"(reason: {verify_result['reason']}, created_at: {verify_result['created_at']}, "
-                f"chunks: {verify_result.get('chunks_count', 'N/A')})"
+                f"[Task {task_id}] [Tenant {tenant_id}] Text content submitted successfully "
+                f"(status: {status['reason']}, doc_status: {status['doc_status']})"
             )
         else:
             # 非文本文件，需要使用解析器
@@ -284,22 +277,18 @@ async def process_document_task(
 
                     # 直接插入到租户的 LightRAG 实例
                     track_id = await lightrag_instance.ainsert(markdown_text, ids=doc_id, file_paths=original_filename)
-                    logger.info(f"[Task {task_id}] [Tenant {tenant_id}] DeepSeek-OCR content inserted (track_id={track_id}), verifying...")
+                    logger.info(f"[Task {task_id}] [Tenant {tenant_id}] DeepSeek-OCR content inserted (track_id={track_id}), checking status...")
 
-                    # 验证插入结果
-                    verify_result = await verify_document_insertion(
-                        lightrag_instance,
-                        track_id,
-                        doc_id
-                    )
+                    # 检查文档提交状态
+                    status = await check_document_submission_status(lightrag_instance, track_id, doc_id)
 
-                    if not verify_result["success"]:
-                        # 插入失败（被去重或处理失败）
-                        raise ValueError(verify_result["error"])
+                    # 根据 reason 决定如何处理
+                    if status["reason"] in ["ignored", "failed", "error"]:
+                        raise ValueError(status["error"])
 
                     logger.info(
                         f"[Task {task_id}] [Tenant {tenant_id}] Document parsed using DeepSeek-OCR "
-                        f"(mode={mode.value}, {len(markdown_text)} chars, reason={verify_result['reason']})"
+                        f"(mode={mode.value}, {len(markdown_text)} chars, status={status['reason']})"
                     )
                 except Exception as e:
                     logger.error(f"[Task {task_id}] DeepSeek-OCR failed: {e}", exc_info=True)
@@ -354,7 +343,7 @@ async def process_document_task(
                     await rag_anything.process_document_complete(file_path=temp_file_path, output_dir="./output", doc_id=doc_id)
                     logger.info(f"[Task {task_id}] [Tenant {tenant_id}] Document parsed using MinerU parser with VLM (mode: {mineru_mode})")
 
-                    # 🆕 获取文档的 track_id（从 doc_status 查询）
+                    # 获取文档的 track_id（从 doc_status 查询）
                     doc_data = await lightrag_instance.doc_status.get_by_id(doc_id)
                     if not doc_data:
                         raise Exception(f"Document '{doc_id}' not found in doc_status after processing")
@@ -363,22 +352,18 @@ async def process_document_task(
                     if not track_id:
                         raise Exception(f"Document '{doc_id}' missing track_id in doc_status")
 
-                    logger.info(f"[Task {task_id}] [Tenant {tenant_id}] Document track_id: {track_id}, verifying...")
+                    logger.info(f"[Task {task_id}] [Tenant {tenant_id}] Document track_id: {track_id}, checking status...")
 
-                    # 🆕 验证插入结果
-                    verify_result = await verify_document_insertion(
-                        lightrag_instance,
-                        track_id,
-                        doc_id
-                    )
+                    # 检查文档提交状态
+                    status = await check_document_submission_status(lightrag_instance, track_id, doc_id)
 
-                    if not verify_result["success"]:
-                        # 插入失败（被去重或处理失败）
-                        raise ValueError(verify_result["error"])
+                    # 根据 reason 决定如何处理
+                    if status["reason"] in ["ignored", "failed", "error"]:
+                        raise ValueError(status["error"])
 
                     logger.info(
-                        f"[Task {task_id}] [Tenant {tenant_id}] MinerU Local verified: "
-                        f"reason={verify_result['reason']}, chunks={verify_result.get('chunks_count')}"
+                        f"[Task {task_id}] [Tenant {tenant_id}] MinerU Local processed: "
+                        f"status={status['reason']}, doc_status={status['doc_status']}"
                     )
 
             # 处理 Docling
@@ -409,7 +394,7 @@ async def process_document_task(
                 await rag_anything.process_document_complete(file_path=temp_file_path, output_dir="./output", doc_id=doc_id)
                 logger.info(f"[Task {task_id}] [Tenant {tenant_id}] Document parsed using {parser} parser")
 
-                # 🆕 获取文档的 track_id（从 doc_status 查询）
+                # 获取文档的 track_id（从 doc_status 查询）
                 doc_data = await lightrag_instance.doc_status.get_by_id(doc_id)
                 if not doc_data:
                     raise Exception(f"Document '{doc_id}' not found in doc_status after processing")
@@ -418,42 +403,26 @@ async def process_document_task(
                 if not track_id:
                     raise Exception(f"Document '{doc_id}' missing track_id in doc_status")
 
-                logger.info(f"[Task {task_id}] [Tenant {tenant_id}] Document track_id: {track_id}, verifying...")
+                logger.info(f"[Task {task_id}] [Tenant {tenant_id}] Document track_id: {track_id}, checking status...")
 
-                # 🆕 验证插入结果
-                verify_result = await verify_document_insertion(
-                    lightrag_instance,
-                    track_id,
-                    doc_id
-                )
+                # 检查文档提交状态
+                status = await check_document_submission_status(lightrag_instance, track_id, doc_id)
 
-                if not verify_result["success"]:
-                    # 插入失败（被去重或处理失败）
-                    raise ValueError(verify_result["error"])
+                # 根据 reason 决定如何处理
+                if status["reason"] in ["ignored", "failed", "error"]:
+                    raise ValueError(status["error"])
 
                 logger.info(
-                    f"[Task {task_id}] [Tenant {tenant_id}] {parser} parser verified: "
-                    f"reason={verify_result['reason']}, chunks={verify_result.get('chunks_count')}"
+                    f"[Task {task_id}] [Tenant {tenant_id}] {parser} parser processed: "
+                    f"status={status['reason']}, doc_status={status['doc_status']}"
                 )
         
         # 处理成功
-        # 构建任务结果（包含验证信息）
         task_result = {
             "message": "Document processed successfully",
             "doc_id": doc_id,
             "filename": original_filename
         }
-
-        # 添加验证结果详情（如果有）
-        if verify_result:
-            task_result.update({
-                "verification": {
-                    "status": verify_result.get("reason"),  # inserted / ignored / failed / timeout
-                    "chunks_count": verify_result.get("chunks_count"),
-                    "time_diff_seconds": verify_result.get("time_diff_seconds"),
-                    "created_at": verify_result.get("created_at")
-                }
-            })
 
         update_task(
             task_id, tenant_id,
@@ -865,22 +834,18 @@ async def process_with_remote_mineru(
             if not track_id:
                 raise Exception(f"Document '{doc_id}' missing track_id in doc_status")
 
-            logger.info(f"[Task {task_id}] [Tenant {tenant_id}] Document track_id: {track_id}, verifying...")
+            logger.info(f"[Task {task_id}] [Tenant {tenant_id}] Document track_id: {track_id}, checking status...")
 
-            # 🆕 验证插入结果
-            verify_result = await verify_document_insertion(
-                lightrag_instance,
-                track_id,
-                doc_id
-            )
+            # 检查文档提交状态
+            status = await check_document_submission_status(lightrag_instance, track_id, doc_id)
 
-            if not verify_result["success"]:
-                # 插入失败（被去重或处理失败）
-                raise ValueError(verify_result["error"])
+            # 根据 reason 决定如何处理
+            if status["reason"] in ["ignored", "failed", "error"]:
+                raise ValueError(status["error"])
 
             logger.info(
-                f"[Task {task_id}] [Tenant {tenant_id}] MinerU result verified: "
-                f"reason={verify_result['reason']}, chunks={verify_result.get('chunks_count')}"
+                f"[Task {task_id}] [Tenant {tenant_id}] MinerU result processed: "
+                f"status={status['reason']}, doc_status={status['doc_status']}"
             )
 
         else:
