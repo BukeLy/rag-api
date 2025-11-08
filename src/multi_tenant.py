@@ -5,6 +5,8 @@
 """
 
 import os
+import asyncio
+from collections import defaultdict
 from functools import lru_cache
 from typing import Dict, Optional
 from contextlib import asynccontextmanager
@@ -41,6 +43,9 @@ class MultiTenantRAGManager:
 
         # 租户实例缓存：tenant_id -> LightRAG
         self._instances: Dict[str, LightRAG] = {}
+
+        # Per-tenant creation locks (auto-creates on first access, no meta-lock needed)
+        self._creation_locks: defaultdict = defaultdict(asyncio.Lock)
 
         # 共享配置（从集中配置管理读取）
         self.ark_api_key = config.llm.api_key
@@ -365,36 +370,57 @@ class MultiTenantRAGManager:
 
     async def get_instance(self, tenant_id: str) -> LightRAG:
         """
-        获取指定租户的 LightRAG 实例（懒加载）
+        Get LightRAG instance for tenant (lazy-load + concurrent-safe + per-tenant locking)
+
+        Concurrency Strategy:
+        - Fast path: Lock-free cache hit (no await = atomic in asyncio)
+        - Slow path: Per-tenant lock (allows parallel creation of different tenants)
+        - Eviction: FIFO (simple and sufficient for 50-instance pool)
 
         Args:
-            tenant_id: 租户 ID（作为 workspace）
+            tenant_id: Tenant ID (used as workspace)
 
         Returns:
-            LightRAG: 该租户的 LightRAG 实例
+            LightRAG instance
+
+        Raises:
+            ValueError: If tenant_id is invalid
         """
-        # 验证 tenant_id
         if not tenant_id or not isinstance(tenant_id, str):
             raise ValueError(f"Invalid tenant_id: {tenant_id}")
 
-        # 检查缓存
+        # Fast path: lock-free cache hit (no await = atomic in asyncio)
         if tenant_id in self._instances:
-            logger.debug(f"Reusing cached instance for tenant: {tenant_id}")
+            logger.debug(f"Cache hit for tenant: {tenant_id}")
             return self._instances[tenant_id]
 
-        # 检查实例数量限制
-        if len(self._instances) >= self.max_instances:
-            # 清理最旧的实例（简单 FIFO 策略）
-            oldest_tenant = next(iter(self._instances))
-            logger.info(f"Instance pool full, removing oldest tenant: {oldest_tenant}")
-            del self._instances[oldest_tenant]
+        # Slow path: per-tenant lock (auto-created by defaultdict)
+        async with self._creation_locks[tenant_id]:
+            # Double-check: another request might have created it
+            if tenant_id in self._instances:
+                logger.debug(f"Instance created by concurrent request: {tenant_id}")
+                return self._instances[tenant_id]
 
-        # 创建新实例
-        logger.info(f"Creating new LightRAG instance for tenant: {tenant_id}")
-        instance = await self._create_instance(tenant_id)
-        self._instances[tenant_id] = instance
+            # Evict oldest instance if pool is full (FIFO)
+            if len(self._instances) >= self.max_instances:
+                victim = next(iter(self._instances))
+                logger.info(
+                    f"Instance pool full ({len(self._instances)}/{self.max_instances}), "
+                    f"evicting oldest tenant: {victim}"
+                )
+                del self._instances[victim]
 
-        return instance
+            # Create instance (expensive I/O, but doesn't block other tenants)
+            logger.info(f"Creating new instance for tenant: {tenant_id}")
+            instance = await self._create_instance(tenant_id)
+            self._instances[tenant_id] = instance
+
+            logger.info(
+                f"Instance created for tenant: {tenant_id} "
+                f"(pool size: {len(self._instances)}/{self.max_instances})"
+            )
+
+            return instance
 
     async def _create_instance(self, tenant_id: str) -> LightRAG:
         """

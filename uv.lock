@@ -4450,6 +4450,7 @@ dependencies = [
     { name = "raganything" },
     { name = "redis" },
     { name = "requests" },
+    { name = "tiktoken" },
 ]
 
 [package.dev-dependencies]
@@ -4473,6 +4474,7 @@ requires-dist = [
     { name = "raganything", specifier = ">=1.2.8" },
     { name = "redis", specifier = ">=5.0.0" },
     { name = "requests", specifier = ">=2.31.0" },
+    { name = "tiktoken", specifier = ">=0.8.0" },
 ]
 
 [package.metadata.requires-dev]
