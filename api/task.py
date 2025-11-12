@@ -3,11 +3,12 @@
 """
 
 from datetime import datetime
-from fastapi import APIRouter, HTTPException, Depends
+from typing import Optional, Literal
+from fastapi import APIRouter, HTTPException, Depends, Query
 
 from src.logger import logger
 from src.tenant_deps import get_tenant_id
-from .task_store import get_task, update_task
+from .task_store import get_task, update_task, get_tenant_tasks
 from .models import TaskStatus, TaskInfo
 
 router = APIRouter()
@@ -184,3 +185,132 @@ async def sync_task_with_lightrag(task: TaskInfo, tenant_id: str) -> TaskInfo:
         )
 
     return task
+
+
+@router.get("/tasks")
+async def list_tasks(
+    tenant_id: str = Depends(get_tenant_id),
+    status: Optional[Literal["pending", "processing", "completed", "failed"]] = None,
+    page: int = Query(1, ge=1, le=10000, description="页码（从 1 开始）"),
+    page_size: int = Query(50, ge=1, le=100, description="每页数量（最多 100）"),
+    sort_by: Literal["created_at", "updated_at", "status"] = Query("created_at"),
+    sort_order: Literal["asc", "desc"] = Query("desc")
+):
+    """
+    获取租户的任务列表（支持分页、过滤、排序）
+
+    **功能**：
+    - ✅ 分页：page, page_size
+    - ✅ 过滤：status (pending/processing/completed/failed)
+    - ✅ 排序：sort_by (created_at/updated_at/status), sort_order (asc/desc)
+
+    **注意**：
+    - 当前在内存中分页，如果任务量 >10000，性能会下降
+    - 建议未来在存储层实现分页
+
+    **示例请求**：
+    - GET /tasks?tenant_id=tenant_a&page=1&page_size=20
+    - GET /tasks?tenant_id=tenant_a&status=completed&sort_by=updated_at&sort_order=desc
+
+    **示例响应**：
+    ```json
+    {
+        "tasks": [
+            {
+                "task_id": "xxx",
+                "tenant_id": "tenant_a",
+                "status": "completed",
+                "doc_id": "doc_001",
+                "filename": "test.pdf",
+                "created_at": "2025-10-14T20:00:00",
+                "updated_at": "2025-10-14T20:02:30"
+            }
+        ],
+        "pagination": {
+            "total": 100,
+            "page": 1,
+            "page_size": 20,
+            "total_pages": 5,
+            "has_next": true,
+            "has_prev": false
+        }
+    }
+    ```
+    """
+    try:
+        # 获取所有任务
+        tasks_dict = get_tenant_tasks(tenant_id)
+
+        # 如果没有任务，返回空列表
+        if not tasks_dict:
+            return {
+                "tasks": [],
+                "pagination": {
+                    "total": 0,
+                    "page": page,
+                    "page_size": page_size,
+                    "total_pages": 0,
+                    "has_next": False,
+                    "has_prev": False
+                }
+            }
+
+        tasks_list = list(tasks_dict.values())
+
+        # 过滤状态
+        if status:
+            tasks_list = [t for t in tasks_list if t.status.value == status]
+
+        # 排序
+        reverse = (sort_order == "desc")
+        tasks_list.sort(
+            key=lambda t: getattr(t, sort_by, 0) or 0,
+            reverse=reverse
+        )
+
+        # 分页
+        total = len(tasks_list)
+        start = (page - 1) * page_size
+        end = start + page_size
+        tasks_page = tasks_list[start:end]
+
+        # 转换为 dict（确保可序列化）
+        tasks_data = []
+        for t in tasks_page:
+            if hasattr(t, 'dict'):
+                tasks_data.append(t.dict())
+            else:
+                # 手动转换为字典
+                task_dict = {
+                    "task_id": t.task_id,
+                    "tenant_id": t.tenant_id,
+                    "status": t.status.value,
+                    "doc_id": t.doc_id,
+                    "filename": t.filename,
+                    "created_at": t.created_at,
+                    "updated_at": t.updated_at
+                }
+                if hasattr(t, 'result') and t.result:
+                    task_dict["result"] = t.result
+                if hasattr(t, 'error') and t.error:
+                    task_dict["error"] = t.error
+                tasks_data.append(task_dict)
+
+        return {
+            "tasks": tasks_data,
+            "pagination": {
+                "total": total,
+                "page": page,
+                "page_size": page_size,
+                "total_pages": (total + page_size - 1) // page_size,
+                "has_next": end < total,
+                "has_prev": page > 1
+            }
+        }
+
+    except Exception as e:
+        logger.error(f"Failed to list tasks for tenant {tenant_id}: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to retrieve tasks"
+        )

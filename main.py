@@ -6,6 +6,7 @@ RAG API - 主应用入口
 """
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 # 导入 RAG 相关模块
 from src.rag import lifespan
@@ -92,6 +93,20 @@ app = FastAPI(
             "description": "系统性能监控和指标收集"
         }
     ]
+)
+
+# 添加 CORS middleware（修复前端跨域问题）
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "https://main.d2bxt3tjxqfsjq.amplifyapp.com",  # 前端生产域名
+        "http://localhost:3000",  # 本地开发（React）
+        "http://localhost:5173",  # 本地开发（Vite）
+    ],
+    allow_credentials=False,  # 不发送 cookies，降低安全风险
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization", "X-Request-ID"],
+    max_age=3600,  # 预检请求缓存 1 小时
 )
 
 # 注册 API 路由

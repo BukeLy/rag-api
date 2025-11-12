@@ -3,6 +3,7 @@
 """
 
 from fastapi import APIRouter, HTTPException, Depends, Query, BackgroundTasks
+from typing import Optional, Literal
 from src.multi_tenant import get_tenant_lightrag
 from src.tenant_deps import get_tenant_id
 from src.logger import logger
@@ -185,3 +186,156 @@ async def delete_document(
         "doc_id": doc_id,
         "tenant_id": tenant_id
     }
+
+
+# ============ GET 文档列表 ============
+
+@router.get("/documents")
+async def list_documents(
+    tenant_id: str = Depends(get_tenant_id),
+    page: int = Query(1, ge=1, le=10000, description="页码（从 1 开始）"),
+    page_size: int = Query(50, ge=1, le=100, description="每页数量（最多 100）"),
+    status_filter: Optional[Literal["pending", "processing", "preprocessed", "processed", "failed"]] = None,
+    sort_field: Literal["created_at", "updated_at"] = Query("created_at"),
+    sort_direction: Literal["asc", "desc"] = Query("desc")
+):
+    """
+    获取租户的文档列表（支持分页、过滤、排序）
+
+    **功能**：
+    - ✅ 分页：page, page_size
+    - ✅ 过滤：status_filter (pending/processing/preprocessed/processed/failed)
+    - ✅ 排序：sort_field (created_at/updated_at), sort_direction (asc/desc)
+    - ✅ 使用 LightRAG 原生分页 API
+
+    **示例请求**：
+    - GET /documents?tenant_id=tenant_a&page=1&page_size=20
+    - GET /documents?tenant_id=tenant_a&status_filter=processed&sort_field=updated_at&sort_direction=desc
+
+    **示例响应**：
+    ```json
+    {
+        "documents": [
+            {
+                "doc_id": "doc-abc123",
+                "status": "processed",
+                "file_path": "research_paper.pdf",
+                "created_at": "2025-11-06T10:00:00",
+                "updated_at": "2025-11-06T10:05:00"
+            }
+        ],
+        "pagination": {
+            "total": 100,
+            "page": 1,
+            "page_size": 20,
+            "total_pages": 5,
+            "has_next": true,
+            "has_prev": false
+        }
+    }
+    ```
+    """
+    try:
+        # 获取 LightRAG 实例
+        lightrag = await get_tenant_lightrag(tenant_id)
+
+        # 验证 doc_status 是否可用
+        if not hasattr(lightrag, 'doc_status'):
+            raise HTTPException(
+                status_code=501,
+                detail="Document status storage not available"
+            )
+
+        # 调用 LightRAG 的分页方法
+        docs_list, total = await lightrag.doc_status.get_docs_paginated(
+            status_filter=status_filter,
+            page=page,
+            page_size=page_size,
+            sort_field=sort_field,
+            sort_direction=sort_direction
+        )
+
+        # 格式化文档数据
+        documents = []
+        for doc in docs_list:
+            # docs_list 是列表，每个元素是文档对象
+            if hasattr(doc, '__dict__'):
+                doc_dict = doc.__dict__.copy()
+            elif isinstance(doc, dict):
+                doc_dict = doc.copy()
+            else:
+                # 尝试转换为字典
+                doc_dict = {"raw_data": str(doc)}
+
+            documents.append(doc_dict)
+
+        return {
+            "documents": documents,
+            "pagination": {
+                "total": total,
+                "page": page,
+                "page_size": page_size,
+                "total_pages": (total + page_size - 1) // page_size if total > 0 else 0,
+                "has_next": page * page_size < total,
+                "has_prev": page > 1
+            }
+        }
+
+    except NotImplementedError as e:
+        logger.error(f"get_docs_paginated not implemented: {e}")
+        raise HTTPException(
+            status_code=501,
+            detail="Document pagination not implemented in current LightRAG version"
+        )
+    except Exception as e:
+        logger.error(f"Failed to list documents for tenant {tenant_id}: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to retrieve documents: {str(e)}"
+        )
+
+
+@router.get("/documents/status_counts")
+async def get_document_status_counts(tenant_id: str = Depends(get_tenant_id)):
+    """
+    获取文档状态统计
+
+    **功能**：
+    - 返回各状态的文档数量（pending/processing/preprocessed/processed/failed）
+
+    **示例响应**：
+    ```json
+    {
+        "status_counts": {
+            "pending": 5,
+            "processing": 2,
+            "preprocessed": 3,
+            "processed": 100,
+            "failed": 1,
+            "all": 111
+        }
+    }
+    ```
+    """
+    try:
+        # 获取 LightRAG 实例
+        lightrag = await get_tenant_lightrag(tenant_id)
+
+        # 验证 doc_status 是否可用
+        if not hasattr(lightrag, 'doc_status'):
+            raise HTTPException(
+                status_code=501,
+                detail="Document status storage not available"
+            )
+
+        # 调用 LightRAG 的统计方法
+        counts = await lightrag.doc_status.get_all_status_counts()
+
+        return {"status_counts": counts}
+
+    except Exception as e:
+        logger.error(f"Failed to get status counts for tenant {tenant_id}: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to get status counts"
+        )
