@@ -4,6 +4,7 @@
 
 from fastapi import APIRouter, HTTPException, Depends, Query, BackgroundTasks
 from typing import Optional, Literal
+from dataclasses import asdict, is_dataclass
 from src.multi_tenant import get_tenant_lightrag
 from src.tenant_deps import get_tenant_id
 from src.logger import logger
@@ -258,13 +259,31 @@ async def list_documents(
         # 格式化文档数据
         documents = []
         for doc in docs_list:
-            # docs_list 是列表，每个元素是文档对象
-            if hasattr(doc, '__dict__'):
+            # docs_list 中每个元素是元组: (doc_id, DocProcessingStatus)
+            if isinstance(doc, tuple) and len(doc) == 2:
+                doc_id, status_obj = doc
+
+                # 将 DocProcessingStatus 转换为字典
+                if is_dataclass(status_obj):
+                    doc_dict = asdict(status_obj)
+                elif hasattr(status_obj, '__dict__'):
+                    doc_dict = status_obj.__dict__.copy()
+                elif isinstance(status_obj, dict):
+                    doc_dict = status_obj.copy()
+                else:
+                    logger.warning(f"Unexpected status object type: {type(status_obj)}")
+                    doc_dict = {"raw_data": str(status_obj)}
+
+                # 添加 doc_id 字段
+                doc_dict["doc_id"] = doc_id
+
+            # 兼容其他格式（向后兼容）
+            elif hasattr(doc, '__dict__'):
                 doc_dict = doc.__dict__.copy()
             elif isinstance(doc, dict):
                 doc_dict = doc.copy()
             else:
-                # 尝试转换为字典
+                logger.warning(f"Unexpected doc format: {type(doc)}")
                 doc_dict = {"raw_data": str(doc)}
 
             documents.append(doc_dict)
