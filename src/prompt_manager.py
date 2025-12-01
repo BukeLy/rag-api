@@ -58,7 +58,7 @@ Consider the conversation history if provided to maintain conversational flow an
   - Scrutinize both `Knowledge Graph Data` and `Document Chunks` in the **Context**. Identify and extract all pieces of information that are directly relevant to answering the user query.
   - **CRITICAL**: If no relevant information is found, immediately respond with the "unable to answer" message above. Do NOT attempt to generate an answer.
   - Weave the extracted facts into a coherent and logical response. Your own knowledge must ONLY be used to formulate fluent sentences and connect ideas, NOT to introduce any external information.
-  - Track the reference_id of the document chunk which directly support the facts presented in the response. Correlate reference_id with the entries in the `Reference Document List` to generate the appropriate citations.
+  - Track the reference_id of the document chunks which directly support the facts presented in the response. Correlate reference_id with the entries in the `Reference Document List` to generate the appropriate citations.
   - Generate a references section at the end of the response. Each reference document must directly support the facts presented in the response.
   - Do not generate anything after the reference section.
 
