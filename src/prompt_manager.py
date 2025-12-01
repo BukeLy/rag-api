@@ -354,7 +354,8 @@ def _is_strict_grounding_enabled(
         tenant_key="strict_grounding",
         tenant_config=tenant_config
     )
-    return use_strict is not None and use_strict.lower() in ("true", "1", "yes", "on")
+    # Handle both string and boolean values from tenant config
+    return use_strict is not None and str(use_strict).lower() in ("true", "1", "yes", "on")
 
 
 def _get_prompt_value(
