@@ -132,17 +132,32 @@ curl -X POST "http://localhost:8000/tenants/your_tenant/config/refresh"
 docker compose restart rag-api
 ```
 
+## Prompt 与查询模式的对应关系
+
+LightRAG 有 5 种查询模式，但只使用 2 种响应 Prompt：
+
+| 查询模式 | 使用的 Prompt | 说明 |
+|---------|--------------|------|
+| `naive` | `naive_rag_response` | 纯向量搜索，不使用知识图谱 |
+| `local` | `rag_response` | 局部知识图谱搜索 |
+| `global` | `rag_response` | 全局知识图谱搜索 |
+| `hybrid` | `rag_response` | 混合模式（local + global） |
+| `mix` | `rag_response` | 全功能混合（KG + 向量） |
+
+因此，自定义 `rag_response` 会影响除 `naive` 以外的所有模式，而 `naive_rag_response` 仅影响 `naive` 模式。
+
 ## 相关配置
 
 | 配置项 | 类型 | 描述 |
 |-------|------|------|
 | `LIGHTRAG_STRICT_GROUNDING` | 环境变量 | 全局启用严格 Grounding 模式 |
 | `strict_grounding` | 租户配置 | 租户级启用严格 Grounding 模式 |
-| `rag_response` | 租户配置 | 完全自定义 KG 模式响应 prompt |
-| `naive_rag_response` | 租户配置 | 完全自定义 naive 模式响应 prompt |
+| `rag_response` | 租户配置 | 自定义 KG 模式响应 prompt（影响 local/global/hybrid/mix） |
+| `naive_rag_response` | 租户配置 | 自定义 naive 模式响应 prompt（仅影响 naive） |
 
 ## 注意事项
 
 1. **语言适配**：当前默认拒绝回答消息是中文，如需英文或其他语言，请使用完全自定义 prompt
 2. **性能影响**：严格 Grounding 模式不会影响性能，仅修改 prompt 内容
 3. **兼容性**：此功能与所有查询模式（naive、local、global、hybrid、mix）兼容
+4. **Prompt 复用**：LightRAG 的设计中，`rag_response` 被 local/global/hybrid/mix 四种模式共享
