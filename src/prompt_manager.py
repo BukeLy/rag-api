@@ -76,7 +76,7 @@ Consider the conversation history if provided to maintain conversational flow an
 
 4. References Section Format:
   - The References section should be under heading: `### References`
-  - Reference list entries should adhere to the format: `* [n] Document Title`. Do not include a caret (`^`) after opening square bracket (`[`).
+  - Reference list entries should adhere to the format: `- [n] Document Title`. Do not include a caret (`^`) after opening square bracket (`[`).
   - The Document Title in the citation must retain its original language.
   - Output each citation on an individual line
   - Provide maximum of 5 most relevant citations.
@@ -158,7 +158,7 @@ Consider the conversation history if provided to maintain conversational flow an
 
 4. References Section Format:
   - The References section should be under heading: `### References`
-  - Reference list entries should adhere to the format: `* [n] Document Title`. Do not include a caret (`^`) after opening square bracket (`[`).
+  - Reference list entries should adhere to the format: `- [n] Document Title`. Do not include a caret (`^`) after opening square bracket (`[`).
   - The Document Title in the citation must retain its original language.
   - Output each citation on an individual line
   - Provide maximum of 5 most relevant citations.
@@ -270,6 +270,9 @@ def apply_custom_prompts(
         except json.JSONDecodeError as e:
             logger.warning(f"Failed to parse entity_types JSON: {e}")
 
+    # Check if strict grounding is enabled (used by both rag_response and naive_rag_response)
+    use_strict_grounding = _is_strict_grounding_enabled(tenant_custom_prompts)
+
     # 6. RAG Response Prompt (for knowledge graph queries)
     rag_response = _get_prompt_value(
         env_key="LIGHTRAG_RAG_RESPONSE_PROMPT",
@@ -279,16 +282,9 @@ def apply_custom_prompts(
     if rag_response:
         PROMPTS["rag_response"] = rag_response
         applied_prompts.append("rag_response")
-    else:
-        # Apply enhanced default if not customized and strict_grounding is enabled
-        use_strict = _get_prompt_value(
-            env_key="LIGHTRAG_STRICT_GROUNDING",
-            tenant_key="strict_grounding",
-            tenant_config=tenant_custom_prompts
-        )
-        if use_strict and use_strict.lower() in ("true", "1", "yes", "on"):
-            PROMPTS["rag_response"] = ENHANCED_RAG_RESPONSE
-            applied_prompts.append("rag_response(strict)")
+    elif use_strict_grounding:
+        PROMPTS["rag_response"] = ENHANCED_RAG_RESPONSE
+        applied_prompts.append("rag_response(strict)")
 
     # 7. Naive RAG Response Prompt (for vector-only queries)
     naive_rag_response = _get_prompt_value(
@@ -299,16 +295,9 @@ def apply_custom_prompts(
     if naive_rag_response:
         PROMPTS["naive_rag_response"] = naive_rag_response
         applied_prompts.append("naive_rag_response")
-    else:
-        # Apply enhanced default if not customized and strict_grounding is enabled
-        use_strict = _get_prompt_value(
-            env_key="LIGHTRAG_STRICT_GROUNDING",
-            tenant_key="strict_grounding",
-            tenant_config=tenant_custom_prompts
-        )
-        if use_strict and use_strict.lower() in ("true", "1", "yes", "on"):
-            PROMPTS["naive_rag_response"] = ENHANCED_NAIVE_RAG_RESPONSE
-            applied_prompts.append("naive_rag_response(strict)")
+    elif use_strict_grounding:
+        PROMPTS["naive_rag_response"] = ENHANCED_NAIVE_RAG_RESPONSE
+        applied_prompts.append("naive_rag_response(strict)")
 
     if applied_prompts:
         tenant_info = f"[Tenant {tenant_id}]" if tenant_id else "[Global]"
@@ -346,6 +335,26 @@ def get_custom_entity_types(
         logger.warning(f"Failed to parse entity_types JSON: {e}")
 
     return None
+
+
+def _is_strict_grounding_enabled(
+    tenant_config: dict[str, Any] | None
+) -> bool:
+    """
+    Check if strict grounding mode is enabled.
+
+    Args:
+        tenant_config: Tenant custom prompts dictionary
+
+    Returns:
+        bool: True if strict grounding is enabled
+    """
+    use_strict = _get_prompt_value(
+        env_key="LIGHTRAG_STRICT_GROUNDING",
+        tenant_key="strict_grounding",
+        tenant_config=tenant_config
+    )
+    return use_strict is not None and use_strict.lower() in ("true", "1", "yes", "on")
 
 
 def _get_prompt_value(
