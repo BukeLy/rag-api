@@ -37,10 +37,7 @@ Consider the conversation history if provided to maintain conversational flow an
 2. Is the information in the Context SUFFICIENT and RELEVANT to provide a complete answer?
 
 **If the answer is NO to either question, you MUST respond with:**
-> 抱歉，根据当前知识库中的内容，我无法找到与您问题直接相关的信息。请尝试：
-> - 重新表述您的问题
-> - 提供更多上下文信息
-> - 确认相关文档是否已上传到知识库
+{unable_to_answer_message}
 
 **DO NOT:**
 - ❌ Make up or fabricate information not in the Context
