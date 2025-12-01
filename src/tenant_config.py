@@ -81,7 +81,10 @@ class TenantConfigModel(BaseModel):
             "entity_extraction_user_prompt": "你的自定义 user prompt...",
             "entity_continue_extraction_user_prompt": "你的自定义 continue prompt...",
             "entity_extraction_examples": ["示例1", "示例2"],
-            "entity_types": ["product", "feature", "error_code", "configuration"]
+            "entity_types": ["product", "feature", "error_code", "configuration"],
+            "strict_grounding": "true",
+            "rag_response": "你的自定义 RAG 响应 prompt（可选）...",
+            "naive_rag_response": "你的自定义 Naive RAG 响应 prompt（可选）..."
         }
     )
 
