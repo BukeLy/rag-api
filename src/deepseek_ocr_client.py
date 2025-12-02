@@ -49,6 +49,9 @@ class DSSeekConfig:
     # DPI 配置（200 DPI 是最佳平衡点）
     dpi: int = field(default_factory=lambda: config.ds_ocr.dpi)
 
+    # OCR 模式配置
+    default_mode: str = field(default_factory=lambda: config.ds_ocr.default_mode)
+
     # 智能降级配置
     fallback_enabled: bool = field(default_factory=lambda: config.ds_ocr.fallback_enabled)
     fallback_mode: str = field(default_factory=lambda: config.ds_ocr.fallback_mode)
