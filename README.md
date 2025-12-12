@@ -15,7 +15,7 @@ Enterprise-grade RAG service built on RAG-Anything and LightRAG
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
-[Features](#-features) • [Quick Start](#-quick-start) • [Architecture](#-architecture) • [API Documentation](#-api-documentation) • [Deployment](#-deployment)
+[Features](#✨-features) • [Quick Start](#🚀-quick-start) • [Architecture](#🏗️-architecture) • [API Documentation](#📚-api-documentation) • [Deployment](#🛠️-deployment)
 
 </div>
 
