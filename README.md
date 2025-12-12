@@ -2,95 +2,97 @@
 
 # 🚀 RAG API
 
-**多租户多模态文档智能检索系统**
+**Multi-tenant Multimodal Document Intelligent Retrieval System**
 
-基于 RAG-Anything 和 LightRAG 构建的企业级 RAG 服务
+Enterprise-grade RAG service built on RAG-Anything and LightRAG
 
-[![CI](https://github.com/YOUR_USERNAME/rag-api/actions/workflows/ci-basic.yml/badge.svg)](https://github.com/YOUR_USERNAME/rag-api/actions/workflows/ci-basic.yml)
+[![CI](https://github.com/BukeLy/rag-api/actions/workflows/ci-basic.yml/badge.svg)](https://github.com/BukeLy/rag-api/actions/workflows/ci-basic.yml)
 [![Python](https://img.shields.io/badge/Python-3.11+-blue.svg)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-00C7B7.svg)](https://fastapi.tiangolo.com/)
 [![LightRAG](https://img.shields.io/badge/LightRAG-1.4+-orange.svg)](https://github.com/HKUDS/LightRAG)
 [![Docker](https://img.shields.io/badge/Docker-Ready-2496ED.svg)](https://www.docker.com/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-[功能特性](#-功能特性) • [快速开始](#-快速开始) • [架构设计](#-架构设计) • [API 文档](#-api-文档) • [部署指南](#-部署指南)
+[English](README.md) | [简体中文](README.zh-CN.md)
+
+[Features](#-features) • [Quick Start](#-quick-start) • [Architecture](#-architecture) • [API Documentation](#-api-documentation) • [Deployment](#-deployment)
 
 </div>
 
 ---
 
-## 📖 项目简介
+## 📖 Introduction
 
-RAG API 是一个企业级的检索增强生成（RAG）服务，结合了 **RAG-Anything** 的强大文档解析能力和 **LightRAG** 的高效知识图谱检索技术，为您的文档提供智能问答能力。
+RAG API is an enterprise-grade Retrieval-Augmented Generation (RAG) service that combines the powerful document parsing capabilities of **RAG-Anything** with the efficient knowledge graph retrieval technology of **LightRAG**, providing intelligent Q&A capabilities for your documents.
 
-### 🎯 核心亮点
+### 🎯 Key Highlights
 
-- 🏢 **多租户隔离** - 完整的租户数据隔离，支持企业级多租户场景
-- 🎨 **多模态解析** - 支持 PDF、Word、图片等多种格式，OCR、表格、公式全覆盖
-- ⚡ **高性能检索** - 基于知识图谱的混合检索，查询响应 6-15 秒
-- 🔄 **灵活部署** - 支持生产模式和开发模式，一键切换
-- 📦 **开箱即用** - Docker 一键部署，3 分钟启动服务
-- 🎛️ **多解析引擎** - DeepSeek-OCR(远程API) + MinerU（本地/远程API）+ Docling（快速）
-- 🎨 **RAG-Anything-VLM增强** - 三种模式（off/selective/full），深度理解图表内容
-- 💾 **任务持久化** - Redis 存储支持，容器重启/实例重建后任务可恢复
+- 🏢 **Multi-tenant Isolation** - Complete tenant data isolation for enterprise multi-tenant scenarios
+- 🎨 **Multimodal Parsing** - Support for PDF, Word, images and more, with full OCR, tables, and formulas coverage
+- ⚡ **High-performance Retrieval** - Knowledge graph-based hybrid retrieval with 6-15 second query response
+- 🔄 **Flexible Deployment** - Support for production and development modes with one-click switching
+- 📦 **Ready to Use** - One-click Docker deployment, service starts in 3 minutes
+- 🎛️ **Multiple Parsing Engines** - DeepSeek-OCR (Remote API) + MinerU (Local/Remote API) + Docling (Fast)
+- 🎨 **RAG-Anything VLM Enhancement** - Three modes (off/selective/full) for deep chart understanding
+- 💾 **Task Persistence** - Redis storage support, tasks recoverable after container restart/instance rebuild
 
 ---
 
-## ✨ 功能特性
+## ✨ Features
 
 <table>
 <tr>
 <td width="50%">
 
-### 📄 文档处理
+### 📄 Document Processing
 
-- ✅ **多格式支持**
-  - PDF、Word、Excel、PPT
-  - PNG、JPG、WebP 图片
-  - TXT、Markdown 文本
+- ✅ **Multiple Format Support**
+  - PDF, Word, Excel, PPT
+  - PNG, JPG, WebP images
+  - TXT, Markdown text
   
-- ✅ **智能解析**
-  - 纯文本（.txt, .md）→ 直接插入（极快 ~1秒，跳过解析器）
-  - OCR 文字识别
-  - 表格结构化提取
-  - 数学公式识别
-  - 版面分析
+- ✅ **Intelligent Parsing**
+  - Plain text (.txt, .md) → Direct insertion (ultra-fast ~1s, skip parser)
+  - OCR text recognition
+  - Structured table extraction
+  - Mathematical formula recognition
+  - Layout analysis
 
-- ✅ **RAG-Anything-VLM增强** 🆕
-  - `off` - 仅 Markdown（最快）
-  - `selective` - 选择性处理重要图表
-  - `full` - 完整上下文增强处理
-  - 智能过滤：有标题、大尺寸、首页内容
-  - ⚠️ **仅支持 remote MinerU 模式,本地模式会调用RAG-Anything原生方法**
+- ✅ **RAG-Anything VLM Enhancement** 🆕
+  - `off` - Markdown only (fastest)
+  - `selective` - Selective processing of important charts
+  - `full` - Complete context enhancement processing
+  - Smart filtering: with titles, large size, first page content
+  - ⚠️ **Only supports remote MinerU mode, local mode uses RAG-Anything native methods**
 
-- ✅ **批量处理**
-  - 单次最多 100 个文件
-  - 异步任务队列
-  - 进度实时追踪
+- ✅ **Batch Processing**
+  - Up to 100 files per batch
+  - Async task queue
+  - Real-time progress tracking
 
 </td>
 <td width="50%">
 
-### 🔍 智能检索
+### 🔍 Intelligent Retrieval
 
-- ✅ **多模式查询**
-  - `naive` - 向量检索（最快）
-  - `local` - 本地图谱
-  - `global` - 全局图谱
-  - `hybrid` - 混合检索
-  - `mix` - 完整检索（最准确）
+- ✅ **Multi-mode Query**
+  - `naive` - Vector retrieval (fastest)
+  - `local` - Local graph
+  - `global` - Global graph
+  - `hybrid` - Hybrid retrieval
+  - `mix` - Full retrieval (most accurate)
 
-- ✅ **知识图谱**
-  - 自动实体提取
-  - 关系推理
-  - 语义理解
-  - 上下文增强
+- ✅ **Knowledge Graph**
+  - Automatic entity extraction
+  - Relationship reasoning
+  - Semantic understanding
+  - Context enhancement
 
-- ✅ **外部存储**
-  - DragonflyDB（KV 存储 + 任务存储）
-  - Qdrant（向量存储）
-  - Memgraph（图数据库）
-  - 任务持久化（Redis 模式）
+- ✅ **External Storage**
+  - DragonflyDB (KV storage + task storage)
+  - Qdrant (vector storage)
+  - Memgraph (graph database)
+  - Task persistence (Redis mode)
 
 </td>
 </tr>
@@ -98,51 +100,51 @@ RAG API 是一个企业级的检索增强生成（RAG）服务，结合了 **RAG
 
 ---
 
-## 🏗️ 架构设计
+## 🏗️ Architecture
 
-### 系统架构图
+### System Architecture Diagram
 
 ```mermaid
 graph TB
-    subgraph "客户端层"
-        Client[客户端应用]
-        WebUI[Web 界面]
+    subgraph "Client Layer"
+        Client[Client Application]
+        WebUI[Web Interface]
     end
     
-    subgraph "API 网关层"
-        FastAPI[FastAPI 服务]
-        Auth[租户认证]
+    subgraph "API Gateway Layer"
+        FastAPI[FastAPI Service]
+        Auth[Tenant Authentication]
     end
     
-    subgraph "业务逻辑层"
-        TenantMgr[租户管理器]
-        TaskQueue[任务队列]
+    subgraph "Business Logic Layer"
+        TenantMgr[Tenant Manager]
+        TaskQueue[Task Queue]
         
-        subgraph "文档处理"
-            DeepSeekOCR[DeepSeek-OCR<br/>快速 OCR 80%场景]
-            MinerU[MinerU 解析器<br/>复杂多模态]
-            Docling[Docling 解析器<br/>快速轻量]
-            FileRouter[智能路由<br/>复杂度评分选择]
+        subgraph "Document Processing"
+            DeepSeekOCR[DeepSeek-OCR<br/>Fast OCR 80% cases]
+            MinerU[MinerU Parser<br/>Complex multimodal]
+            Docling[Docling Parser<br/>Fast lightweight]
+            FileRouter[Smart Router<br/>Complexity scoring]
         end
         
-        subgraph "RAG 引擎"
-            LightRAG[LightRAG 实例池<br/>LRU 缓存 50]
-            KG[知识图谱引擎]
-            Vector[向量检索引擎]
+        subgraph "RAG Engine"
+            LightRAG[LightRAG Instance Pool<br/>LRU Cache 50]
+            KG[Knowledge Graph Engine]
+            Vector[Vector Retrieval Engine]
         end
     end
     
-    subgraph "存储层"
-        DragonflyDB[(DragonflyDB<br/>KV 存储)]
-        Qdrant[(Qdrant<br/>向量数据库)]
-        Memgraph[(Memgraph<br/>图数据库)]
-        Local[(本地文件<br/>临时存储)]
+    subgraph "Storage Layer"
+        DragonflyDB[(DragonflyDB<br/>KV Storage)]
+        Qdrant[(Qdrant<br/>Vector Database)]
+        Memgraph[(Memgraph<br/>Graph Database)]
+        Local[(Local Files<br/>Temp Storage)]
     end
     
-    subgraph "外部服务"
-        LLM[LLM<br/>实体提取/生成]
-        Embedding[Embedding<br/>向量化]
-        Rerank[Rerank<br/>重排序]
+    subgraph "External Services"
+        LLM[LLM<br/>Entity Extraction/Generation]
+        Embedding[Embedding<br/>Vectorization]
+        Rerank[Rerank<br/>Reranking]
     end
     
     Client --> FastAPI
@@ -180,42 +182,42 @@ graph TB
     style TenantMgr fill:#F38181
 ```
 
-### 多租户架构
+### Multi-tenant Architecture
 
 ```mermaid
 graph TB
-    subgraph "租户 A"
-        A_Config[租户 A 配置<br/>独立 API Key]
-        A_Instance[LightRAG 实例 A<br/>专属 LLM/Embedding]
-        A_Data[(租户 A 数据<br/>完全隔离)]
+    subgraph "Tenant A"
+        A_Config[Tenant A Config<br/>Independent API Key]
+        A_Instance[LightRAG Instance A<br/>Dedicated LLM/Embedding]
+        A_Data[(Tenant A Data<br/>Fully Isolated)]
         A_Config --> A_Instance
         A_Instance --> A_Data
     end
 
-    subgraph "租户 B"
-        B_Config[租户 B 配置<br/>独立 API Key]
-        B_Instance[LightRAG 实例 B<br/>专属 LLM/Embedding]
-        B_Data[(租户 B 数据<br/>完全隔离)]
+    subgraph "Tenant B"
+        B_Config[Tenant B Config<br/>Independent API Key]
+        B_Instance[LightRAG Instance B<br/>Dedicated LLM/Embedding]
+        B_Data[(Tenant B Data<br/>Fully Isolated)]
         B_Config --> B_Instance
         B_Instance --> B_Data
     end
 
-    subgraph "租户 C"
-        C_Config[使用全局配置]
-        C_Instance[LightRAG 实例 C<br/>共享 LLM/Embedding]
-        C_Data[(租户 C 数据<br/>完全隔离)]
+    subgraph "Tenant C"
+        C_Config[Using Global Config]
+        C_Instance[LightRAG Instance C<br/>Shared LLM/Embedding]
+        C_Data[(Tenant C Data<br/>Fully Isolated)]
         C_Config --> C_Instance
         C_Instance --> C_Data
     end
 
-    Pool[实例池管理器<br/>LRU Cache + 配置隔离]
-    Global[全局配置<br/>默认 API Key]
+    Pool[Instance Pool Manager<br/>LRU Cache + Config Isolation]
+    Global[Global Config<br/>Default API Key]
 
     Pool --> A_Instance
     Pool --> B_Instance
     Pool --> C_Instance
 
-    C_Config -.降级.-> Global
+    C_Config -.fallback.-> Global
 
     style Pool fill:#F38181
     style Global fill:#95E1D3
@@ -224,13 +226,13 @@ graph TB
     style C_Config fill:#E8E8E8
 ```
 
-### 核心技术栈
+### Core Technology Stack
 
 <table>
 <tr>
 <td width="33%">
 
-**🔧 框架 & 运行时**
+**🔧 Frameworks & Runtime**
 - FastAPI 0.115+
 - Python 3.11+
 - Uvicorn
@@ -248,11 +250,11 @@ graph TB
 </td>
 <td width="33%">
 
-**💾 存储 & 数据库**
-- DragonflyDB（Redis 协议兼容）
-- Qdrant（向量数据库）
-- Memgraph（图数据库）
-- 本地文件系统
+**💾 Storage & Database**
+- DragonflyDB（Redis compatible）
+- Qdrant（Vector Database）
+- Memgraph（Graph Database）
+- Local filesystem
 
 </td>
 </tr>
@@ -260,163 +262,163 @@ graph TB
 
 ---
 
-## 🚀 快速开始
+## 🚀 Quick Start
 
-### 方式一：一键部署（推荐）
+### Option 1: One-click Deployment (Recommended)
 
-适合生产环境和测试环境：
+Suitable for production and testing environments:
 
 ```bash
-# 1. 克隆项目
+# 1. Clone the project
 git clone https://github.com/BukeLy/rag-api.git
 cd rag-api
 
-# 2. 配置环境变量
+# 2. Configure environment variables
 cp env.example .env
-nano .env  # 填入你的 API 密钥
+nano .env  # Fill in your API keys
 
-# 3. 运行部署脚本
+# 3. Run deployment script
 chmod +x deploy.sh
 ./deploy.sh
 
-# 选择部署模式：
-# 1) 生产模式 (Production) - 标准容器部署
-# 2) 开发模式 (Development) - 代码热重载
+# Select deployment mode:
+# 1) Production Mode - Standard container deployment
+# 2) Development Mode - Code hot-reload
 
-# 4. 验证服务
+# 4. Verify service
 curl http://localhost:8000/
 ```
 
-**访问 Swagger 文档：** http://localhost:8000/docs
+**Access Swagger Documentation:** http://localhost:8000/docs
 
-### 方式二：Docker Compose
+### Option 2: Docker Compose
 
-#### 生产模式
+#### Production Mode
 
 ```bash
-# 配置环境变量
+# Configure environment variables
 cp env.example .env
 nano .env
 
-# 启动服务
+# Start services
 docker compose -f docker-compose.yml up -d
 
-# 查看日志
+# View logs
 docker compose -f docker-compose.yml logs -f
 ```
 
-#### 开发模式（代码热重载）
+#### Development Mode (Code Hot-reload)
 
 ```bash
-# 启动开发环境
+# Start development environment
 docker compose -f docker-compose.dev.yml up -d
 
-# 或使用快捷脚本
+# Or use quick script
 ./scripts/dev.sh
 
-# 修改代码会自动重载，无需重启
+# Code changes will auto-reload without restart
 ```
 
-### 方式三：本地开发
+### Option 3: Local Development
 
 ```bash
-# 安装 uv (Python 包管理器)
+# Install uv (Python package manager)
 curl -LsSf https://astral.sh/uv/install.sh | sh
 
-# 安装依赖
+# Install dependencies
 uv sync
 
-# 配置环境变量
+# Configure environment variables
 cp env.example .env
 nano .env
 
-# 启动服务
+# Start services
 uv run uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-### 环境变量配置
+### Environment Variable Configuration
 
-最小配置（必填）：
+Minimum configuration (required):
 
 ```bash
-# LLM 配置（功能导向命名）
+# LLM Configuration (Function-oriented naming)
 LLM_API_KEY=your_llm_api_key
 LLM_BASE_URL=https://ark.cn-beijing.volces.com/api/v3
 LLM_MODEL=ep-xxx-xxx
-# LLM_REQUESTS_PER_MINUTE=800        # 速率限制（可选）
-# LLM_TOKENS_PER_MINUTE=40000        # 速率限制（可选）
-# LLM_MAX_ASYNC=8                    # 【可选,专家模式】手动指定并发数
-#                                    # 未设置时自动计算: min(RPM, TPM/3500) = 11
+# LLM_REQUESTS_PER_MINUTE=800        # Rate limit (optional)
+# LLM_TOKENS_PER_MINUTE=40000        # Rate limit (optional)
+# LLM_MAX_ASYNC=8                    # [Optional, expert mode] Manual concurrency control
+#                                    # Auto-calculated when unset: min(RPM, TPM/3500) = 11
 
-# Embedding 配置（功能导向命名）
+# Embedding Configuration (Function-oriented naming)
 EMBEDDING_API_KEY=your_embedding_api_key
 EMBEDDING_BASE_URL=https://api.siliconflow.cn/v1
 EMBEDDING_MODEL=Qwen/Qwen3-Embedding-0.6B
 EMBEDDING_DIM=1024
-# EMBEDDING_MAX_ASYNC=32             # 【可选,专家模式】未设置时自动计算: 800
+# EMBEDDING_MAX_ASYNC=32             # [Optional, expert mode] Auto-calculated when unset: 800
 
-# MinerU 模式（推荐远程模式）
+# MinerU Mode (Remote recommended)
 MINERU_MODE=remote
 MINERU_API_TOKEN=your_token
-MINERU_HTTP_TIMEOUT=60              # MinerU 下载超时（秒，默认 60）
+MINERU_HTTP_TIMEOUT=60              # MinerU download timeout (seconds, default 60)
 FILE_SERVICE_BASE_URL=http://your-ip:8000
 
-# VLM 图表增强配置 🆕
-# ⚠️ 注意：仅在 MINERU_MODE=remote 时生效
+# VLM Chart Enhancement Configuration 🆕
+# ⚠️ Note: Only effective in MINERU_MODE=remote
 RAG_VLM_MODE=off                    # off / selective / full
-RAG_IMPORTANCE_THRESHOLD=0.5        # 重要性阈值（selective 模式）
-RAG_CONTEXT_WINDOW=2                # 上下文窗口（full 模式）
+RAG_IMPORTANCE_THRESHOLD=0.5        # Importance threshold (selective mode)
+RAG_CONTEXT_WINDOW=2                # Context window (full mode)
 RAG_CONTEXT_MODE=page               # page / chunk
-RAG_MAX_CONTEXT_TOKENS=3000         # 最大上下文 tokens
+RAG_MAX_CONTEXT_TOKENS=3000         # Max context tokens
 
-# 任务存储配置 🆕
-TASK_STORE_STORAGE=redis            # memory / redis（生产推荐 redis）
+# Task Storage Configuration 🆕
+TASK_STORE_STORAGE=redis            # memory / redis (production recommends redis)
 
-# 文档插入验证配置 🆕
-DOC_INSERT_VERIFICATION_TIMEOUT=300        # 验证超时时间（秒，默认 5 分钟）
-DOC_INSERT_VERIFICATION_POLL_INTERVAL=0.5  # 轮询间隔（秒，默认 500ms）
+# Document Insert Verification Configuration 🆕
+DOC_INSERT_VERIFICATION_TIMEOUT=300        # Verification timeout (seconds, default 5 minutes)
+DOC_INSERT_VERIFICATION_POLL_INTERVAL=0.5  # Poll interval (seconds, default 500ms)
 
-# 模型调用超时配置 🆕
-MODEL_CALL_TIMEOUT=90               # 模型调用最大超时（秒，默认 90）
+# Model Call Timeout Configuration 🆕
+MODEL_CALL_TIMEOUT=90               # Model call max timeout (seconds, default 90)
 ```
 
-**⚡ 自动并发数计算**：
-- **LLM**: 未设置 `LLM_MAX_ASYNC` 时，自动计算为 `min(RPM, TPM/3500)` ≈ 11
-- **Embedding**: 未设置 `EMBEDDING_MAX_ASYNC` 时，自动计算为 `min(RPM, TPM/500)` ≈ 800
-- **Rerank**: 未设置 `RERANK_MAX_ASYNC` 时，自动计算为 `min(RPM, TPM/500)` ≈ 800
+**⚡ Auto Concurrency Calculation**:
+- **LLM**: When `LLM_MAX_ASYNC` is unset, auto-calculated as `min(RPM, TPM/3500)` ≈ 11
+- **Embedding**: When `EMBEDDING_MAX_ASYNC` is unset, auto-calculated as `min(RPM, TPM/500)` ≈ 800
+- **Rerank**: When `RERANK_MAX_ASYNC` is unset, auto-calculated as `min(RPM, TPM/500)` ≈ 800
 
-**✅ 推荐**: 不设置 `*_MAX_ASYNC`，让系统自动计算，彻底避免 429 错误
+**✅ Recommended**: Don't set `*_MAX_ASYNC`, let the system auto-calculate to completely avoid 429 errors
 
-完整配置参考 `env.example`。
+See `env.example` for complete configuration.
 
 ---
 
-## 📚 API 文档
+## 📚 API Documentation
 
-### 核心接口
+### Core Endpoints
 
-#### 1️⃣ 上传文档
+#### 1️⃣ Upload Document
 
 ```bash
-# 单文件上传（默认模式）
+# Single file upload (default mode)
 curl -X POST "http://localhost:8000/insert?tenant_id=your_tenant&doc_id=doc1" \
   -F "file=@document.pdf" \
   -F "parser=auto"
 
-# VLM 图表增强模式 🆕
-# off: 仅 Markdown（最快，默认）
+# VLM chart enhancement mode 🆕
+# off: Markdown only (fastest, default)
 curl -X POST "http://localhost:8000/insert?tenant_id=your_tenant&doc_id=doc2&vlm_mode=off" \
   -F "file=@document.pdf"
 
-# selective: 选择性处理重要图表（平衡性能和质量）
+# selective: Selective processing of important charts (balance performance and quality)
 curl -X POST "http://localhost:8000/insert?tenant_id=your_tenant&doc_id=doc3&vlm_mode=selective" \
   -F "file=@document.pdf"
 
-# full: 完整 RAG-Anything 处理（最高质量，启用上下文增强）
+# full: Complete RAG-Anything processing (highest quality, context enhancement enabled)
 curl -X POST "http://localhost:8000/insert?tenant_id=your_tenant&doc_id=doc4&vlm_mode=full" \
   -F "file=@document.pdf"
 
-# 返回
+# Response
 {
   "task_id": "task-xxx-xxx",
   "doc_id": "doc1",
@@ -426,7 +428,7 @@ curl -X POST "http://localhost:8000/insert?tenant_id=your_tenant&doc_id=doc4&vlm
 }
 ```
 
-#### 2️⃣ 批量上传
+#### 2️⃣ Batch Upload
 
 ```bash
 curl -X POST "http://localhost:8000/batch?tenant_id=your_tenant" \
@@ -434,7 +436,7 @@ curl -X POST "http://localhost:8000/batch?tenant_id=your_tenant" \
   -F "files=@doc2.docx" \
   -F "files=@image.png"
 
-# 返回
+# Response
 {
   "batch_id": "batch-xxx-xxx",
   "total_files": 3,
@@ -443,58 +445,58 @@ curl -X POST "http://localhost:8000/batch?tenant_id=your_tenant" \
 }
 ```
 
-#### 3️⃣ 智能查询（Query API v2.0）
+#### 3️⃣ Intelligent Query (Query API v2.0)
 
-**新增高级功能**：
-- ✨ **对话历史**：支持多轮对话上下文
-- ✨ **自定义提示词**：定制回答风格
-- ✨ **响应格式控制**：paragraph/list/json
-- ✨ **关键词精准检索**：hl_keywords/ll_keywords
-- ✨ **流式输出**：实时查看生成过程
+**New Advanced Features**:
+- ✨ **Conversation History**: Support for multi-turn conversation context
+- ✨ **Custom Prompts**: Customize response style
+- ✨ **Response Format Control**: paragraph/list/json
+- ✨ **Keyword Precision Retrieval**: hl_keywords/ll_keywords
+- ✨ **Streaming Output**: Real-time generation viewing
 
 ```bash
-# 基础查询
+# Basic query
 curl -X POST "http://localhost:8000/query?tenant_id=your_tenant" \
   -H "Content-Type: application/json" \
   -d '{
-    "query": "文档中的核心观点是什么？",
+    "query": "What are the core viewpoints in the document?",
     "mode": "hybrid"
   }'
 
-# 高级查询（多轮对话 + 自定义提示词）
+# Advanced query (multi-turn dialogue + custom prompt)
 curl -X POST "http://localhost:8000/query?tenant_id=your_tenant" \
   -H "Content-Type: application/json" \
   -d '{
-    "query": "能详细展开第二点吗？",
+    "query": "Can you elaborate on the second point?",
     "mode": "hybrid",
     "conversation_history": [
-      {"role": "user", "content": "有哪些要点？"},
-      {"role": "assistant", "content": "主要有三点..."}
+      {"role": "user", "content": "What are the key points?"},
+      {"role": "assistant", "content": "There are mainly three points..."}
     ],
-    "user_prompt": "请用专业的学术语言回答",
+    "user_prompt": "Please answer in professional academic language",
     "response_type": "list"
   }'
 
-# 流式查询（SSE）
+# Streaming query (SSE)
 curl -N -X POST "http://localhost:8000/query/stream?tenant_id=your_tenant" \
   -H "Content-Type: application/json" \
   -d '{
-    "query": "文档中的核心观点是什么？",
+    "query": "What are the core viewpoints in the document?",
     "mode": "hybrid"
   }'
 
-# 返回（实时流式输出）
-data: {"chunk": "根据", "done": false}
-data: {"chunk": "文档内容", "done": false}
+# Response (real-time streaming output)
+data: {"chunk": "Based on", "done": false}
+data: {"chunk": "document content", "done": false}
 data: {"done": true}
 ```
 
-#### 4️⃣ 任务状态查询
+#### 4️⃣ Task Status Query
 
 ```bash
 curl "http://localhost:8000/task/task-xxx-xxx?tenant_id=your_tenant"
 
-# 返回
+# Response
 {
   "task_id": "task-xxx-xxx",
   "status": "completed",
@@ -503,70 +505,70 @@ curl "http://localhost:8000/task/task-xxx-xxx?tenant_id=your_tenant"
 }
 ```
 
-#### 5️⃣ 租户管理
+#### 5️⃣ Tenant Management
 
 ```bash
-# 获取租户统计
+# Get tenant statistics
 curl "http://localhost:8000/tenants/stats?tenant_id=your_tenant"
 
-# 清除租户缓存
+# Clear tenant cache
 curl -X DELETE "http://localhost:8000/tenants/cache?tenant_id=your_tenant"
 
-# 查看实例池状态（管理员）
+# View instance pool status (admin)
 curl "http://localhost:8000/tenants/pool/stats"
 ```
 
-### VLM 模式对比 🆕
+### VLM Mode Comparison 🆕
 
-| 模式 | 速度 | 质量 | 资源消耗 | 适用场景 |
+| Mode | Speed | Quality | Resource Usage | Use Case |
 |------|------|------|----------|---------|
-| `off` | ⚡⚡⚡⚡⚡ | ⭐⭐⭐ | 极低 | 纯文本文档、快速批量处理 |
-| `selective` | ⚡⚡⚡⚡ | ⭐⭐⭐⭐ | 低 | 包含关键图表的文档（推荐） |
-| `full` | ⚡⚡ | ⭐⭐⭐⭐⭐ | 高 | 图表密集的研究报告、论文 |
+| `off` | ⚡⚡⚡⚡⚡ | ⭐⭐⭐ | Very Low | Plain text documents, fast batch processing |
+| `selective` | ⚡⚡⚡⚡ | ⭐⭐⭐⭐ | Low | Documents with key charts (recommended) |
+| `full` | ⚡⚡ | ⭐⭐⭐⭐⭐ | High | Chart-intensive research reports, papers |
 
-**处理时间估算**（以 20 页 PDF 为例）：
-- `off`: ~10 秒（仅 Markdown）
-- `selective`: ~30 秒（5-10 个重要图表）
-- `full`: ~120 秒（完整上下文处理）
+**Processing Time Estimate** (20-page PDF example):
+- `off`: ~10 seconds(Markdown only)
+- `selective`: ~30 seconds(5-10 important charts)
+- `full`: ~120 seconds(complete context processing)
 
-### 查询模式对比
+### Query Mode Comparison
 
-| 模式 | 速度 | 准确度 | 适用场景 |
+| Mode | Speed | Accuracy | Use Case |
 |------|------|--------|---------|
-| `naive` | ⚡⚡⚡⚡⚡ | ⭐⭐⭐ | 简单问答，快速检索 |
-| `local` | ⚡⚡⚡⚡ | ⭐⭐⭐⭐ | 局部实体关系查询 |
-| `global` | ⚡⚡⚡ | ⭐⭐⭐⭐ | 全局知识图谱推理 |
-| `hybrid` | ⚡⚡⚡ | ⭐⭐⭐⭐⭐ | 混合检索（推荐） |
-| `mix` | ⚡⚡ | ⭐⭐⭐⭐⭐ | 复杂问题，深度分析 |
+| `naive` | ⚡⚡⚡⚡⚡ | ⭐⭐⭐ | Simple Q&A, fast retrieval |
+| `local` | ⚡⚡⚡⚡ | ⭐⭐⭐⭐ | Local entity relationship queries |
+| `global` | ⚡⚡⚡ | ⭐⭐⭐⭐ | Global knowledge graph reasoning |
+| `hybrid` | ⚡⚡⚡ | ⭐⭐⭐⭐⭐ | Hybrid retrieval (recommended) |
+| `mix` | ⚡⚡ | ⭐⭐⭐⭐⭐ | Complex questions, deep analysis |
 
-### Query API v2.0 高级参数
+### Query API v2.0 Advanced Parameters
 
-| 参数 | 类型 | 说明 | 示例 |
+| Parameter | Type | Description | Example |
 |------|------|------|------|
-| `conversation_history` | List[Dict] | 多轮对话上下文 | `[{"role": "user", "content": "..."}]` |
-| `user_prompt` | str | 自定义提示词 | "请用专业的学术语言回答" |
-| `response_type` | str | 响应格式 | "paragraph", "list", "json" |
-| `hl_keywords` | List[str] | 高优先级关键词 | `["人工智能", "机器学习"]` |
-| `ll_keywords` | List[str] | 低优先级关键词 | `["应用", "案例"]` |
-| `only_need_context` | bool | 仅返回上下文（调试） | `true` |
-| `max_entity_tokens` | int | 实体 Token 限制 | `6000` |
+| `conversation_history` | List[Dict] | Multi-turn conversation context | `[{"role": "user", "content": "..."}]` |
+| `user_prompt` | str | Custom prompt | "Please answer in professional academic language" |
+| `response_type` | str | Response format | "paragraph", "list", "json" |
+| `hl_keywords` | List[str] | High priority keywords | `["artificial intelligence", "machine learning"]` |
+| `ll_keywords` | List[str] | Low priority keywords | `["application", "case study"]` |
+| `only_need_context` | bool | Return context only (debug) | `true` |
+| `max_entity_tokens` | int | Entity token limit | `6000` |
 
-完整 API 文档访问：http://localhost:8000/docs
+Complete API documentation:http://localhost:8000/docs
 
 ---
 
-## 🎯 使用示例
+## 🎯 Usage Examples
 
 ### Python SDK
 
 ```python
 import requests
 
-# 配置
+# Configuration
 BASE_URL = "http://localhost:8000"
 TENANT_ID = "your_tenant"
 
-# 上传文档
+# Upload document
 with open("document.pdf", "rb") as f:
     response = requests.post(
         f"{BASE_URL}/insert",
@@ -576,12 +578,12 @@ with open("document.pdf", "rb") as f:
     task_id = response.json()["task_id"]
     print(f"Task ID: {task_id}")
 
-# 查询
+# Query
 response = requests.post(
     f"{BASE_URL}/query",
     params={"tenant_id": TENANT_ID},
     json={
-        "query": "文档的主要内容是什么？",
+        "query": "What is the main content of the document?",
         "mode": "hybrid",
         "top_k": 10
     }
@@ -590,16 +592,16 @@ result = response.json()
 print(f"Answer: {result['answer']}")
 ```
 
-### cURL 完整示例
+### Complete cURL Example
 
 ```bash
-# 1. 上传 PDF 文档
+# 1. Upload PDF document
 TASK_ID=$(curl -X POST "http://localhost:8000/insert?tenant_id=demo&doc_id=report" \
   -F "file=@report.pdf" | jq -r '.task_id')
 
 echo "Task ID: $TASK_ID"
 
-# 2. 等待处理完成
+# 2. Wait for processing completion
 while true; do
   STATUS=$(curl -s "http://localhost:8000/task/$TASK_ID?tenant_id=demo" | jq -r '.status')
   echo "Status: $STATUS"
@@ -609,154 +611,154 @@ while true; do
   sleep 2
 done
 
-# 3. 查询文档内容
+# 3. Query document content
 curl -X POST "http://localhost:8000/query?tenant_id=demo" \
   -H "Content-Type: application/json" \
   -d '{
-    "query": "这份报告的主要结论是什么？",
+    "query": "What are the main conclusions of this report?",
     "mode": "hybrid"
   }' | jq '.answer'
 ```
 
 ---
 
-## 🛠️ 部署指南
+## 🛠️ Deployment
 
-### 系统要求
+### System Requirements
 
-**最小配置：**
-- CPU: 2 核
-- 内存: 4GB
-- 磁盘: 40GB SSD
-- 系统: Ubuntu 20.04+ / Debian 11+ / CentOS 8+
+**Minimum Configuration:**
+- CPU: 2 cores
+- RAM: 4GB
+- Disk: 40GB SSD
+- OS: Ubuntu 20.04+ / Debian 11+ / CentOS 8+
 
-**推荐配置（生产环境）：**
-- CPU: 4 核
-- 内存: 8GB
-- 磁盘: 100GB SSD
-- 系统: Ubuntu 22.04 LTS
+**Recommended Configuration (Production):**
+- CPU: 4 cores
+- RAM: 8GB
+- Disk: 100GB SSD
+- OS: Ubuntu 22.04 LTS
 
-### 服务器部署
+### Server Deployment
 
-#### 阿里云/腾讯云快速部署
+#### Quick Deployment on Aliyun/Tencent Cloud
 
 ```bash
-# SSH 登录服务器
+# SSH login to server
 ssh root@your-server-ip
 
-# 克隆项目
+# Clone project
 git clone https://github.com/BukeLy/rag-api.git
 cd rag-api
 
-# 运行一键部署脚本
+# Run one-click deployment script
 chmod +x deploy.sh
 ./deploy.sh
 
-# 脚本会自动：
-# 1. 安装 Docker 和 Docker Compose
-# 2. 配置环境变量
-# 3. 优化系统参数
-# 4. 启动服务
-# 5. 验证健康状态
+# The script will automatically:
+# 1. Install Docker and Docker Compose
+# 2. Configure environment variables
+# 3. Optimize system parameters
+# 4. Start services
+# 5. Verify health status
 ```
 
-#### 外部存储配置
+#### External Storage Configuration
 
-支持 DragonflyDB + Qdrant + Memgraph 外部存储（默认已启用）：
+Supports DragonflyDB + Qdrant + Memgraph external storage (enabled by default):
 
 ```bash
-# 在 .env 中配置
+# Configure in .env
 USE_EXTERNAL_STORAGE=true
 
-# DragonflyDB 配置（KV 存储）
+# DragonflyDB configuration (KV Storage)
 KV_STORAGE=RedisKVStorage
 REDIS_URI=redis://dragonflydb:6379/0
 
-# Qdrant 配置（向量存储）
+# Qdrant configuration (vector storage)
 VECTOR_STORAGE=QdrantVectorDBStorage
 QDRANT_URL=http://qdrant:6333
 
-# Memgraph 配置（图存储）
+# Memgraph configuration (graph storage)
 GRAPH_STORAGE=MemgraphStorage
 MEMGRAPH_URI=bolt://memgraph:7687
 MEMGRAPH_USERNAME=
 MEMGRAPH_PASSWORD=
 ```
 
-详细配置参考 [外部存储部署文档](docs/DEPLOYMENT_EXTERNAL_STORAGE.md)。
+See [External Storage Deployment Documentation](docs/DEPLOYMENT_EXTERNAL_STORAGE.md)。
 
-### Docker Compose 配置
+### Docker Compose Configuration
 
-项目提供两个配置文件：
+The project provides two configuration files:
 
-| 文件 | 用途 | 特点 |
+| File | Purpose | Features |
 |------|------|------|
-| `docker-compose.yml` | 生产模式 | 代码打包到镜像，性能最优 |
-| `docker-compose.dev.yml` | 开发模式 | 代码外挂，支持热重载 |
+| `docker-compose.yml` | Production mode | Code packaged in image, optimal performance |
+| `docker-compose.dev.yml` | Development mode | Code mounted externally, supports hot-reload |
 
-选择配置文件：
+Select configuration file:
 
 ```bash
-# 生产模式
+# Production mode
 docker compose -f docker-compose.yml up -d
 
-# 开发模式
+# Development mode
 docker compose -f docker-compose.dev.yml up -d
 ```
 
-### 性能优化
+### Performance Optimization
 
-#### 调优参数
+#### Tuning Parameters
 
-在 `.env` 中配置：
+Configure in `.env`:
 
 ```bash
-# ⚡ 并发控制（推荐：使用自动计算）
-# LLM_MAX_ASYNC=8                    # 【专家模式】手动指定 LLM 并发数
-#                                    # 未设置时自动计算: min(RPM, TPM/3500) ≈ 11
-# EMBEDDING_MAX_ASYNC=32             # 【专家模式】手动指定 Embedding 并发数
-#                                    # 未设置时自动计算: min(RPM, TPM/500) ≈ 800
-# RERANK_MAX_ASYNC=16                # 【专家模式】手动指定 Rerank 并发数
-#                                    # 未设置时自动计算: min(RPM, TPM/500) ≈ 800
+# ⚡ Concurrency Control (Recommended: use auto-calculation)
+# LLM_MAX_ASYNC=8                    # [Expert mode] Manually specify LLM concurrency
+#                                    # Auto-calculated when unset: min(RPM, TPM/3500) ≈ 11
+# EMBEDDING_MAX_ASYNC=32             # [Expert mode] Manually specify Embedding concurrency
+#                                    # Auto-calculated when unset: min(RPM, TPM/500) ≈ 800
+# RERANK_MAX_ASYNC=16                # [Expert mode] Manually specify Rerank concurrency
+#                                    # Auto-calculated when unset: min(RPM, TPM/500) ≈ 800
 
-# 检索数量（影响查询质量和速度）
-TOP_K=20  # 实体/关系检索数量
-CHUNK_TOP_K=10  # 文本块检索数量
+# Retrieval count (affects query quality and speed)
+TOP_K=20  # Entity/relationship retrieval count
+CHUNK_TOP_K=10  # Text chunk retrieval count
 
-# 文档处理并发
-DOCUMENT_PROCESSING_CONCURRENCY=10  # 远程模式可设高，本地模式设为 1
+# Document processing concurrency
+DOCUMENT_PROCESSING_CONCURRENCY=10  # Remote mode can be set high, local mode set to 1
 ```
 
-**🎯 并发数配置建议**：
-- **推荐方式**：不设置 `*_MAX_ASYNC`，让系统根据 TPM/RPM 自动计算
-- **专家模式**：如果需要手动控制，可设置 `LLM_MAX_ASYNC` 等参数
-- **优势**：自动计算可彻底避免 429 错误（TPM limit reached）
+**🎯 Concurrency Configuration Recommendations**:
+- **Recommended**: Don't set `*_MAX_ASYNC`, let the system auto-calculate based on TPM/RPM
+- **Expert mode**: If manual control needed, can set `LLM_MAX_ASYNC` and other parameters
+- **Advantage**: Auto-calculation completely avoids 429 errors (TPM limit reached)
 
-#### 模式选择
+#### Mode Selection
 
-- **MinerU 远程模式（推荐）**：高并发，节省资源
-- **MinerU 本地模式**：需要 GPU，内存占用高
-- **Docling 模式**：快速轻量，适合简单文档
+- **MinerU Remote Mode (Recommended)**: High concurrency, resource-efficient
+- **MinerU Local Mode**: Requires GPU, high memory usage
+- **Docling Mode**: Fast and lightweight, suitable for simple documents
 
 ---
 
-## 🏢 多租户使用
+## 🏢 Multi-tenant Usage
 
-### 租户隔离
+### Tenant Isolation
 
-每个租户拥有：
-- ✅ 独立的 LightRAG 实例
-- ✅ 隔离的数据存储空间
-- ✅ 独立的向量索引
-- ✅ 专属的知识图谱
-- ✅ **独立的服务配置**（LLM、Embedding、Rerank、DeepSeek-OCR、MinerU）🆕
+Each tenant has:
+- ✅ Independent LightRAG instance
+- ✅ Isolated data storage space
+- ✅ Independent vector index
+- ✅ Dedicated knowledge graph
+- ✅ **Independent service configuration** (LLM, Embedding, Rerank, DeepSeek-OCR, MinerU)🆕
 
-### 租户配置管理 🆕
+### Tenant Configuration Management 🆕
 
-每个租户可以独立配置 5 个服务，支持配置热重载：
+Each tenant can independently configure 5 services with hot-reload support:
 
 ```bash
-# 1️⃣ 为租户 A 配置独立的 DeepSeek-OCR API key
+# 1️⃣ Configure independent DeepSeek-OCR API key for Tenant A
 curl -X PUT "http://localhost:8000/tenants/tenant_a/config" \
   -H "Content-Type: application/json" \
   -d '{
@@ -768,7 +770,7 @@ curl -X PUT "http://localhost:8000/tenants/tenant_a/config" \
     }
   }'
 
-# 2️⃣ 为租户 B 配置独立的 MinerU API token
+# 2️⃣ Configure independent MinerU API token for Tenant B
 curl -X PUT "http://localhost:8000/tenants/tenant_b/config" \
   -H "Content-Type: application/json" \
   -d '{
@@ -779,7 +781,7 @@ curl -X PUT "http://localhost:8000/tenants/tenant_b/config" \
     }
   }'
 
-# 3️⃣ 同时配置多个服务（LLM + Embedding + DeepSeek-OCR）
+# 3️⃣ Configure multiple services simultaneously (LLM + Embedding + DeepSeek-OCR)
 curl -X PUT "http://localhost:8000/tenants/tenant_c/config" \
   -H "Content-Type: application/json" \
   -d '{
@@ -797,273 +799,273 @@ curl -X PUT "http://localhost:8000/tenants/tenant_c/config" \
     }
   }'
 
-# 4️⃣ 查询租户配置（API key 自动脱敏）
+# 4️⃣ Query tenant configuration (API key auto-masked)
 curl "http://localhost:8000/tenants/tenant_a/config"
 
-# 返回示例
+# Response example
 {
   "tenant_id": "tenant_a",
   "ds_ocr_config": {
-    "api_key": "sk-***-key",  // 自动脱敏
+    "api_key": "sk-***-key",  // Auto-masked
     "timeout": 90
   },
   "merged_config": {
-    "llm": {...},        // 使用全局配置
-    "embedding": {...},  // 使用全局配置
-    "rerank": {...},     // 使用全局配置
-    "ds_ocr": {...},     // 使用租户配置
-    "mineru": {...}      // 使用全局配置
+    "llm": {...},        // Using Global Config
+    "embedding": {...},  // Using Global Config
+    "rerank": {...},     // Using Global Config
+    "ds_ocr": {...},     // Using tenant config
+    "mineru": {...}      // Using Global Config
   }
 }
 
-# 5️⃣ 刷新配置缓存（配置热重载）
+# 5️⃣ Refresh config cache (config hot-reload)
 curl -X POST "http://localhost:8000/tenants/tenant_a/config/refresh"
 
-# 6️⃣ 删除租户配置（恢复使用全局配置）
+# 6️⃣ Delete tenant config (restore to global config)
 curl -X DELETE "http://localhost:8000/tenants/tenant_a/config"
 ```
 
-**支持的配置项**：
+**Supported Configuration Items**:
 
-| 服务 | 配置字段 | 说明 |
+| Service | Config Field | Description |
 |------|---------|------|
-| **LLM** | `llm_config` | 模型、API key、base_url 等 |
-| **Embedding** | `embedding_config` | 模型、API key、维度等 |
-| **Rerank** | `rerank_config` | 模型、API key等 |
-| **DeepSeek-OCR** | `ds_ocr_config` | API key、超时、模式等 |
-| **MinerU** | `mineru_config` | API token、版本、超时等 |
+| **LLM** | `llm_config` | Model, API key, base_url, etc. |
+| **Embedding** | `embedding_config` | Model, API key, dimension, etc. |
+| **Rerank** | `rerank_config` | Model, API key, etc. |
+| **DeepSeek-OCR** | `ds_ocr_config` | API key, timeout, mode, etc. |
+| **MinerU** | `mineru_config` | API token, version, timeout, etc. |
 
-**配置优先级**：租户配置 > 全局配置
+**Configuration Priority**: Tenant config > Global config
 
-**使用场景**：
-- 🔐 **多租户 SaaS**：每个租户使用自己的 API key
-- 💰 **按量计费**：通过独立 API key 跟踪租户使用量
-- 🎯 **差异化服务**：不同租户使用不同的模型（GPT-4 vs GPT-3.5）
-- 🧪 **A/B 测试**：对比不同模型/参数的效果
+**Use Cases**:
+- 🔐 **Multi-tenant SaaS**: Each tenant uses their own API key
+- 💰 **Pay-per-use**: Track tenant usage through independent API keys
+- 🎯 **Differentiated Services**: Different tenants use different models (GPT-4 vs GPT-3.5)
+- 🧪 **A/B Testing**: Compare different models/parameters
 
-### 使用方式
+### Usage
 
-所有 API 都需要提供 `tenant_id` 参数：
+All APIs require `tenant_id` parameter:
 
 ```bash
-# 租户 A 上传文档
+# Tenant A upload document
 curl -X POST "http://localhost:8000/insert?tenant_id=tenant_a&doc_id=doc1" \
   -F "file=@doc.pdf"
 
-# 租户 B 上传文档（完全隔离）
+# Tenant B upload document (fully isolated)
 curl -X POST "http://localhost:8000/insert?tenant_id=tenant_b&doc_id=doc1" \
   -F "file=@doc.pdf"
 
-# 租户 A 查询（只能查到自己的文档）
+# Tenant A query (can only query own documents)
 curl -X POST "http://localhost:8000/query?tenant_id=tenant_a" \
   -H "Content-Type: application/json" \
-  -d '{"query": "文档内容", "mode": "hybrid"}'
+  -d '{"query": "document content", "mode": "hybrid"}'
 ```
 
-### 实例池管理
+### Instance Pool Management
 
-- **容量**：最多缓存 50 个租户实例
-- **策略**：LRU（最近最少使用）自动清理
-- **配置隔离**：每个租户可使用独立的 LLM、Embedding、解析器配置
+- **Capacity**: Cache up to 50 tenant instances
+- **Strategy**: LRU (Least Recently Used) automatic cleanup
+- **Config Isolation**: Each tenant can use independent LLM, Embedding, parser configuration
 
 ---
 
-## 📊 监控与维护
+## 📊 Monitoring & Maintenance
 
-### 常用命令
+### Common Commands
 
 ```bash
-# 查看服务状态
+# View service status
 docker compose ps
 
-# 查看实时日志
+# View real-time logs
 docker compose logs -f
 
-# 重启服务
+# Restart services
 docker compose restart
 
-# 停止服务
+# Stop services
 docker compose down
 
-# 查看资源使用
+# View resource usage
 docker stats
 
-# 清理 Docker 资源
+# Clean Docker resources
 docker system prune -f
 ```
 
-### 维护脚本
+### Maintenance Scripts
 
 ```bash
-# 监控服务健康状态
+# Monitor service health
 ./scripts/monitor.sh
 
-# 备份数据
+# Backup data
 ./scripts/backup.sh
 
-# 更新服务
+# Update services
 ./scripts/update.sh
 
-# 性能测试
+# Performance testing
 ./scripts/test_concurrent_perf.sh
 
-# 性能监控
+# Performance monitoring
 ./scripts/monitor_performance.sh
 ```
 
-### 健康检查
+### Health Checks
 
 ```bash
-# 完整健康检查（推荐）
+# Complete health check (recommended)
 ./scripts/health_check.sh
-./scripts/health_check.sh --verbose  # 详细输出
+./scripts/health_check.sh --verbose  # verbose output
 
-# API 健康检查
+# API health check
 curl http://localhost:8000/
 
-# 租户统计
+# Tenant statistics
 curl "http://localhost:8000/tenants/stats?tenant_id=your_tenant"
 
-# 实例池状态
+# Instance pool status
 curl "http://localhost:8000/tenants/pool/stats"
 ```
 
 ---
 
-## 🗂️ 项目结构
+## 🗂️ Project Structure
 
 ```
 rag-api/
-├── main.py                 # FastAPI 应用入口
-├── api/                    # API 路由模块
-│   ├── __init__.py         # 路由聚合
-│   ├── insert.py           # 文档上传（单/批量）
-│   ├── query.py            # 智能查询
-│   ├── task.py             # 任务状态查询
-│   ├── tenant.py           # 租户管理
-│   ├── files.py            # 文件服务
-│   ├── models.py           # Pydantic 模型
-│   └── task_store.py       # 任务存储
-├── src/                    # 核心业务逻辑
-│   ├── rag.py              # LightRAG 生命周期管理
-│   ├── multi_tenant.py     # 多租户实例管理器
-│   ├── tenant_deps.py      # 租户依赖注入
-│   ├── logger.py           # 统一日志
-│   ├── metrics.py          # 性能指标
-│   ├── file_url_service.py # 临时文件服务
-│   ├── mineru_client.py    # MinerU 客户端
-│   └── mineru_result_processor.py  # 结果处理
-├── docs/                   # 文档
-│   ├── ARCHITECTURE.md     # 架构设计文档
-│   ├── USAGE.md            # 详细使用指南
-│   ├── DEPLOY_MODES.md     # 部署模式说明
-│   ├── PR_WORKFLOW.md      # PR 工作流程
+├── main.py                 # FastAPI application entry
+├── api/                    # API route modules
+│   ├── __init__.py         # Route aggregation
+│   ├── insert.py           # Document upload (single/batch)
+│   ├── query.py            # Intelligent query
+│   ├── task.py             # Task status query
+│   ├── tenant.py           # Tenant management
+│   ├── files.py            # File service
+│   ├── models.py           # Pydantic models
+│   └── task_store.py       # Task storage
+├── src/                    # Core business logic
+│   ├── rag.py              # LightRAG lifecycle management
+│   ├── multi_tenant.py     # Multi-tenant instance manager
+│   ├── tenant_deps.py      # Tenant dependency injection
+│   ├── logger.py           # Unified logging
+│   ├── metrics.py          # Performance metrics
+│   ├── file_url_service.py # Temporary file service
+│   ├── mineru_client.py    # MinerU client
+│   └── mineru_result_processor.py  # Result processing
+├── docs/                   # Documentation
+│   ├── ARCHITECTURE.md     # Architecture design documentation
+│   ├── USAGE.md            # Detailed usage guide
+│   ├── DEPLOY_MODES.md     # Deployment mode description
+│   ├── PR_WORKFLOW.md      # PR workflow
 │   └── ...
-├── scripts/                # 维护脚本
-│   ├── dev.sh              # 开发模式快捷启动
-│   ├── monitor.sh          # 服务监控
-│   ├── backup.sh           # 数据备份
-│   ├── update.sh           # 服务更新
+├── scripts/                # Maintenance scripts
+│   ├── dev.sh              # Development mode quick start
+│   ├── monitor.sh          # Service monitoring
+│   ├── backup.sh           # Data backup
+│   ├── update.sh           # Service update
 │   └── ...
-├── deploy.sh               # 一键部署脚本
-├── docker-compose.yml      # 生产模式配置
-├── docker-compose.dev.yml  # 开发模式配置
-├── Dockerfile              # 生产镜像
-├── Dockerfile.dev          # 开发镜像
-├── pyproject.toml          # 项目依赖
-├── uv.lock                 # 依赖锁定
-├── env.example             # 环境变量模板
-├── CLAUDE.md               # Claude AI 指引
-└── README.md               # 本文档
+├── deploy.sh               # One-click deployment script
+├── docker-compose.yml      # Production mode configuration
+├── docker-compose.dev.yml  # Development mode configuration
+├── Dockerfile              # Production image
+├── Dockerfile.dev          # Development image
+├── pyproject.toml          # Project dependencies
+├── uv.lock                 # Dependency lock
+├── env.example             # Environment variable template
+├── CLAUDE.md               # Claude AI guide
+└── README.md               # This documentation
 ```
 
 ---
 
-## 🐛 故障排查
+## 🐛 Troubleshooting
 
-### 常见问题
+### Common Issues
 
 <details>
-<summary><b>Q1: 服务启动失败怎么办？</b></summary>
+<summary><b>Q1: What to do if service fails to start?</b></summary>
 
 ```bash
-# 查看详细日志
+# View detailed logs
 docker compose logs
 
-# 检查端口占用
+# Check port usage
 netstat -tulpn | grep 8000
 
-# 检查 Docker 状态
+# Check Docker status
 docker ps -a
 ```
 </details>
 
 <details>
-<summary><b>Q2: multimodal_processed 错误？</b></summary>
+<summary><b>Q2: multimodal_processed error?</b></summary>
 
-**注意**：此问题已在 LightRAG 1.4.9.4+ 版本中修复。如果遇到此错误，说明版本过旧。
+**Note**: This issue has been fixed in LightRAG 1.4.9.4+. If you encounter this error, your version is outdated.
 
-**解决方案**：
+**Solution**:
 ```bash
-# 方案 1：升级到最新版本（推荐）
-# 修改 pyproject.toml 中的 LightRAG 版本
+# Option 1: Upgrade to latest version (recommended)
+# Modify LightRAG version in pyproject.toml
 # lightrag = "^1.4.9.4"
 
-# 重新构建镜像
+# Rebuild image
 docker compose down
 docker compose up -d --build
 
-# 方案 2：清理旧数据（临时方案）
+# Option 2: Clean old data (temporary solution)
 rm -rf ./rag_local_storage
 docker compose restart
 ```
 </details>
 
 <details>
-<summary><b>Q3: 上传文件返回 400 错误？</b></summary>
+<summary><b>Q3: File upload returns 400 error?</b></summary>
 
-检查：
-- 文件格式是否支持（PDF、DOCX、PNG、JPG等）
-- 文件大小是否超过 100MB
-- 文件是否为空
+Check:
+- File format supported (PDF, DOCX, PNG, JPG, etc.)
+- File size exceeds 100MB
+- File is empty
 
 ```bash
-# 查看支持的格式
+# View supported formats
 curl http://localhost:8000/docs
 ```
 </details>
 
 <details>
-<summary><b>Q3.5: Embedding 维度错误？</b></summary>
+<summary><b>Q3.5: Embedding dimension error?</b></summary>
 
-如果遇到维度相关错误，需要清理数据并重建：
+If you encounter dimension-related errors, need to clean data and rebuild:
 
 ```bash
-# 停止服务
+# Stop services
 docker compose down
 
-# 删除所有 volume（清空数据库）
+# Delete all volumes (clear database)
 docker volume rm rag-api_dragonflydb_data rag-api_qdrant_data rag-api_memgraph_data
 
-# 修改 .env 中的 EMBEDDING_DIM
-EMBEDDING_DIM=1024  # 或 4096，必须与模型匹配
+# Modify EMBEDDING_DIM in .env
+EMBEDDING_DIM=1024  # or 4096, must match the model
 
-# 重新启动
+# Restart
 docker compose up -d
 ```
 </details>
 
 <details>
-<summary><b>Q4: 查询速度很慢（>30秒）？</b></summary>
+<summary><b>Q4: Query is very slow (>30 seconds)?</b></summary>
 
-优化建议：
-1. 使用 `naive` 或 `hybrid` 模式而不是 `mix`
-2. 增加 `MAX_ASYNC` 参数（在 `.env` 中）
-3. 减小 `TOP_K` 和 `CHUNK_TOP_K`
-4. 启用 Reranker
+Optimization suggestions:
+1. Use `naive` or `hybrid` mode instead of `mix`
+2. Increase `MAX_ASYNC` parameter (in `.env`)
+3. Reduce `TOP_K` and `CHUNK_TOP_K`
+4. Enable Reranker
 
 ```bash
-# 修改 .env
+# Modify .env
 MAX_ASYNC=8
 TOP_K=20
 CHUNK_TOP_K=10
@@ -1071,201 +1073,201 @@ CHUNK_TOP_K=10
 </details>
 
 <details>
-<summary><b>Q5: 内存不足（OOM）？</b></summary>
+<summary><b>Q5: Out of memory (OOM)?</b></summary>
 
-如果使用本地 MinerU：
+If using local MinerU:
 ```bash
-# 切换到远程模式
-# 在 .env 中修改
+# Switch to remote mode
+# Modify in .env
 MINERU_MODE=remote
 MINERU_API_TOKEN=your_token
 
-# 或限制并发
+# Or limit concurrency
 DOCUMENT_PROCESSING_CONCURRENCY=1
 ```
 </details>
 
 <details>
-<summary><b>Q6: 容器重启后任务丢失？</b></summary>
+<summary><b>Q6: Tasks lost after container restart?</b></summary>
 
-**问题现象**：
-- 容器重启后无法查询之前的任务状态
-- 租户实例被 LRU 驱逐后任务消失
+**Problem Symptoms**:
+- Cannot query previous task status after container restart
+- Tasks disappear after tenant instance evicted by LRU
 
-**解决方案**：启用 Redis 任务存储
+**Solution**: Enable Redis task storage
 
 ```bash
-# 修改 .env
+# Modify .env
 TASK_STORE_STORAGE=redis
 
-# 重启服务
+# Restart services
 docker compose restart
 
-# 验证
+# Verify
 docker compose logs api | grep TaskStore
-# 应该看到: ✅ TaskStore: Redis connection successful
+# Should see: ✅ TaskStore: Redis connection successful
 ```
 
-**配置说明**：
-- `memory` 模式：内存存储，重启后数据丢失（默认，适合开发）
-- `redis` 模式：持久化存储，支持容器重启和实例重建（生产推荐）
+**Configuration Description**:
+- `memory` mode: In-memory storage, data lost after restart (default, suitable for development)
+- `redis` mode: Persistent storage, supports container restart and instance rebuild (production recommended)
 
-**TTL 策略**（Redis 模式自动清理）：
-- completed 任务：24 小时
-- failed 任务：24 小时
-- pending/processing 任务：6 小时
+**TTL Strategy** (Redis mode auto-cleanup):
+- completed tasks: 24 hours
+- failed tasks: 24 hours
+- pending/processing tasks: 6 hours
 </details>
 
 <details>
-<summary><b>Q7: VLM 模式处理失败？</b></summary>
+<summary><b>Q7: VLM mode processing failed?</b></summary>
 
-**检查项**：
-1. **vision_model_func 未配置**
-   - 检查日志：`vision_model_func not found, fallback to off mode`
-   - 确保 `.env` 中配置了 LLM API（豆包）
+**Check Items**:
+1. **vision_model_func not configured**
+   - Check logs:`vision_model_func not found, fallback to off mode`
+   - Ensure LLM API is configured in `.env`
 
-2. **图片文件不存在**
-   - 检查日志：`Image file not found: xxx`
-   - 可能是 MinerU ZIP 损坏或解压失败
+2. **Image file does not exist**
+   - Check logs:`Image file not found: xxx`
+   - Possibly corrupted MinerU ZIP or extraction failed
 
-3. **超时错误**
-   - `full` 模式处理大文件可能超时
-   - 建议：先用 `selective` 模式，或增加 `VLM_TIMEOUT`
+3. **Timeout error**
+   - `full` mode may timeout on large files
+   - Suggestion: Use `selective` mode first, or increase `VLM_TIMEOUT`
 
 ```bash
-# 修改 .env
-VLM_TIMEOUT=300  # 增加到 5 分钟
-RAG_VLM_MODE=selective  # 降级到 selective
+# Modify .env
+VLM_TIMEOUT=300  # Increase to 5 minutes
+RAG_VLM_MODE=selective  # downgrade to selective
 ```
 
-**调试技巧**：
+**Debugging Tips**:
 ```bash
-# 查看详细日志
+# View detailed logs
 docker compose logs -f | grep VLM
 
-# 测试单个文件
+# Test single file
 curl -X POST 'http://localhost:8000/insert?tenant_id=test&doc_id=test&vlm_mode=off' \
   -F 'file=@test.pdf'
 ```
 </details>
 
-### 性能调优建议
+### Performance Tuning Recommendations
 
-| 场景 | MAX_ASYNC | TOP_K | CHUNK_TOP_K | MINERU_MODE |
+| Scenario | MAX_ASYNC | TOP_K | CHUNK_TOP_K | MINERU_MODE |
 |------|-----------|-------|-------------|-------------|
-| 快速响应 | 8 | 10 | 5 | remote |
-| 平衡模式 | 8 | 20 | 10 | remote |
-| 高准确度 | 4 | 60 | 20 | remote |
-| 资源受限 | 4 | 20 | 10 | remote |
+| Fast response | 8 | 10 | 5 | remote |
+| Balanced mode | 8 | 20 | 10 | remote |
+| High accuracy | 4 | 60 | 20 | remote |
+| Resource limited | 4 | 20 | 10 | remote |
 
 ---
 
-## 📖 文档
+## 📖 Documentation
 
-- [📘 架构设计文档](docs/ARCHITECTURE.md) - 详细的系统架构和设计思路
-- [📗 使用指南](docs/USAGE.md) - 完整的 API 使用文档和示例
-- [📙 部署模式说明](docs/DEPLOY_MODES.md) - 生产模式 vs 开发模式
-- [📕 PR 工作流程](docs/PR_WORKFLOW.md) - 贡献代码的流程指南
-- [📔 外部存储部署](docs/DEPLOYMENT_EXTERNAL_STORAGE.md) - Redis/PostgreSQL/Neo4j 配置
-- [📊 API 对比分析](docs/API_COMPARISON.md) - rag-api vs LightRAG 官方 API 对比
-- [🌐 WebUI 集成指南](docs/LIGHTRAG_WEBUI_INTEGRATION.md) - 知识图谱可视化集成
+- [📘 Architecture Design Documentation](docs/ARCHITECTURE.md) - Detailed system architecture and design concepts
+- [📗 Usage Guide](docs/USAGE.md) - Complete API usage documentation and examples
+- [📙 Deployment Mode Description](docs/DEPLOY_MODES.md) - Production mode vs Development mode
+- [📕 PR Workflow](docs/PR_WORKFLOW.md) - Process guide for code contribution
+- [📔 External Storage Deployment](docs/DEPLOYMENT_EXTERNAL_STORAGE.md) - Redis/PostgreSQL/Neo4j configuration
+- [📊 API Comparison Analysis](docs/API_COMPARISON.md) - rag-api vs LightRAG official API comparison
+- [🌐 WebUI Integration Guide](docs/LIGHTRAG_WEBUI_INTEGRATION.md) - Knowledge graph visualization integration
 
 ---
 
-## 🤝 贡献指南
+## 🤝 Contributing
 
-我们欢迎所有形式的贡献！
+We welcome all forms of contribution!
 
-### 如何贡献
+### How to Contribute
 
-1. **Fork 项目**
+1. **Fork the project**
 
 ```bash
 git clone https://github.com/BukeLy/rag-api.git
 cd rag-api
 ```
 
-2. **创建功能分支**
+2. **Create feature branch**
 
 ```bash
 git checkout -b feature/your-feature-name
 ```
 
-3. **开发和测试**
+3. **Development and Testing**
 
 ```bash
-# 安装依赖
+# Install dependencies
 uv sync
 
-# 运行测试
+# Run tests
 uv run pytest
 
-# 代码格式化
+# Code formatting
 uv run black .
 uv run isort .
 ```
 
-4. **提交代码**
+4. **Submit code**
 
 ```bash
 git add .
-git commit -m "feat: 添加新功能"
+git commit -m "feat: Add new feature"
 git push origin feature/your-feature-name
 ```
 
-5. **创建 Pull Request**
+5. **Create Pull Request**
 
-在 GitHub 上创建 PR，详细描述你的更改。
+Create a PR on GitHub with detailed description of your changes.
 
-### Commit 规范
+### Commit Conventions
 
-使用语义化提交信息：
+Use semantic commit messages:
 
-- `feat:` 新功能
-- `fix:` Bug 修复
-- `docs:` 文档更新
-- `style:` 代码格式
-- `refactor:` 代码重构
-- `perf:` 性能优化
-- `test:` 测试相关
-- `chore:` 构建/工具
+- `feat:` New feature
+- `fix:` Bug fix
+- `docs:` Documentation update
+- `style:` Code formatting
+- `refactor:` Code refactoring
+- `perf:` Performance optimization
+- `test:` Testing
+- `chore:` Build/tools
 
-详见 [PR 工作流程文档](docs/PR_WORKFLOW.md)。
-
----
-
-## 📄 许可证
-
-本项目采用 MIT 许可证。详见 [LICENSE](LICENSE) 文件。
+See [PR Workflow Documentation](docs/PR_WORKFLOW.md)。
 
 ---
 
-## 🙏 致谢
+## 📄 License
 
-本项目基于以下优秀的开源项目构建：
-
-- [LightRAG](https://github.com/HKUDS/LightRAG) - 高效的知识图谱 RAG 框架
-- [RAG-Anything](https://github.com/your-org/rag-anything) - 多模态文档解析
-- [MinerU](https://github.com/opendatalab/MinerU) - 强大的 PDF 解析工具
-- [Docling](https://github.com/DS4SD/docling) - 轻量级文档解析
-- [FastAPI](https://fastapi.tiangolo.com/) - 现代化的 Python Web 框架
-
-特别感谢所有贡献者和用户的支持！ 🎉
+This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
 
 ---
 
-## 📬 联系我们
+## 🙏 Acknowledgments
+
+This project is built on the following excellent open source projects:
+
+- [LightRAG](https://github.com/HKUDS/LightRAG) - Efficient knowledge graph RAG framework
+- [RAG-Anything](https://github.com/your-org/rag-anything) - Multimodal document parsing
+- [MinerU](https://github.com/opendatalab/MinerU) - Powerful PDF parsing tool
+- [Docling](https://github.com/DS4SD/docling) - Lightweight document parsing
+- [FastAPI](https://fastapi.tiangolo.com/) - Modern Python web framework
+
+Special thanks to all contributors and users for their support! 🎉
+
+---
+
+## 📬 Contact Us
 
 - **GitHub**: [@BukeLy](https://github.com/BukeLy)
 - **Email**: buledream233@gmail.com
-- **Issues**: [提交问题](https://github.com/BukeLy/rag-api/issues)
-- **Discussions**: [参与讨论](https://github.com/BukeLy/rag-api/discussions)
+- **Issues**: [Submit Issue](https://github.com/BukeLy/rag-api/issues)
+- **Discussions**: [Join Discussion](https://github.com/BukeLy/rag-api/discussions)
 
 ---
 
 <div align="center">
 
-**⭐ 如果这个项目对你有帮助，请给个 Star！**
+**⭐ If this project helps you, please give it a Star!**
 
 Made with ❤️ by [BukeLy](https://github.com/BukeLy)
 
