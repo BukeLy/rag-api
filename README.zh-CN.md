@@ -6,12 +6,14 @@
 
 基于 RAG-Anything 和 LightRAG 构建的企业级 RAG 服务
 
-[![CI](https://github.com/YOUR_USERNAME/rag-api/actions/workflows/ci-basic.yml/badge.svg)](https://github.com/YOUR_USERNAME/rag-api/actions/workflows/ci-basic.yml)
+[![CI](https://github.com/BukeLy/rag-api/actions/workflows/ci-basic.yml/badge.svg)](https://github.com/BukeLy/rag-api/actions/workflows/ci-basic.yml)
 [![Python](https://img.shields.io/badge/Python-3.11+-blue.svg)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-00C7B7.svg)](https://fastapi.tiangolo.com/)
 [![LightRAG](https://img.shields.io/badge/LightRAG-1.4+-orange.svg)](https://github.com/HKUDS/LightRAG)
 [![Docker](https://img.shields.io/badge/Docker-Ready-2496ED.svg)](https://www.docker.com/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+
+[English](README.md) | [简体中文](README.zh-CN.md)
 
 [功能特性](#-功能特性) • [快速开始](#-快速开始) • [架构设计](#-架构设计) • [API 文档](#-api-文档) • [部署指南](#-部署指南)
 
