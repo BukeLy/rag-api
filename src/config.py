@@ -232,6 +232,23 @@ class LightRAGQueryConfig(BaseSettings):
         populate_by_name = True
 
 
+# ==================== Parser Configuration ====================
+
+class ParserConfig(BaseSettings):
+    """Parser Selection Configuration"""
+
+    size_threshold_kb: int = Field(
+        default=500,
+        description="File size threshold in KB for parser selection (files smaller than this use DeepSeek-OCR)",
+        alias="PARSER_SIZE_THRESHOLD_KB"
+    )
+
+    class Config:
+        env_file = ".env"
+        extra = "ignore"
+        populate_by_name = True
+
+
 # ==================== Multi-Tenant Configuration ====================
 
 class MultiTenantConfig(BaseSettings):
@@ -295,6 +312,7 @@ class AppConfig:
         self.ds_ocr = DeepSeekOCRConfig()
         self.storage = StorageConfig()
         self.lightrag_query = LightRAGQueryConfig()
+        self.parser = ParserConfig()
         self.multi_tenant = MultiTenantConfig()
 
     def validate(self) -> None:
@@ -335,6 +353,7 @@ class AppConfig:
         print(f"Storage - Vector: {self.storage.vector_storage}")
         print(f"Storage - Graph: {self.storage.graph_storage}")
         print(f"Storage - DocStatus: {self.storage.doc_status_storage}")
+        print(f"Parser Size Threshold: {self.parser.size_threshold_kb}KB")
         print(f"Max Tenant Instances: {self.multi_tenant.max_tenant_instances}")
         print("=" * 60)
 
