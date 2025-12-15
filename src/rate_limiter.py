@@ -379,7 +379,8 @@ def get_rate_limiter(
     service: str,
     max_concurrent: Optional[int] = None,
     requests_per_minute: Optional[int] = None,
-    tokens_per_minute: Optional[int] = None
+    tokens_per_minute: Optional[int] = None,
+    avg_tokens_per_request: Optional[int] = None
 ) -> AsyncSemaphoreWithRateLimit:
     """
     Get or create a rate limiter for a specific service.
@@ -394,16 +395,18 @@ def get_rate_limiter(
     Auto-calculation Formula:
         concurrent = min(RPM, TPM / avg_tokens_per_request)
 
-    Average Token Estimation:
+    Average Token Estimation (configurable per tenant/service):
         - LLM: 3500 tokens/request (insert + query scenarios)
-        - Embedding: 500 tokens/request (batch encoding)
+        - Embedding: 20000 tokens/request (large batch encoding)
         - Rerank: 500 tokens/request (document scoring)
+        - DS_OCR: 3500 tokens/request (OCR + description)
 
     Args:
         service: Service name (e.g., "llm", "embedding", "rerank")
         max_concurrent: Override max concurrent (tenant RateLimiter config)
         requests_per_minute: Override RPM limit (tenant config)
         tokens_per_minute: Override TPM limit (tenant config)
+        avg_tokens_per_request: Override average tokens per request (tenant config)
 
     Returns:
         AsyncSemaphoreWithRateLimit instance
@@ -415,28 +418,44 @@ def get_rate_limiter(
         # Import config for global defaults
         from src.config import config
 
-        # Token estimation per service (based on production observation)
-        avg_tokens_map = {
-            "llm": 3500,        # Insert: 2840, Query: 3000-5000, Conservative: 3500
-            "embedding": 20000, # Large batch: observed 17181 tokens/request (2.4MB doc)
-            "rerank": 500,      # Document scoring average
-            "ds_ocr": 3500      # Similar to LLM (OCR + description)
-        }
+        # Get service-specific config and defaults
+        if service == "llm":
+            service_config = config.llm
+            default_rpm = 800
+            default_tpm = 40000
+            default_avg_tokens = 3500
+        elif service == "embedding":
+            service_config = config.embedding
+            default_rpm = 1600
+            default_tpm = 400000
+            default_avg_tokens = 20000
+        elif service == "rerank":
+            service_config = config.rerank
+            default_rpm = 1600
+            default_tpm = 400000
+            default_avg_tokens = 500
+        elif service == "ds_ocr":
+            service_config = config.ds_ocr if hasattr(config, 'ds_ocr') else None
+            default_rpm = 800
+            default_tpm = 40000
+            default_avg_tokens = 3500
+        else:
+            service_config = None
+            default_rpm = 1000
+            default_tpm = 50000
+            default_avg_tokens = 3500
 
-        # Default RPM/TPM values (used if not provided)
-        default_rpm_tpm = {
-            "llm": (800, 40000),
-            "embedding": (1600, 400000),
-            "rerank": (1600, 400000),
-            "ds_ocr": (800, 40000)
-        }
-
-        default_rpm, default_tpm = default_rpm_tpm.get(service, (1000, 50000))
-        avg_tokens = avg_tokens_map.get(service, 3500)
-
-        # Get effective RPM/TPM (tenant config > global config)
-        effective_rpm = requests_per_minute or default_rpm
-        effective_tpm = tokens_per_minute or default_tpm
+        # Get effective values with priority: param > config > default
+        if service_config:
+            effective_rpm = requests_per_minute or getattr(service_config, 'requests_per_minute', default_rpm)
+            effective_tpm = tokens_per_minute or getattr(service_config, 'tokens_per_minute', default_tpm)
+            effective_avg_tokens = avg_tokens_per_request or getattr(service_config, 'avg_tokens_per_request', default_avg_tokens)
+            env_max_async = getattr(service_config, 'max_async', None)
+        else:
+            effective_rpm = requests_per_minute or default_rpm
+            effective_tpm = tokens_per_minute or default_tpm
+            effective_avg_tokens = avg_tokens_per_request or default_avg_tokens
+            env_max_async = None
 
         # Determine final concurrent value
         final_concurrent = None
@@ -448,28 +467,16 @@ def get_rate_limiter(
             config_source = "tenant"
 
         # Priority 2: Environment variable (expert mode)
-        if final_concurrent is None:
-            if service == "llm":
-                env_max_async = getattr(config.llm, 'max_async', None)
-            elif service == "embedding":
-                env_max_async = getattr(config.embedding, 'max_async', None)
-            elif service == "rerank":
-                env_max_async = getattr(config.rerank, 'max_async', None)
-            elif service == "ds_ocr":
-                env_max_async = getattr(config.ds_ocr, 'max_async', None) if hasattr(config, 'ds_ocr') else None
-            else:
-                env_max_async = None
-
-            if env_max_async is not None:
-                final_concurrent = env_max_async
-                config_source = "env"
+        if final_concurrent is None and env_max_async is not None:
+            final_concurrent = env_max_async
+            config_source = "env"
 
         # Priority 3: Auto-calculate (default behavior)
         if final_concurrent is None:
             final_concurrent = calculate_optimal_concurrent(
                 requests_per_minute=effective_rpm,
                 tokens_per_minute=effective_tpm,
-                avg_tokens_per_request=avg_tokens,
+                avg_tokens_per_request=effective_avg_tokens,
                 max_in_flight=30  # Conservative: max 30 requests in-flight
             )
             config_source = "auto"
@@ -478,7 +485,7 @@ def get_rate_limiter(
         if final_concurrent < 2:
             logger.warning(
                 f"[{service.upper()}] Calculated concurrent < 2 "
-                f"(RPM={effective_rpm}, TPM={effective_tpm}, avg_tokens={avg_tokens}, max_in_flight=30). "
+                f"(RPM={effective_rpm}, TPM={effective_tpm}, avg_tokens={effective_avg_tokens}, max_in_flight=30). "
                 f"Setting to 2. Consider increasing TPM/RPM limits."
             )
             final_concurrent = 2
@@ -495,7 +502,7 @@ def get_rate_limiter(
         if config_source == "auto":
             logger.info(
                 f"Created rate limiter for {service.upper()}: "
-                f"concurrent={final_concurrent} (auto: TPM={effective_tpm} / avg_tokens={avg_tokens} / max_in_flight=30), "
+                f"concurrent={final_concurrent} (auto: TPM={effective_tpm} / avg_tokens={effective_avg_tokens} / max_in_flight=30), "
                 f"RPM={effective_rpm}, TPM={effective_tpm}"
             )
         else:

@@ -80,7 +80,8 @@ class DeepSeekOCRClient:
             service="ds_ocr",
             max_concurrent=getattr(self.config, 'max_async', config.ds_ocr.max_async),
             requests_per_minute=getattr(self.config, 'requests_per_minute', config.ds_ocr.requests_per_minute),
-            tokens_per_minute=getattr(self.config, 'tokens_per_minute', config.ds_ocr.tokens_per_minute)
+            tokens_per_minute=getattr(self.config, 'tokens_per_minute', config.ds_ocr.tokens_per_minute),
+            avg_tokens_per_request=getattr(self.config, 'avg_tokens_per_request', config.ds_ocr.avg_tokens_per_request)
         )
 
         logger.info(f"DeepSeek-OCR Client initialized: {self.config.base_url} (with rate limiting)")
