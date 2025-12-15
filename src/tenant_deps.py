@@ -8,6 +8,14 @@ from typing import Optional
 from fastapi import Query, HTTPException
 
 from src.logger import logger
+from src.config import get_config
+
+
+# 在模块加载时获取配置值，用于 Query 参数定义
+# 注意：这些值在模块加载时缓存，配置更改需要重启服务才能生效
+_config = get_config()
+_TENANT_ID_MIN_LENGTH = _config.multi_tenant.tenant_id_min_length
+_TENANT_ID_MAX_LENGTH = _config.multi_tenant.tenant_id_max_length
 
 
 async def validate_tenant_access(tenant_id: str) -> bool:
@@ -33,9 +41,9 @@ async def validate_tenant_access(tenant_id: str) -> bool:
         logger.warning("Empty tenant_id")
         return False
 
-    # 长度验证（3-50 字符）
-    if len(tenant_id) < 3 or len(tenant_id) > 50:
-        logger.warning(f"Invalid tenant_id length: {len(tenant_id)}")
+    # 长度验证（使用模块级缓存的配置值）
+    if len(tenant_id) < _TENANT_ID_MIN_LENGTH or len(tenant_id) > _TENANT_ID_MAX_LENGTH:
+        logger.warning(f"Invalid tenant_id length: {len(tenant_id)} (allowed: {_TENANT_ID_MIN_LENGTH}-{_TENANT_ID_MAX_LENGTH})")
         return False
 
     # 字符验证（仅允许字母、数字、下划线、连字符）
@@ -59,9 +67,9 @@ async def validate_tenant_access(tenant_id: str) -> bool:
 async def get_tenant_id(
     tenant_id: Optional[str] = Query(
         default=None,
-        description="租户ID（必填，3-50字符，支持字母数字下划线连字符）",
-        min_length=3,
-        max_length=50,
+        description=f"租户ID（必填，{_TENANT_ID_MIN_LENGTH}-{_TENANT_ID_MAX_LENGTH}字符，支持字母数字下划线连字符）",
+        min_length=_TENANT_ID_MIN_LENGTH,
+        max_length=_TENANT_ID_MAX_LENGTH,
         regex=r'^[a-zA-Z0-9_-]+$'
     )
 ) -> str:

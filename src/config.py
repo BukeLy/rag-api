@@ -241,6 +241,18 @@ class MultiTenantConfig(BaseSettings):
         alias="MAX_TENANT_INSTANCES"
     )
 
+    # Tenant ID Validation
+    tenant_id_min_length: int = Field(
+        default=3,
+        description="Minimum Tenant ID Length",
+        alias="TENANT_ID_MIN_LENGTH"
+    )
+    tenant_id_max_length: int = Field(
+        default=50,
+        description="Maximum Tenant ID Length",
+        alias="TENANT_ID_MAX_LENGTH"
+    )
+
     class Config:
         env_file = ".env"
         extra = "ignore"
