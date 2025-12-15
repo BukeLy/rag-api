@@ -97,13 +97,15 @@ class MultiTenantRAGManager:
         requests_per_minute = llm_config.get("requests_per_minute", config.llm.requests_per_minute)
         tokens_per_minute = llm_config.get("tokens_per_minute", config.llm.tokens_per_minute)
         max_concurrent = llm_config.get("max_async", None)  # RateLimiter 的并发数（可选）
+        avg_tokens_per_request = llm_config.get("avg_tokens_per_request", config.llm.avg_tokens_per_request)
 
         # 创建速率限制器（会自动计算 max_concurrent，除非显式提供）
         rate_limiter = get_rate_limiter(
             service="llm",
             max_concurrent=max_concurrent,  # 租户的 RateLimiter 配置
             requests_per_minute=requests_per_minute,
-            tokens_per_minute=tokens_per_minute
+            tokens_per_minute=tokens_per_minute,
+            avg_tokens_per_request=avg_tokens_per_request
         )
 
         # 获取 rate_limiter 实际使用的并发数（将用于 LightRAG）
@@ -162,12 +164,14 @@ class MultiTenantRAGManager:
         requests_per_minute = embedding_config.get("requests_per_minute", config.embedding.requests_per_minute)
         tokens_per_minute = embedding_config.get("tokens_per_minute", config.embedding.tokens_per_minute)
         max_concurrent = embedding_config.get("max_async", config.embedding.max_async)
+        avg_tokens_per_request = embedding_config.get("avg_tokens_per_request", config.embedding.avg_tokens_per_request)
 
         rate_limiter = get_rate_limiter(
             service="embedding",
             max_concurrent=max_concurrent,
             requests_per_minute=requests_per_minute,
-            tokens_per_minute=tokens_per_minute
+            tokens_per_minute=tokens_per_minute,
+            avg_tokens_per_request=avg_tokens_per_request
         )
 
         # 获取 rate_limiter 实际使用的并发数（将用于 LightRAG）
@@ -227,12 +231,14 @@ class MultiTenantRAGManager:
             requests_per_minute = rerank_config.get("requests_per_minute", config.rerank.requests_per_minute)
             tokens_per_minute = rerank_config.get("tokens_per_minute", config.rerank.tokens_per_minute)
             max_concurrent = rerank_config.get("max_async", config.rerank.max_async)
+            avg_tokens_per_request = rerank_config.get("avg_tokens_per_request", config.rerank.avg_tokens_per_request)
 
             rate_limiter = get_rate_limiter(
                 service="rerank",
                 max_concurrent=max_concurrent,
                 requests_per_minute=requests_per_minute,
-                tokens_per_minute=tokens_per_minute
+                tokens_per_minute=tokens_per_minute,
+                avg_tokens_per_request=avg_tokens_per_request
             )
 
             def rerank_func_with_rate_limit(query, documents, top_n=None, **kwargs):
@@ -290,12 +296,14 @@ class MultiTenantRAGManager:
         requests_per_minute = llm_config.get("requests_per_minute", config.llm.requests_per_minute)
         tokens_per_minute = llm_config.get("tokens_per_minute", config.llm.tokens_per_minute)
         max_concurrent = llm_config.get("max_async", config.llm.max_async)
+        avg_tokens_per_request = llm_config.get("avg_tokens_per_request", config.llm.avg_tokens_per_request)
 
         rate_limiter = get_rate_limiter(
             service="llm",  # VLM 共享 LLM 的速率限制
             max_concurrent=max_concurrent,
             requests_per_minute=requests_per_minute,
-            tokens_per_minute=tokens_per_minute
+            tokens_per_minute=tokens_per_minute,
+            avg_tokens_per_request=avg_tokens_per_request
         )
 
         async def seed_vision_model_func(prompt: str, image_data: str, system_prompt: str) -> str:

@@ -31,6 +31,7 @@ class LLMConfig(BaseSettings):
     requests_per_minute: int = Field(default=800, description="Maximum requests per minute")
     tokens_per_minute: int = Field(default=40000, description="Maximum tokens per minute (input + output)")
     max_async: Optional[int] = Field(default=None, description="Maximum concurrent requests (optional, auto-calculated if not set)")
+    avg_tokens_per_request: int = Field(default=3500, description="Average tokens per request for concurrency calculation (Insert: 2840, Query: 3000-5000)")
 
     class Config:
         env_prefix = "LLM_"
@@ -58,6 +59,7 @@ class EmbeddingConfig(BaseSettings):
     requests_per_minute: int = Field(default=1600, description="Maximum requests per minute")
     tokens_per_minute: int = Field(default=400000, description="Maximum tokens per minute")
     max_async: Optional[int] = Field(default=None, description="Maximum concurrent requests (optional, auto-calculated if not set)")
+    avg_tokens_per_request: int = Field(default=20000, description="Average tokens per request for concurrency calculation (Large batch: observed 17181 tokens/request)")
     timeout: int = Field(default=30, description="HTTP request timeout (seconds)")
 
     class Config:
@@ -82,6 +84,7 @@ class RerankConfig(BaseSettings):
     requests_per_minute: int = Field(default=1600, description="Maximum requests per minute")
     tokens_per_minute: int = Field(default=400000, description="Maximum tokens per minute")
     max_async: Optional[int] = Field(default=None, description="Maximum concurrent requests (optional, auto-calculated if not set)")
+    avg_tokens_per_request: int = Field(default=500, description="Average tokens per request for concurrency calculation (Document scoring average)")
     timeout: int = Field(default=30, description="HTTP request timeout (seconds)")
 
     class Config:
@@ -150,6 +153,7 @@ class DeepSeekOCRConfig(BaseSettings):
     requests_per_minute: int = Field(default=800, description="Maximum requests per minute")
     tokens_per_minute: int = Field(default=40000, description="Maximum tokens per minute")
     max_async: Optional[int] = Field(default=None, description="Maximum concurrent requests (optional, auto-calculated if not set)")
+    avg_tokens_per_request: int = Field(default=3500, description="Average tokens per request for concurrency calculation (Similar to LLM: OCR + description)")
 
     class Config:
         env_prefix = "DS_OCR_"

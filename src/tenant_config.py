@@ -312,6 +312,7 @@ class TenantConfigManager:
             # 速率限制配置
             "requests_per_minute": config.llm.requests_per_minute,
             "tokens_per_minute": config.llm.tokens_per_minute,
+            "avg_tokens_per_request": config.llm.avg_tokens_per_request,  # 用于并发计算的平均 token 数
         }
 
         if tenant_config and tenant_config.llm_config:
@@ -333,6 +334,7 @@ class TenantConfigManager:
             "requests_per_minute": config.embedding.requests_per_minute,
             "tokens_per_minute": config.embedding.tokens_per_minute,
             "max_async": config.embedding.max_async,  # RateLimiter 的并发数（可选）
+            "avg_tokens_per_request": config.embedding.avg_tokens_per_request,  # 用于并发计算的平均 token 数
             "timeout": config.embedding.timeout,
         }
 
@@ -354,6 +356,7 @@ class TenantConfigManager:
             "requests_per_minute": config.rerank.requests_per_minute,
             "tokens_per_minute": config.rerank.tokens_per_minute,
             "max_async": config.rerank.max_async,  # RateLimiter 的并发数（可选）
+            "avg_tokens_per_request": config.rerank.avg_tokens_per_request,  # 用于并发计算的平均 token 数
             "timeout": config.rerank.timeout,
         }
 
@@ -379,6 +382,7 @@ class TenantConfigManager:
             "requests_per_minute": config.ds_ocr.requests_per_minute,
             "tokens_per_minute": config.ds_ocr.tokens_per_minute,
             "max_async": config.ds_ocr.max_async,
+            "avg_tokens_per_request": config.ds_ocr.avg_tokens_per_request,  # 用于并发计算的平均 token 数
         }
 
         if tenant_config and tenant_config.ds_ocr_config:
