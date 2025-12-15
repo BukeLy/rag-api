@@ -182,7 +182,8 @@ def select_parser_by_file(filename: str, file_size: int, file_path: str = None) 
             return ("deepseek-ocr", "free_ocr")
 
         # PDF/Office 小文件 → DeepSeek-OCR（快速）
-        if ext in ['.pdf', '.docx', '.xlsx', '.pptx'] and file_size < 500 * 1024:  # < 500KB
+        size_threshold_bytes = config.parser.size_threshold_kb * 1024
+        if ext in ['.pdf', '.docx', '.xlsx', '.pptx'] and file_size < size_threshold_bytes:
             return ("deepseek-ocr", "free_ocr")
 
         # 大文件或其他 → MinerU（默认）
@@ -217,7 +218,7 @@ def select_parser_by_file(filename: str, file_size: int, file_path: str = None) 
         # 降级：使用简单规则
         if ext in ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff']:
             return ("deepseek-ocr", "free_ocr")
-        elif file_size < 500 * 1024:
+        elif file_size < config.parser.size_threshold_kb * 1024:
             return ("deepseek-ocr", "free_ocr")
         else:
             return ("mineru", None)
