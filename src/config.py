@@ -43,10 +43,7 @@ class EmbeddingConfig(BaseSettings):
 
     api_key: str = Field(..., description="Embedding API Key")
     base_url: str = Field(..., description="Embedding API Base URL")
-    model: str = Field(
-        default="Qwen/Qwen3-Embedding-0.6B",
-        description="Embedding Model Name"
-    )
+    model: str = Field(..., description="Embedding Model Name")
     dim: int = Field(
         default=1024,
         description="Embedding Dimension (Must match model output dimension!)"
