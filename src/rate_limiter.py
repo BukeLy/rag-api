@@ -418,43 +418,38 @@ def get_rate_limiter(
         # Import config for global defaults
         from src.config import config
 
-        # Get service-specific config and defaults
+        # Service-specific default configurations (fallback values)
+        SERVICE_DEFAULTS = {
+            "llm": {"rpm": 800, "tpm": 40000, "avg_tokens": 3500},
+            "embedding": {"rpm": 1600, "tpm": 400000, "avg_tokens": 20000},
+            "rerank": {"rpm": 1600, "tpm": 400000, "avg_tokens": 500},
+            "ds_ocr": {"rpm": 800, "tpm": 40000, "avg_tokens": 3500},
+        }
+
+        # Get service-specific config object and defaults
+        defaults = SERVICE_DEFAULTS.get(service, {"rpm": 1000, "tpm": 50000, "avg_tokens": 3500})
+
         if service == "llm":
             service_config = config.llm
-            default_rpm = 800
-            default_tpm = 40000
-            default_avg_tokens = 3500
         elif service == "embedding":
             service_config = config.embedding
-            default_rpm = 1600
-            default_tpm = 400000
-            default_avg_tokens = 20000
         elif service == "rerank":
             service_config = config.rerank
-            default_rpm = 1600
-            default_tpm = 400000
-            default_avg_tokens = 500
         elif service == "ds_ocr":
             service_config = config.ds_ocr if hasattr(config, 'ds_ocr') else None
-            default_rpm = 800
-            default_tpm = 40000
-            default_avg_tokens = 3500
         else:
             service_config = None
-            default_rpm = 1000
-            default_tpm = 50000
-            default_avg_tokens = 3500
 
         # Get effective values with priority: param > config > default
         if service_config:
-            effective_rpm = requests_per_minute or getattr(service_config, 'requests_per_minute', default_rpm)
-            effective_tpm = tokens_per_minute or getattr(service_config, 'tokens_per_minute', default_tpm)
-            effective_avg_tokens = avg_tokens_per_request or getattr(service_config, 'avg_tokens_per_request', default_avg_tokens)
+            effective_rpm = requests_per_minute or getattr(service_config, 'requests_per_minute', defaults["rpm"])
+            effective_tpm = tokens_per_minute or getattr(service_config, 'tokens_per_minute', defaults["tpm"])
+            effective_avg_tokens = avg_tokens_per_request or getattr(service_config, 'avg_tokens_per_request', defaults["avg_tokens"])
             env_max_async = getattr(service_config, 'max_async', None)
         else:
-            effective_rpm = requests_per_minute or default_rpm
-            effective_tpm = tokens_per_minute or default_tpm
-            effective_avg_tokens = avg_tokens_per_request or default_avg_tokens
+            effective_rpm = requests_per_minute or defaults["rpm"]
+            effective_tpm = tokens_per_minute or defaults["tpm"]
+            effective_avg_tokens = avg_tokens_per_request or defaults["avg_tokens"]
             env_max_async = None
 
         # Determine final concurrent value
