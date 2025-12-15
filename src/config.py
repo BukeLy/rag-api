@@ -8,11 +8,8 @@ All environment variables are loaded and validated through this module.
 重构原因: 统一配置管理，从服务商导向改为功能导向命名
 """
 
-import os
-from typing import Optional
 from pydantic import Field
 from pydantic_settings import BaseSettings
-
 
 # ==================== LLM Configuration ====================
 
@@ -28,7 +25,7 @@ class LLMConfig(BaseSettings):
     # Rate limiting
     requests_per_minute: int = Field(default=800, description="Maximum requests per minute")
     tokens_per_minute: int = Field(default=40000, description="Maximum tokens per minute (input + output)")
-    max_async: Optional[int] = Field(default=None, description="Maximum concurrent requests (optional, auto-calculated if not set)")
+    max_async: int | None = Field(default=None, description="Maximum concurrent requests (optional, auto-calculated if not set)")
 
     class Config:
         env_prefix = "LLM_"
@@ -55,7 +52,7 @@ class EmbeddingConfig(BaseSettings):
     # Rate limiting
     requests_per_minute: int = Field(default=1600, description="Maximum requests per minute")
     tokens_per_minute: int = Field(default=400000, description="Maximum tokens per minute")
-    max_async: Optional[int] = Field(default=None, description="Maximum concurrent requests (optional, auto-calculated if not set)")
+    max_async: int | None = Field(default=None, description="Maximum concurrent requests (optional, auto-calculated if not set)")
     timeout: int = Field(default=30, description="HTTP request timeout (seconds)")
 
     class Config:
@@ -79,7 +76,7 @@ class RerankConfig(BaseSettings):
     # Rate limiting
     requests_per_minute: int = Field(default=1600, description="Maximum requests per minute")
     tokens_per_minute: int = Field(default=400000, description="Maximum tokens per minute")
-    max_async: Optional[int] = Field(default=None, description="Maximum concurrent requests (optional, auto-calculated if not set)")
+    max_async: int | None = Field(default=None, description="Maximum concurrent requests (optional, auto-calculated if not set)")
     timeout: int = Field(default=30, description="HTTP request timeout (seconds)")
 
     class Config:
@@ -147,7 +144,7 @@ class DeepSeekOCRConfig(BaseSettings):
     # Rate limiting
     requests_per_minute: int = Field(default=800, description="Maximum requests per minute")
     tokens_per_minute: int = Field(default=40000, description="Maximum tokens per minute")
-    max_async: Optional[int] = Field(default=None, description="Maximum concurrent requests (optional, auto-calculated if not set)")
+    max_async: int | None = Field(default=None, description="Maximum concurrent requests (optional, auto-calculated if not set)")
 
     class Config:
         env_prefix = "DS_OCR_"
@@ -247,6 +244,33 @@ class MultiTenantConfig(BaseSettings):
         populate_by_name = True
 
 
+# ==================== Metrics Configuration ====================
+
+class MetricsConfig(BaseSettings):
+    """Metrics Cache Size Configuration"""
+
+    response_times_cache_size: int = Field(
+        default=500,
+        description="Cache size for API response times (after truncation)",
+        alias="METRICS_RESPONSE_TIMES_CACHE_SIZE"
+    )
+    doc_metrics_cache_size: int = Field(
+        default=5000,
+        description="Cache size for document metrics (after truncation)",
+        alias="METRICS_DOC_METRICS_CACHE_SIZE"
+    )
+    alerts_cache_size: int = Field(
+        default=500,
+        description="Cache size for alerts (after truncation)",
+        alias="METRICS_ALERTS_CACHE_SIZE"
+    )
+
+    class Config:
+        env_file = ".env"
+        extra = "ignore"
+        populate_by_name = True
+
+
 # ==================== Tenant Configuration (for override) ====================
 
 class TenantConfig:
@@ -254,9 +278,9 @@ class TenantConfig:
 
     def __init__(
         self,
-        llm_config: Optional[dict] = None,
-        embedding_config: Optional[dict] = None,
-        rerank_config: Optional[dict] = None,
+        llm_config: dict | None = None,
+        embedding_config: dict | None = None,
+        rerank_config: dict | None = None,
         quota_daily_queries: int = 1000,
         quota_storage_mb: int = 1000,
         status: str = "active"
@@ -294,6 +318,7 @@ class AppConfig:
         self.storage = StorageConfig()
         self.lightrag_query = LightRAGQueryConfig()
         self.multi_tenant = MultiTenantConfig()
+        self.metrics = MetricsConfig()
 
     def validate(self) -> None:
         """Validate Configuration Integrity"""
@@ -334,6 +359,9 @@ class AppConfig:
         print(f"Storage - Graph: {self.storage.graph_storage}")
         print(f"Storage - DocStatus: {self.storage.doc_status_storage}")
         print(f"Max Tenant Instances: {self.multi_tenant.max_tenant_instances}")
+        print(f"Metrics - Response Times Cache: {self.metrics.response_times_cache_size}")
+        print(f"Metrics - Doc Metrics Cache: {self.metrics.doc_metrics_cache_size}")
+        print(f"Metrics - Alerts Cache: {self.metrics.alerts_cache_size}")
         print("=" * 60)
 
 
