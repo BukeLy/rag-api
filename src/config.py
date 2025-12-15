@@ -8,7 +8,6 @@ All environment variables are loaded and validated through this module.
 重构原因: 统一配置管理，从服务商导向改为功能导向命名
 """
 
-import os
 from typing import Optional
 from pydantic import Field
 from pydantic_settings import BaseSettings
@@ -22,6 +21,9 @@ class LLMConfig(BaseSettings):
     api_key: str = Field(..., description="LLM API Key")
     base_url: str = Field(..., description="LLM API Base URL")
     model: str = Field(default="seed-1-6-250615", description="LLM Model Name")
+    vlm_model: str = Field(..., description="VLM Model Name", alias="VLM_MODEL")
+    vlm_api_key: Optional[str] = Field(default=None, description="VLM API Key", alias="VLM_API_KEY")
+    vlm_base_url: Optional[str] = Field(default=None, description="VLM API Base URL", alias="VLM_BASE_URL")
     vlm_timeout: int = Field(default=120, description="VLM Image Understanding Timeout (seconds)")
     timeout: int = Field(default=60, description="General LLM Timeout (seconds)")
 
