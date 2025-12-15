@@ -282,7 +282,7 @@ class MultiTenantRAGManager:
 
         # 从配置中提取参数（支持租户覆盖）
         model = llm_config.get("vlm_model", self.vlm_model)
-        api_key = llm_config.get("vlm_api_key") or self.vlm_api_key
+        api_key = llm_config.get("vlm_api_key") or llm_config.get("api_key") or self.vlm_api_key
         base_url = llm_config.get("vlm_base_url") or llm_config.get("base_url") or self.vlm_base_url
         vlm_timeout = llm_config.get("vlm_timeout", self.vlm_timeout)
 
