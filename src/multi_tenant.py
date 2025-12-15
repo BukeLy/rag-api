@@ -64,12 +64,6 @@ class MultiTenantRAGManager:
         self.max_async = config.llm.max_async
         self.vlm_timeout = config.llm.vlm_timeout
 
-        # Token 估算配置
-        self.llm_estimated_output_tokens = config.llm.estimated_output_tokens
-        self.vlm_estimated_output_tokens = config.llm.vlm_estimated_output_tokens
-        self.vlm_max_tokens = config.llm.vlm_max_tokens
-        self.vlm_image_tokens_estimate = config.llm.vlm_image_tokens_estimate
-
         # 存储配置
         self.use_external_storage = config.storage.use_external
         self.kv_storage = config.storage.kv_storage
@@ -112,14 +106,11 @@ class MultiTenantRAGManager:
         # 获取 rate_limiter 实际使用的并发数（将用于 LightRAG）
         actual_max_concurrent = rate_limiter.max_concurrent
 
-        # 获取 token 估算配置（支持租户覆盖）
-        llm_estimated_output = llm_config.get("estimated_output_tokens", self.llm_estimated_output_tokens)
-
         def llm_model_func(prompt, **kwargs):
             # 精确计算输入 tokens（使用 tiktoken）
             input_tokens = count_tokens(prompt, model="cl100k_base")
             # 保守估算输出 tokens（实体提取通常输出较长）
-            estimated_output = llm_estimated_output  # 从配置读取
+            estimated_output = 3000  # 50 entities + 46 relations ≈ 3000 tokens
             estimated_tokens = input_tokens + estimated_output
 
             # Debug: 输出 token 计数
@@ -304,11 +295,6 @@ class MultiTenantRAGManager:
             tokens_per_minute=tokens_per_minute
         )
 
-        # 获取 VLM token 估算配置（支持租户覆盖）
-        vlm_image_tokens = llm_config.get("vlm_image_tokens_estimate", self.vlm_image_tokens_estimate)
-        vlm_estimated_output = llm_config.get("vlm_estimated_output_tokens", self.vlm_estimated_output_tokens)
-        vlm_max_tokens = llm_config.get("vlm_max_tokens", self.vlm_max_tokens)
-
         async def seed_vision_model_func(prompt: str, image_data: str, system_prompt: str) -> str:
             """
             使用 VLM 理解图片内容（带速率限制）
@@ -323,8 +309,8 @@ class MultiTenantRAGManager:
             """
             # 精确计算 tokens（使用 tiktoken）
             prompt_tokens = count_tokens(prompt, model="cl100k_base")
-            image_tokens = vlm_image_tokens  # 从配置读取
-            estimated_output = vlm_estimated_output  # 从配置读取
+            image_tokens = 200  # 图片约 200 tokens（固定估算）
+            estimated_output = 500  # VLM 输出通常较短
             estimated_tokens = prompt_tokens + image_tokens + estimated_output
 
             # Debug: 输出 token 计数
@@ -350,7 +336,7 @@ class MultiTenantRAGManager:
                             ]
                         }
                     ],
-                    "max_tokens": vlm_max_tokens,  # 从配置读取
+                    "max_tokens": 500,
                     "temperature": 0.1
                 }
 
