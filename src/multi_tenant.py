@@ -51,6 +51,7 @@ class MultiTenantRAGManager:
         self.ark_api_key = config.llm.api_key
         self.ark_base_url = config.llm.base_url
         self.ark_model = config.llm.model
+        self.ark_vlm_model = config.llm.vlm_model
 
         self.sf_api_key = config.embedding.api_key
         self.sf_base_url = config.embedding.base_url
@@ -278,7 +279,7 @@ class MultiTenantRAGManager:
         import aiohttp
 
         # 从配置中提取参数（支持租户覆盖）
-        model = llm_config.get("model", self.ark_model)
+        model = llm_config.get("vlm_model", self.ark_vlm_model)
         api_key = llm_config.get("api_key", self.ark_api_key)
         base_url = llm_config.get("base_url", self.ark_base_url)
         vlm_timeout = llm_config.get("vlm_timeout", self.vlm_timeout)

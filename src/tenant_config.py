@@ -301,6 +301,7 @@ class TenantConfigManager:
         """
         base = {
             "model": config.llm.model,
+            "vlm_model": config.llm.vlm_model,
             "api_key": config.llm.api_key,
             "base_url": config.llm.base_url,
             "timeout": config.llm.timeout,

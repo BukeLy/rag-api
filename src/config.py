@@ -10,7 +10,7 @@ All environment variables are loaded and validated through this module.
 
 import os
 from typing import Optional
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings
 
 
@@ -22,6 +22,7 @@ class LLMConfig(BaseSettings):
     api_key: str = Field(..., description="LLM API Key")
     base_url: str = Field(..., description="LLM API Base URL")
     model: str = Field(default="seed-1-6-250615", description="LLM Model Name")
+    vlm_model: str = Field(default="seed-1-6-250615", description="VLM Model Name")
     vlm_timeout: int = Field(default=120, description="VLM Image Understanding Timeout (seconds)")
     timeout: int = Field(default=60, description="General LLM Timeout (seconds)")
 
@@ -34,6 +35,19 @@ class LLMConfig(BaseSettings):
         env_prefix = "LLM_"
         env_file = ".env"
         extra = "ignore"
+
+    @field_validator("vlm_model", mode="before")
+    @classmethod
+    def _load_vlm_model(cls, v):
+        """
+        优先读取独立的 VLM_MODEL（保持与 LLM 文本模型解耦）
+        回退顺序：
+        1) 显式传入值
+        2) 环境变量 VLM_MODEL（独立配置）
+        3) 环境变量 LLM_VLM_MODEL（前缀形式）
+        4) 默认值
+        """
+        return v or os.getenv("VLM_MODEL") or os.getenv("LLM_VLM_MODEL") or "seed-1-6-250615"
 
 
 # ==================== Embedding Configuration ====================
