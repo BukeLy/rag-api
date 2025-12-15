@@ -210,19 +210,39 @@ class StorageConfig(BaseSettings):
 
 # ==================== LightRAG Query Configuration ====================
 
+class LightRAGQueryDefaults:
+    """
+    LightRAG Query Default Values (Single Source of Truth)
+
+    All default values for LightRAGQueryConfig are defined here.
+    This ensures consistent defaults and simplifies maintenance.
+    """
+
+    TOP_K: int = 20
+    CHUNK_TOP_K: int = 10
+    MAX_ENTITY_TOKENS: int = 6000
+    MAX_RELATION_TOKENS: int = 8000
+    MAX_TOTAL_TOKENS: int = 30000
+    MAX_PARALLEL_INSERT: int = 2
+    MAX_SOURCE_IDS_PER_ENTITY: int = 300
+    MAX_SOURCE_IDS_PER_RELATION: int = 300
+    SOURCE_IDS_LIMIT_METHOD: str = "FIFO"
+    MAX_FILE_PATHS: int = 100
+
+
 class LightRAGQueryConfig(BaseSettings):
     """LightRAG Query Optimization Parameters"""
 
-    top_k: int = Field(default=20, description="Number of Entities/Relations to Retrieve", alias="TOP_K")
-    chunk_top_k: int = Field(default=10, description="Number of Text Chunks to Retrieve", alias="CHUNK_TOP_K")
-    max_entity_tokens: int = Field(default=6000, description="Max Entity Context Tokens", alias="MAX_ENTITY_TOKENS")
-    max_relation_tokens: int = Field(default=8000, description="Max Relation Context Tokens", alias="MAX_RELATION_TOKENS")
-    max_total_tokens: int = Field(default=30000, description="Max Total Tokens", alias="MAX_TOTAL_TOKENS")
-    max_parallel_insert: int = Field(default=2, description="Max Parallel Document Inserts", alias="MAX_PARALLEL_INSERT")
-    max_source_ids_per_entity: int = Field(default=300, description="Max Source IDs per Entity", alias="MAX_SOURCE_IDS_PER_ENTITY")
-    max_source_ids_per_relation: int = Field(default=300, description="Max Source IDs per Relation", alias="MAX_SOURCE_IDS_PER_RELATION")
-    source_ids_limit_method: str = Field(default="FIFO", description="Source IDs Limit Method", alias="SOURCE_IDS_LIMIT_METHOD")
-    max_file_paths: int = Field(default=100, description="Max File Paths", alias="MAX_FILE_PATHS")
+    top_k: int = Field(default=LightRAGQueryDefaults.TOP_K, description="Number of Entities/Relations to Retrieve", alias="TOP_K")
+    chunk_top_k: int = Field(default=LightRAGQueryDefaults.CHUNK_TOP_K, description="Number of Text Chunks to Retrieve", alias="CHUNK_TOP_K")
+    max_entity_tokens: int = Field(default=LightRAGQueryDefaults.MAX_ENTITY_TOKENS, description="Max Entity Context Tokens", alias="MAX_ENTITY_TOKENS")
+    max_relation_tokens: int = Field(default=LightRAGQueryDefaults.MAX_RELATION_TOKENS, description="Max Relation Context Tokens", alias="MAX_RELATION_TOKENS")
+    max_total_tokens: int = Field(default=LightRAGQueryDefaults.MAX_TOTAL_TOKENS, description="Max Total Tokens", alias="MAX_TOTAL_TOKENS")
+    max_parallel_insert: int = Field(default=LightRAGQueryDefaults.MAX_PARALLEL_INSERT, description="Max Parallel Document Inserts", alias="MAX_PARALLEL_INSERT")
+    max_source_ids_per_entity: int = Field(default=LightRAGQueryDefaults.MAX_SOURCE_IDS_PER_ENTITY, description="Max Source IDs per Entity", alias="MAX_SOURCE_IDS_PER_ENTITY")
+    max_source_ids_per_relation: int = Field(default=LightRAGQueryDefaults.MAX_SOURCE_IDS_PER_RELATION, description="Max Source IDs per Relation", alias="MAX_SOURCE_IDS_PER_RELATION")
+    source_ids_limit_method: str = Field(default=LightRAGQueryDefaults.SOURCE_IDS_LIMIT_METHOD, description="Source IDs Limit Method", alias="SOURCE_IDS_LIMIT_METHOD")
+    max_file_paths: int = Field(default=LightRAGQueryDefaults.MAX_FILE_PATHS, description="Max File Paths", alias="MAX_FILE_PATHS")
 
     class Config:
         env_file = ".env"
