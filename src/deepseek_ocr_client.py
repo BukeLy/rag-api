@@ -57,6 +57,9 @@ class DSSeekConfig:
     fallback_mode: str = field(default_factory=lambda: config.ds_ocr.fallback_mode)
     min_output_threshold: int = field(default_factory=lambda: config.ds_ocr.min_output_threshold)
 
+    # Token 估算配置
+    image_tokens_estimate: int = field(default_factory=lambda: config.ds_ocr.image_tokens_estimate)
+
     def __post_init__(self):
         """验证配置"""
         if not self.api_key:
@@ -281,8 +284,8 @@ class DeepSeekOCRClient:
         Raises:
             Exception: API 调用失败时抛出异常
         """
-        # 估算 tokens（提示词 + 图片约 1000 tokens + 输出约 2000 tokens）
-        estimated_tokens = len(prompt) // 3 + 1000 + self.config.max_tokens
+        # 估算 tokens（提示词 + 图片 + 输出）
+        estimated_tokens = len(prompt) // 3 + self.config.image_tokens_estimate + self.config.max_tokens
 
         # 获取速率限制许可
         await self.rate_limiter.rate_limiter.acquire(estimated_tokens)
@@ -348,8 +351,8 @@ class DeepSeekOCRClient:
         """
         import asyncio
 
-        # 估算 tokens（提示词 + 图片约 1000 tokens + 输出约 2000 tokens）
-        estimated_tokens = len(prompt) // 3 + 1000 + self.config.max_tokens
+        # 估算 tokens（提示词 + 图片 + 输出）
+        estimated_tokens = len(prompt) // 3 + self.config.image_tokens_estimate + self.config.max_tokens
 
         # 在同步函数中调用异步速率限制器
         try:

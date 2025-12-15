@@ -30,6 +30,26 @@ class LLMConfig(BaseSettings):
     tokens_per_minute: int = Field(default=40000, description="Maximum tokens per minute (input + output)")
     max_async: Optional[int] = Field(default=None, description="Maximum concurrent requests (optional, auto-calculated if not set)")
 
+    # Token estimation for rate limiting (LLM)
+    estimated_output_tokens: int = Field(
+        default=3000,
+        description="Estimated output tokens for LLM calls (entity extraction typically outputs ~3000 tokens)"
+    )
+
+    # Token estimation for rate limiting (VLM)
+    vlm_estimated_output_tokens: int = Field(
+        default=500,
+        description="Estimated output tokens for VLM calls (image descriptions are typically shorter)"
+    )
+    vlm_max_tokens: int = Field(
+        default=500,
+        description="Maximum output tokens for VLM API calls"
+    )
+    vlm_image_tokens_estimate: int = Field(
+        default=200,
+        description="Estimated tokens for image input in VLM calls"
+    )
+
     class Config:
         env_prefix = "LLM_"
         env_file = ".env"
@@ -148,6 +168,12 @@ class DeepSeekOCRConfig(BaseSettings):
     requests_per_minute: int = Field(default=800, description="Maximum requests per minute")
     tokens_per_minute: int = Field(default=40000, description="Maximum tokens per minute")
     max_async: Optional[int] = Field(default=None, description="Maximum concurrent requests (optional, auto-calculated if not set)")
+
+    # Token estimation for rate limiting
+    image_tokens_estimate: int = Field(
+        default=1000,
+        description="Estimated tokens for image input in OCR calls"
+    )
 
     class Config:
         env_prefix = "DS_OCR_"
