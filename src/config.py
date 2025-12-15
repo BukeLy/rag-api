@@ -14,6 +14,20 @@ from pydantic import Field
 from pydantic_settings import BaseSettings
 
 
+# ==================== Default Model Constants ====================
+# These default values must stay in sync with env.example
+# They are only used when the corresponding environment variable is not set:
+#   - DEFAULT_LLM_MODEL       -> LLM_MODEL
+#   - DEFAULT_EMBEDDING_MODEL -> EMBEDDING_MODEL
+#   - DEFAULT_RERANK_MODEL    -> RERANK_MODEL
+#   - DEFAULT_DS_OCR_MODEL    -> DS_OCR_MODEL
+
+DEFAULT_LLM_MODEL = "seed-1-6-250615"
+DEFAULT_EMBEDDING_MODEL = "Qwen/Qwen3-Embedding-0.6B"
+DEFAULT_RERANK_MODEL = "Qwen/Qwen3-Reranker-8B"
+DEFAULT_DS_OCR_MODEL = "deepseek-ai/DeepSeek-OCR"
+
+
 # ==================== LLM Configuration ====================
 
 class LLMConfig(BaseSettings):
@@ -21,7 +35,7 @@ class LLMConfig(BaseSettings):
 
     api_key: str = Field(..., description="LLM API Key")
     base_url: str = Field(..., description="LLM API Base URL")
-    model: str = Field(default="seed-1-6-250615", description="LLM Model Name")
+    model: str = Field(default=DEFAULT_LLM_MODEL, description="LLM Model Name")
     vlm_timeout: int = Field(default=120, description="VLM Image Understanding Timeout (seconds)")
     timeout: int = Field(default=60, description="General LLM Timeout (seconds)")
 
@@ -44,7 +58,7 @@ class EmbeddingConfig(BaseSettings):
     api_key: str = Field(..., description="Embedding API Key")
     base_url: str = Field(..., description="Embedding API Base URL")
     model: str = Field(
-        default="Qwen/Qwen3-Embedding-0.6B",
+        default=DEFAULT_EMBEDDING_MODEL,
         description="Embedding Model Name"
     )
     dim: int = Field(
@@ -72,7 +86,7 @@ class RerankConfig(BaseSettings):
     api_key: str = Field(..., description="Rerank API Key")
     base_url: str = Field(..., description="Rerank API Base URL")
     model: str = Field(
-        default="Qwen/Qwen3-Reranker-8B",
+        default=DEFAULT_RERANK_MODEL,
         description="Rerank Model Name"
     )
 
@@ -99,7 +113,7 @@ class DeepSeekOCRConfig(BaseSettings):
         description="DeepSeek-OCR API Base URL"
     )
     model: str = Field(
-        default="deepseek-ai/DeepSeek-OCR",
+        default=DEFAULT_DS_OCR_MODEL,
         description="DeepSeek-OCR Model Name"
     )
 
