@@ -28,7 +28,7 @@ DEFAULT_SYSTEM_PROMPT = "You are a helpful assistant. Provide direct answers wit
 
 # EC2 t3.small has 2 vCPUs. 4x oversubscription for I/O-bound LLM API calls.
 # Empirically tested: 8 gives best throughput without hitting rate limits.
-DEFAULT_MAX_ASYNC = 8
+DEFAULT_MAX_ASYNC = int(os.getenv("MAX_ASYNC", "8"))
 
 # --- 多租户架构：移除全局单实例 ---
 # 使用多租户管理器替代全局单实例
