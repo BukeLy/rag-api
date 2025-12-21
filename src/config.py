@@ -100,10 +100,7 @@ class DeepSeekOCRConfig(BaseSettings):
         default="https://api.siliconflow.cn/v1",
         description="DeepSeek-OCR API Base URL"
     )
-    model: str = Field(
-        default="deepseek-ai/DeepSeek-OCR",
-        description="DeepSeek-OCR Model Name"
-    )
+    model: str = Field(..., description="DeepSeek-OCR Model Name")
 
     # OCR 模式配置
     default_mode: str = Field(
