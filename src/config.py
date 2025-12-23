@@ -170,22 +170,37 @@ class StorageConfig(BaseSettings):
     )
     kv_storage: str = Field(
         default="RedisKVStorage",
-        description="KV Storage Type",
+        description=(
+            "KV Storage Type. "
+            "Supported: JsonKVStorage, RedisKVStorage, PGKVStorage, MongoKVStorage"
+        ),
         alias="KV_STORAGE"
     )
     vector_storage: str = Field(
-        default="QdrantStorage",
-        description="Vector Storage Type",
+        default="QdrantVectorDBStorage",
+        description=(
+            "Vector Storage Type. "
+            "Supported: NanoVectorDBStorage, MilvusVectorDBStorage, PGVectorStorage, "
+            "FaissVectorDBStorage, QdrantVectorDBStorage, MongoVectorDBStorage"
+        ),
         alias="VECTOR_STORAGE"
     )
     graph_storage: str = Field(
         default="MemgraphStorage",
-        description="Graph Storage Type",
+        description=(
+            "Graph Storage Type. "
+            "Supported: NetworkXStorage, Neo4JStorage, PGGraphStorage, "
+            "MongoGraphStorage, MemgraphStorage"
+        ),
         alias="GRAPH_STORAGE"
     )
     doc_status_storage: str = Field(
         default="RedisDocStatusStorage",
-        description="Document Status Storage Type",
+        description=(
+            "Document Status Storage Type. "
+            "Supported: JsonDocStatusStorage, RedisDocStatusStorage, "
+            "PGDocStatusStorage, MongoDocStatusStorage"
+        ),
         alias="DOC_STATUS_STORAGE"
     )
     redis_uri: str = Field(
