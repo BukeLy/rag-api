@@ -18,8 +18,15 @@ from src.logger import logger
 class FileURLService:
     """轻量级文件 URL 服务，在 8000 端口提供临时文件访问"""
     
-    def __init__(self, base_url: str = "http://localhost:8000", 
+    def __init__(self, base_url: Optional[str] = None, 
                  temp_dir: str = "/tmp/rag-files"):
+        # 从环境变量读取 base_url，移除硬编码默认值
+        base_url = base_url or os.getenv("FILE_SERVICE_BASE_URL")
+        if not base_url:
+            raise ValueError(
+                "FILE_SERVICE_BASE_URL 环境变量未设置。"
+                "请在 .env 文件中配置 FILE_SERVICE_BASE_URL=http://your-ip:8000"
+            )
         self.base_url = base_url
         self.temp_dir = temp_dir
         os.makedirs(temp_dir, exist_ok=True)
@@ -138,6 +145,6 @@ def get_file_service():
     """获取文件服务实例"""
     global global_file_service
     if global_file_service is None:
-        base_url = os.getenv("FILE_SERVICE_BASE_URL", "http://localhost:8000")
-        global_file_service = FileURLService(base_url)
+        # 不再传递 base_url，让 FileURLService.__init__ 从环境变量读取
+        global_file_service = FileURLService()
     return global_file_service
