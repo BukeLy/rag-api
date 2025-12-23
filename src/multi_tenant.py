@@ -36,10 +36,11 @@ class MultiTenantRAGManager:
     def __init__(
         self,
         max_instances: int = 50,  # 最多缓存 50 个租户实例
-        default_system_prompt: str = "You are a helpful assistant. Provide direct answers without showing your reasoning process.",
+        default_system_prompt: str = None,
     ):
         self.max_instances = max_instances
-        self.default_system_prompt = default_system_prompt
+        # Use config value if not explicitly provided
+        self.default_system_prompt = default_system_prompt or config.llm.default_system_prompt
 
         # 租户实例缓存：tenant_id -> LightRAG
         self._instances: Dict[str, LightRAG] = {}

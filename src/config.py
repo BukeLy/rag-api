@@ -26,6 +26,10 @@ class LLMConfig(BaseSettings):
     vlm_base_url: Optional[str] = Field(default=None, description="VLM API Base URL", alias="VLM_BASE_URL")
     vlm_timeout: int = Field(default=120, description="VLM Image Understanding Timeout (seconds)")
     timeout: int = Field(default=60, description="General LLM Timeout (seconds)")
+    default_system_prompt: str = Field(
+        default="You are a helpful assistant. Provide direct answers without showing your reasoning process.",
+        description="Default system prompt for LLM calls"
+    )
 
     # Rate limiting
     requests_per_minute: int = Field(default=800, description="Maximum requests per minute")

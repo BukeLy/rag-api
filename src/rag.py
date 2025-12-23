@@ -24,7 +24,8 @@ except ImportError:
 load_dotenv()
 
 # Seed 1.6 model returns <think> tags by default, breaking API responses
-DEFAULT_SYSTEM_PROMPT = "You are a helpful assistant. Provide direct answers without showing your reasoning process."
+# Now configurable via LLM_DEFAULT_SYSTEM_PROMPT environment variable
+DEFAULT_SYSTEM_PROMPT = config.llm.default_system_prompt
 
 # EC2 t3.small has 2 vCPUs. 4x oversubscription for I/O-bound LLM API calls.
 # Empirically tested: 8 gives best throughput without hitting rate limits.
